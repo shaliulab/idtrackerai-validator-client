@@ -1,43 +1,73 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 
 const HEIGHT=100;
 const WIDTH=100;
-const RGB_COLORS=[
-  [128.0, 0.0, 0.0, 0.0],
-  [242.0819964349376, 0.0, 0.0, 0.0],
-  [255.0, 76.8, 0.0, 0.0],
-  [255.0, 177.1921568627451, 0.0, 0.0],
-  [206.45161290322582, 255.0, 41.29032258064515, 0.0],
-  [122.2517394054396, 255.0, 125.49019607843135, 0.0],
-  [41.29032258064515, 255.0, 206.45161290322577, 0.0],
-  [0.0, 197.2519970951344, 255.0, 0.0], [0.0, 104.29629629629633, 255.0, 0.0],
-  [0.0, 7.622367465504766, 242.08199643493768, 0.0]
-]
 
-const color_to_hex = function(color) {
-  return("#"+
-  (parseInt(color[0])).toString(16).padStart(2, '0') +
-  (parseInt(color[1])).toString(16).padStart(2, '0') +
-  (parseInt(color[2])).toString(16).padStart(2, '0')
-  )
+function generateColorPalette(numColors) {
+  const colors = [];
+
+  for (let i = 0; i < numColors; i++) {
+    // Hue value changes for each color, covering the whole spectrum (0-360)
+    const hue = Math.floor((i / numColors) * 360);
+    // Saturation is 100%, lightness is 50% for the most vibrant colors
+    colors.push(`hsl(${hue}, 100%, 50%)`);
+  }
+
+  return colors;
 }
-
-const COLORS = [];
-RGB_COLORS.forEach(color => {
-
-  var hex_color=color.slice(0, 3);
-  COLORS.push(hex_color);
-})
 
 
 const FrameWithSquare = React.forwardRef(({ imageURL, trackingData }, ref) => {
   const canvasRef = useRef();
+  const inputRef = useRef(); // create a ref for the input field
+  const [showBanner, setShowBanner] = useState(false);
+  const [bannerText, setBannerText] = useState("");
+
+
+  const handleClick = (event) => {
+    // Get the bounding rectangle of the target element
+    const rect = event.target.getBoundingClientRect();
+
+    // Calculate the click coordinates relative to the element
+    const x = event.clientX - rect.left;
+    const y = event.clientY - rect.top;
+
+    // Log the coordinates
+    console.log(`Clicked at ${x}, ${y}`);
+
+    // Check if the click falls within any of the rectangles
+    trackingData.forEach((animal) => {
+      if (
+        x >= animal.x - WIDTH/2 &&
+        x <= animal.x + WIDTH/2 &&
+        y >= animal.y - HEIGHT/2 &&
+        y <= animal.y + HEIGHT/2
+      ) {
+        setShowBanner(true);
+        console.log(`Clicked within rectangle for animal with identity ${animal.identity}`);
+      }
+    });
+  }
+
+  const handleInputChange = (e) => {
+    setBannerText(e.target.value);
+  };
+
+  const closeBanner = () => {
+    console.log("User entered " + bannerText);
+    setShowBanner(false);
+    setBannerText("");
+  };
+
 
 
   useEffect(() => {
     const context = ref.current.getContext('2d');
     const img = canvasRef.current;
     img.src = imageURL;
+
+    const number_of_animals=trackingData.length;
+    const colors = generateColorPalette(number_of_animals);
     
     img.onload = function() {
 
@@ -45,7 +75,7 @@ const FrameWithSquare = React.forwardRef(({ imageURL, trackingData }, ref) => {
       ref.current.height = img.height
       context.clearRect(0, 0, ref.current.width, ref.current.height);
       context.drawImage(img, 0, 0, ref.current.width, ref.current.height);
-      console.log("");
+
       trackingData.forEach(animal => {
         const drawSquare = (context, animal, color) => {
           context.beginPath();
@@ -65,11 +95,10 @@ const FrameWithSquare = React.forwardRef(({ imageURL, trackingData }, ref) => {
         }
         
         var color = "#000000";
-        if (animal.identity != null) {
-          color = color_to_hex(COLORS[parseInt(animal.identity) % COLORS.length ])
+        if (animal.identity != null & animal.identity != 0) {
+          color = colors[parseInt(animal.identity) % number_of_animals ]
         }
 
-        console.log(animal);
         drawSquare(context, animal, color);
         writeIdentity(context, animal, color);
 
@@ -78,10 +107,37 @@ const FrameWithSquare = React.forwardRef(({ imageURL, trackingData }, ref) => {
   }, [imageURL, trackingData, ref]);
 
 
+  // this effect runs whenever showBanner changes
+  useEffect(() => {
+    if (showBanner && inputRef.current) {
+      inputRef.current.focus(); // focus the input field when the banner is shown
+    }
+  }, [showBanner]);
+
+
+  const handleOkClick = (e) => {
+    e.preventDefault(); // prevent form from refreshing the page
+    closeBanner();
+  };
+
+
+
   return (
-    <div>
+    <div onClick={handleClick}>
       <canvas ref={ref} />
       <img ref={canvasRef} style={{ display: 'none', width: 1000 }} alt="" />
+      {showBanner && (
+        <form onSubmit={handleOkClick} className="banner">
+          <input 
+            type="text"
+            onChange={handleInputChange}
+            value={bannerText} 
+            ref={inputRef} // assign the ref to the input field
+
+          />
+          <button type="submit">OK</button>
+        </form>
+      )}
     </div>
   );
 });

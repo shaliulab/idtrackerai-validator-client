@@ -16,6 +16,13 @@ export const get_chunk_forward = (value) => {
   return(Math.min(parseInt(value) + CHUNKSIZE, MAX_FN))
 }
 
+export const get_1seconds_back = (value) => {
+  return(Math.max(parseInt(value) - FRAMERATE*1, MIN_FN))
+}
+
+export const get_1seconds_forward = (value) => {
+  return(Math.min(parseInt(value) + FRAMERATE*1, MAX_FN))
+}
 export const get_10seconds_back = (value) => {
   return(Math.max(parseInt(value) - FRAMERATE*10, MIN_FN))
 }
