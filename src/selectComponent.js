@@ -1,12 +1,13 @@
 import React, { useEffect, useState } from "react";
 import Select from 'react-select';
 import axios from 'axios';
+import { BACKEND_SERVER } from './constants'
 
 const SelectComponent = () => {
   const [options, setOptions] = useState([]);
 
   const fetchData = async () => {
-    const response = await axios.get("http://localhost:5000/api/list");
+    const response = await axios.get(`http://${BACKEND_SERVER}:5000/api/list`);
     const data = response.data["experiments"];
     console.log(data);
     if (data != null) {
@@ -23,11 +24,10 @@ const SelectComponent = () => {
 
   const handleSelectChange = async (selectedOption) => {
     console.log(`Option selected:`, selectedOption["value"]);
-    // let config={headers: {"Access-Control-Allow-Origin": "http://localhost:3000"}}
     let config={}
 
 
-    const response = await axios.post("http://localhost:5000/api/load", {"experiment": selectedOption["value"]}, config)
+    await axios.post(`http://${BACKEND_SERVER}:5000/api/load`, {"experiment": selectedOption["value"]}, config)
     .then(response => {
     if (response.status === 0) {
         console.log(response.data["message"]);   

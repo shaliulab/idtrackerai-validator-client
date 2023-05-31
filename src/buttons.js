@@ -3,11 +3,12 @@ import {
   get_prev_chunk, get_next_chunk, get_chunk_back, get_chunk_forward,
   get_10seconds_back, get_10seconds_forward, get_1seconds_back, get_1seconds_forward } from './utils';
 import axios from 'axios';
-
+import { BACKEND_SERVER } from './constants'
 
 const Buttons = ( {frameNumber, setFrameNumber, setIsPlaying, requestQueue } ) => {
     
     const play = () => {
+      setFrameNumber(frameNumber);
       setIsPlaying(true);
     };
     
@@ -17,21 +18,21 @@ const Buttons = ( {frameNumber, setFrameNumber, setIsPlaying, requestQueue } ) =
     };
     
     const next_error = () => {
-      axios.get(`http://localhost:5000/api/next_error/${parseInt(frameNumber)}`)
+      axios.get(`http://${BACKEND_SERVER}:5000/api/next_error/${parseInt(frameNumber)}`)
       .then(response => {
         setFrameNumber(response.data["frame_number"]);  
       });
     };
 
     const prev_error = () => {
-      axios.get(`http://localhost:5000/api/prev_error/${parseInt(frameNumber)}`)
+      axios.get(`http://${BACKEND_SERVER}:5000/api/prev_error/${parseInt(frameNumber)}`)
       .then(response => {
         setFrameNumber(response.data["frame_number"]);  
       })
     };
 
     const next_ok = () => {
-      axios.get(`http://localhost:5000/api/next_ok/${parseInt(frameNumber)}`)
+      axios.get(`http://${BACKEND_SERVER}:5000/api/next_ok/${parseInt(frameNumber)}`)
       .then(response => {
         const frame_number = response.data["frame_number"]
         if(frame_number == null) {
@@ -42,7 +43,7 @@ const Buttons = ( {frameNumber, setFrameNumber, setIsPlaying, requestQueue } ) =
       })
     };
     const prev_ok = () => {
-      axios.get(`http://localhost:5000/api/prev_ok/${parseInt(frameNumber)}`)
+      axios.get(`http://${BACKEND_SERVER}:5000/api/prev_ok/${parseInt(frameNumber)}`)
       .then(response => {
         const frame_number = response.data["frame_number"]
         if(frame_number == null) {
@@ -54,7 +55,7 @@ const Buttons = ( {frameNumber, setFrameNumber, setIsPlaying, requestQueue } ) =
     };
 
     const next_ai = () => {
-      axios.get(`http://localhost:5000/api/next_ai/${parseInt(frameNumber)}`)
+      axios.get(`http://${BACKEND_SERVER}:5000/api/next_ai/${parseInt(frameNumber)}`)
       .then(response => {
         console.log(response.data["ai"]);
         setFrameNumber(response.data["frame_number"]);
@@ -62,7 +63,7 @@ const Buttons = ( {frameNumber, setFrameNumber, setIsPlaying, requestQueue } ) =
     };
 
     const prev_ai = () => {
-      axios.get(`http://localhost:5000/api/prev_ai/${parseInt(frameNumber)}`)
+      axios.get(`http://${BACKEND_SERVER}:5000/api/prev_ai/${parseInt(frameNumber)}`)
       .then(response => {
         console.log(response.data["ai"]);
         setFrameNumber(response.data["frame_number"]);
@@ -70,7 +71,7 @@ const Buttons = ( {frameNumber, setFrameNumber, setIsPlaying, requestQueue } ) =
     };
     
     const close = () => {
-      axios.post(`http://localhost:5000/shutdown`)
+      axios.post(`http://${BACKEND_SERVER}:5000/shutdown`)
       .then(response => {
         const message=response.data["message"];
         console.log(message);
