@@ -8,7 +8,7 @@ const BlobsTable = ({ Data }) => {
               <th>X</th>
               <th>Y</th>
               <th>Identity</th>
-              <th>Modified</th>
+              <th>YOLOv7</th>
             </tr>
           </thead>
           <tbody>

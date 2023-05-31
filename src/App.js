@@ -103,16 +103,6 @@ function App() {
   }, [isPlaying]);
 
 
-  // useEffect(() => {
-  //   const timerId = setTimeout(() => {
-  //     setFrameNumber(frameNumber);
-  //   }, 50);
-
-  //   return () => {
-  //     clearTimeout(timerId);
-  //   };
-  // }, [frameNumber]);
-
   const validateData = (dataArray) => {
     return dataArray.filter(item => {
       // Check if all attributes are set (not null or undefined)
