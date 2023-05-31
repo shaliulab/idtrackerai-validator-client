@@ -6,7 +6,14 @@ const Slider = ({ isPlaying, frameNumber, setFrameNumber, sliderWidth }) => {
     const [updateFromSlider, setUpdateFromSlider] = useState(true);
 
     const debouncedSetFrameNumber = useCallback(
-        _.debounce((value) => setFrameNumber(value), 50), 
+        
+        _.debounce((value) => {
+            if (!isNaN(value)) {
+            const value_int = parseInt(value);
+            console.log(value_int);
+            setFrameNumber(value_int);
+          }
+        }, 50), 
         [setFrameNumber]
     );
 
@@ -27,3 +34,4 @@ const Slider = ({ isPlaying, frameNumber, setFrameNumber, sliderWidth }) => {
 };
 
 export default Slider
+
