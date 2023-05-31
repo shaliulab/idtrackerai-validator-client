@@ -1,11 +1,11 @@
 import React, { useRef, useEffect } from 'react';
 
-const InteractiveText = React.forwardRef(({ frameNumber, setFrameNumber }, ref) => {
+const InteractiveText = React.forwardRef(({ value, setValue }, ref) => {
     
     const handleInputChange = (event) => {
         const newValue = parseInt(event.target.value);
         if (!isNaN(newValue)) {
-            setFrameNumber(newValue);
+            setValue(newValue);
         }
     };
 
@@ -14,7 +14,7 @@ const InteractiveText = React.forwardRef(({ frameNumber, setFrameNumber }, ref) 
             style={{width: 100}}
             type="number"
             step="1" 
-            value={frameNumber} 
+            value={value} 
             onChange={handleInputChange} 
         />
     )

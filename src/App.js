@@ -9,7 +9,6 @@ import { RequestQueue } from './queue'
 import BlobsTable from './blobs_table'
 import SelectComponent from './selectComponent'
 
-const STEP=FRAMERATE;
 const MAX_SIMULTANEOUS_REQUESTS = 1;
 const requestQueue = new RequestQueue(MAX_SIMULTANEOUS_REQUESTS);
 
@@ -38,6 +37,7 @@ function App() {
   const canvasRef = useRef(null);
   const [sliderWidth, setSliderWidth] = useState(1192);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [videoFrameRate, setVideoFrameRate] = useState(FRAMERATE);
 
 
   useEffect(() => {
@@ -82,12 +82,12 @@ function App() {
   useEffect(() => {
     if (isPlaying) {
       const intervalId = setInterval(() => {
-        setFrameNumber(prevFrameNumber => ( prevFrameNumber + STEP ) % 15750000 );
+        setFrameNumber(prevFrameNumber => ( prevFrameNumber + videoFrameRate ) % 15750000 );
       }, 500);
   
       return () => clearInterval(intervalId); // cleanup on unmount
     }
-  }, [isPlaying]);
+  }, [isPlaying, videoFrameRate]);
 
 
   const validateData = (dataArray) => {
@@ -113,7 +113,8 @@ function App() {
               <div className="frame-container">
                { <SelectComponent /> }
                {frame && <FrameWithSquare imageURL={frame} trackingData={trackingData} ref={canvasRef}/>}
-               { <InteractiveText frameNumber={frameNumber} setFrameNumber={setFrameNumber} /> }
+               { <InteractiveText value={frameNumber} setValue={setFrameNumber} /> }
+               { <InteractiveText value={videoFrameRate} setValue={setVideoFrameRate} /> }
                { <Slider isPlaying={isPlaying} frameNumber={frameNumber} setFrameNumber={setFrameNumber} sliderWidth={sliderWidth} /> }
               </div>
               <div className="table-container">
