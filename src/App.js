@@ -4,20 +4,14 @@ import FrameWithSquare from './FrameWithSquare';
 import Buttons from './buttons';
 import Slider from './slider';
 import InteractiveText from './interactiveText' 
-import { FRAMERATE, MIN_FN } from './constants';
+import { FRAMERATE, MIN_FN, BACKEND_SERVER } from './constants';
 import { RequestQueue } from './queue'
 import BlobsTable from './blobs_table'
 import SelectComponent from './selectComponent'
 
 const STEP=FRAMERATE;
-
-
 const MAX_SIMULTANEOUS_REQUESTS = 1;
 const requestQueue = new RequestQueue(MAX_SIMULTANEOUS_REQUESTS);
-
-// function queuedAxiosGet(url) {
-//   return requestQueue.add(() => axios.get(url, { responseType: 'blob' } ));
-// }
 
 function queuedAxiosGet(url) {
   const source = axios.CancelToken.source();
@@ -29,17 +23,12 @@ function queuedAxiosGet(url) {
     if (index !== -1) {
       requestQueue.pendingRequests.splice(index, 1);
     }
-
-    // requestQueue.pendingRequests.delete(request);
   });
 
   request.cancel = () => source.cancel('Operation canceled by user.');
 
   return requestQueue.add(request);
 }
-
-// Then use queuedAxiosGet instead of axios.get
-
 
 
 function App() {
@@ -54,7 +43,6 @@ function App() {
   useEffect(() => {
 
     const updateFrame = (value) => {
-      // If your server responds with an image, you might want to display the image instead:
       setFrame(URL.createObjectURL(value));
 
       if (canvasRef.current) {
@@ -63,7 +51,7 @@ function App() {
     }
 
     function fetchTrackingData(value) {
-        axios.get(`http://localhost:5000/api/tracking/${parseInt(value)}`)
+        axios.get(`http://${BACKEND_SERVER}:5000/api/tracking/${parseInt(value)}`)
         .then(response => {
           const validatedData = validateData(response.data);
           setTrackingData(validatedData);
@@ -77,8 +65,7 @@ function App() {
 
       console.log(requestQueue.pendingRequests.length);
 
-      queuedAxiosGet(`http://localhost:5000/api/frame/${parseInt(frameNumber)}`)
-      // axios.get(`http://localhost:5000/api/frame/${parseInt(frameNumber)}`,  { responseType: 'blob' })
+      queuedAxiosGet(`http://${BACKEND_SERVER}:5000/api/frame/${parseInt(frameNumber)}`)
       .then(response => {      
         updateFrame(response.data);
         fetchTrackingData(frameNumber);
