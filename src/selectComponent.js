@@ -4,7 +4,7 @@ import axios from 'axios';
 import { BACKEND_SERVER } from './constants'
 
 const SelectComponent = () => {
-  const defaultOption = { value: "", label: "Select an option..." };
+  const defaultOption = { value: "FlyHostel1/5X/2023-05-23_14-00-00", label: "Select an experiment..." };
   const [options, setOptions] = useState([defaultOption]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -12,7 +12,7 @@ const SelectComponent = () => {
     setIsLoading(true);
     const response = await axios.get(`http://${BACKEND_SERVER}:5000/api/list`);
     const data = response.data["experiments"];
-    console.log(data);
+
     if (data != null) {
       // Map data to match react-select's expected shape
       const formattedData = data.map((item) => ({ value: item, label: item }));
@@ -33,9 +33,7 @@ const SelectComponent = () => {
     await axios.post(`http://${BACKEND_SERVER}:5000/api/load`, {"experiment": selectedOption["value"]}, config)
     .then(response => {
     if (response.status === 0) {
-        console.log(response.data["message"]);   
     } else if (response.status === 200) {
-        console.log(response.data["message"]);
     } else {
     // Handle non-OK status codes
     console.log("Error:", response.status);

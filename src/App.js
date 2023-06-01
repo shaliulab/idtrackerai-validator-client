@@ -54,6 +54,7 @@ function App() {
         axios.get(`http://${BACKEND_SERVER}:5000/api/tracking/${parseInt(value)}`)
         .then(response => {
           const validatedData = validateData(response.data);
+
           setTrackingData(validatedData);
         })
         .catch(error => {
@@ -63,7 +64,7 @@ function App() {
 
     const fetchFrame = async (frameNumber) => {
 
-      console.log(requestQueue.pendingRequests.length);
+      // console.log(requestQueue.pendingRequests.length);
 
       queuedAxiosGet(`http://${BACKEND_SERVER}:5000/api/frame/${parseInt(frameNumber)}`)
       .then(response => {      
@@ -91,7 +92,7 @@ function App() {
 
 
   const validateData = (dataArray) => {
-    return dataArray.filter(item => {
+    const filteredData=dataArray.filter(item => {
       // Check if all attributes are set (not null or undefined)
       return (
         item.frame_number != null && 
@@ -101,31 +102,42 @@ function App() {
         item.identity != null &&
         item.modified != null
       );
-    });
+    })
+    for (let i=0; i < filteredData.length; i++) {
+      filteredData[i]["x"]=Math.round(filteredData[i]["x"]);
+      filteredData[i]["y"]=Math.round(filteredData[i]["y"]);
+    }
+
+    return(filteredData);
   };
 
   
   return (
-      <div className="App">
+    <div className="App">
       <h1>FlyHostel Viewer</h1>
       <h3>Developed at Liu Lab @ VIB-KU Leuven Center for Brain & Disease Research</h3>
       <div className="dashboard-container">
-              <div className="frame-container">
-               { <SelectComponent /> }
-               {frame && <FrameWithSquare imageURL={frame} trackingData={trackingData} ref={canvasRef}/>}
-               { <InteractiveText value={frameNumber} setValue={setFrameNumber} /> }
-               { <InteractiveText value={videoFrameRate} setValue={setVideoFrameRate} /> }
-               { <Slider isPlaying={isPlaying} frameNumber={frameNumber} setFrameNumber={setFrameNumber} sliderWidth={sliderWidth} /> }
-              </div>
-              <div className="table-container">
-                  <BlobsTable Data={trackingData} />
-              </div>
+        <div className="column-container">
+          <div className="left-column">
+            <SelectComponent />
+            {frame && <FrameWithSquare imageURL={frame} trackingData={trackingData} ref={canvasRef}/>}
+            <InteractiveText value={frameNumber} setValue={setFrameNumber} id="frame_number" labelText="Frame number  " />
+            <InteractiveText value={videoFrameRate} setValue={setVideoFrameRate} id="frame_rate" labelText="Frame rate (during playback)  "  />
+            <Slider isPlaying={isPlaying} frameNumber={frameNumber} setFrameNumber={setFrameNumber} sliderWidth={sliderWidth} />
           </div>
-          <div className="button-group">
-              { <Buttons frameNumber={frameNumber} setFrameNumber={setFrameNumber} setIsPlaying={setIsPlaying} requestQueue={requestQueue} />}
+          <div className="right-column">
+            <div className="table-container">
+              <BlobsTable Data={trackingData} />
+            </div>
           </div>
+        </div>
+        <div className="button-group">
+          <Buttons frameNumber={frameNumber} setFrameNumber={setFrameNumber} setIsPlaying={setIsPlaying} requestQueue={requestQueue} />
+        </div>
       </div>
+    </div>
   );
+  
 }
 
 export default App;

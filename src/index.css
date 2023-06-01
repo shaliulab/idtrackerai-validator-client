@@ -11,3 +11,26 @@ code {
   font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
     monospace;
 }
+
+.column-container {
+  display: flex;
+  align-items: flex-start; /* this ensures the items start from the top of the column */
+}
+
+.left-column, .right-column {
+  flex: 1;
+  display: flex;
+  flex-direction: column; /* makes the items in the column stack vertically */
+}
+
+.left-column {
+  align-items: flex-start; /* optional: aligns items to the start of the column */
+}
+
+.right-column {
+  /* align-items: flex-end; /* optional: aligns items to the end of the column */
+}
+
+.right-column > *:first-child {
+  margin-top: 200px; /* assuming FrameWithSquare is 200px tall; adjust as needed */
+}

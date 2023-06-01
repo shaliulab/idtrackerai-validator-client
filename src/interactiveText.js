@@ -1,6 +1,6 @@
 import React, { useRef, useEffect } from 'react';
 
-const InteractiveText = React.forwardRef(({ value, setValue }, ref) => {
+const InteractiveText = React.forwardRef(({ value, setValue, id, labelText }, ref) => {
     
     const handleInputChange = (event) => {
         const newValue = parseInt(event.target.value);
@@ -10,13 +10,17 @@ const InteractiveText = React.forwardRef(({ value, setValue }, ref) => {
     };
 
     return(
+        <div>
+        <label htmlFor={id}>{labelText}</label>
         <input 
             style={{width: 100}}
             type="number"
             step="1" 
-            value={value} 
-            onChange={handleInputChange} 
+            value={value}
+            id={id} 
+            onChange={handleInputChange}
         />
+        </div>
     )
 
 }); 
