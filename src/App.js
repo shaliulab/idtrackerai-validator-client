@@ -106,8 +106,8 @@ function App() {
     for (let i=0; i < filteredData.length; i++) {
       filteredData[i]["x"]=Math.round(filteredData[i]["x"]);
       filteredData[i]["y"]=Math.round(filteredData[i]["y"]);
+      filteredData[i]["ZT"]=(filteredData[i]["t"]/3600).toFixed(2);
     }
-
     return(filteredData);
   };
 
