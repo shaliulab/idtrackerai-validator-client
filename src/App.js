@@ -116,13 +116,31 @@ function App() {
     <div className="App">
       <h1>FlyHostel Viewer</h1>
       <h3>Developed at Liu Lab @ VIB-KU Leuven Center for Brain & Disease Research</h3>
+      
+      <h2>What can I do with this web application?</h2>
+      <ul>
+      
+      <li>Select from an array of experiments</li>
+      <li>Browse any frame from that experiment with a slider (like Youtube) and an input box</li>
+      <li>Move 1, 10, 45000 (1 chunk of 5 minutes) frames back and forth</li>
+      <li>Move to the beginning of the next chunk or the end of the previous one</li>
+      <li>Move to the previous/next frame where an AI has intervened (either YOLOv7 or idtrackerai)</li>
+      <li>Move to the previous/next frame where the AI could not solve an identity (there is at least one fly with identity=0)</li>
+      <li>Move to the first previous/next frame where all identities are restored</li>
+      <li>Playback the video at the desired framerate. 1 frame is displayed every half a second, and the number of frames skipped at each step is given by the playback framerate input box</li>
+      </ul>
+
+      <p>The goal is to 1) visualize the identity assignments produced by YOLOv7+idtrackerai, and 2) be able to correct or improve them if needed</p>
+      <p>3) The plots produced in the analysis will also be displayed, as well as behavioral labels</p>
+      <p>So far, only the first goal is achieved</p>
+
       <div className="dashboard-container">
         <div className="column-container">
           <div className="left-column">
             <SelectComponent />
             {frame && <FrameWithSquare imageURL={frame} trackingData={trackingData} ref={canvasRef}/>}
             <InteractiveText value={frameNumber} setValue={setFrameNumber} id="frame_number" labelText="Frame number  " />
-            <InteractiveText value={videoFrameRate} setValue={setVideoFrameRate} id="frame_rate" labelText="Frame rate (during playback)  "  />
+            <InteractiveText value={videoFrameRate} setValue={setVideoFrameRate} id="playback_framerate" labelText="Playback Framerate  "  />
             <Slider isPlaying={isPlaying} frameNumber={frameNumber} setFrameNumber={setFrameNumber} sliderWidth={sliderWidth} />
           </div>
           <div className="right-column">
