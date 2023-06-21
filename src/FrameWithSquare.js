@@ -17,7 +17,7 @@ function generateColorPalette(numColors) {
 }
 
 
-const FrameWithSquare = React.forwardRef(({ imageURL, trackingData }, ref) => {
+const FrameWithSquare = React.forwardRef(({ imageURL, trackingData, contoursData}, ref) => {
   const canvasRef = useRef();
   const inputRef = useRef(); // create a ref for the input field
   const [showBanner, setShowBanner] = useState(false);
@@ -76,23 +76,25 @@ const FrameWithSquare = React.forwardRef(({ imageURL, trackingData }, ref) => {
       context.clearRect(0, 0, ref.current.width, ref.current.height);
       context.drawImage(img, 0, 0, ref.current.width, ref.current.height);
 
-      trackingData.forEach(animal => {
+      trackingData.forEach(function(animal, index) {
         const drawSquare = (context, animal, color) => {
           context.beginPath();
           context.rect(animal.x-WIDTH/2, animal.y-HEIGHT/2, WIDTH, HEIGHT);
           context.lineWidth = 2;
           context.strokeStyle = color;
+          console.log(color);
           context.stroke();
-        };
+          context.closePath();
+        };    
 
         const writeIdentity = (context, animal, color) => {
 
-          context.font = "35px Arial";
-          // Draw the index number on the top left corner of the square
-          context.fillStyle=color;
-          context.fillText(animal.identity.toString(), animal.x, animal.y);
-          // context.fillText(animal.identity.toString(), animal.x-WIDTH/2, animal.y-HEIGHT/2-10);
-        }
+            context.font = "35px Arial";
+            // Draw the index number on the top left corner of the square
+            context.fillStyle=color;
+            context.fillText(animal.identity.toString(), animal.x, animal.y);
+            // context.fillText(animal.identity.toString(), animal.x-WIDTH/2, animal.y-HEIGHT/2-10);
+          }
         
         var color = "#000000";
         if (animal.identity != null & animal.identity != 0) {
@@ -101,8 +103,33 @@ const FrameWithSquare = React.forwardRef(({ imageURL, trackingData }, ref) => {
 
         drawSquare(context, animal, color);
         writeIdentity(context, animal, color);
+      });
 
-      });    
+      let contour_color = "hsla(120, 100%, 50%, 0.2)";
+      console.log(contoursData.length);
+
+      contoursData.forEach(function(contour) {
+        // Start a new path
+        context.beginPath();
+    
+        // Draw the contour
+        contour.forEach(function(point, index) {
+            let x = point[0][0];
+            let y = point[0][1];
+    
+            // If it's the first point, we move to it. Otherwise, we draw a line from the last point
+            if (index === 0) {
+                context.moveTo(x, y);
+            } else {
+                context.lineTo(x, y);
+            }
+        });
+        // Close the path if needed
+        context.closePath();
+        context.fillStyle = contour_color;
+        context.fill();
+      });
+
     };
   }, [imageURL, trackingData, ref]);
 

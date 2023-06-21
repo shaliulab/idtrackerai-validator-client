@@ -34,6 +34,7 @@ function App() {
   const [frame, setFrame] = useState(null);
   const [frameNumber, setFrameNumber] = useState(MIN_FN); // Default frame number
   const [trackingData, setTrackingData] = useState([]); // Default frame number
+  const [contoursData, setContoursData] = useState([]); // Default frame number
   const canvasRef = useRef(null);
   const [sliderWidth, setSliderWidth] = useState(1192);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -62,6 +63,17 @@ function App() {
         });
     }
 
+  function fetchPreprocessData(value) {
+      axios.get(`http://${BACKEND_SERVER}:5000/api/preprocess/${parseInt(value)}`)
+      .then(response => {
+        const contours = response.data["contours"];
+        setContoursData(contours);
+      })
+      .catch(error => {
+        console.error("Error fetching frame contours: ", error);
+      });
+  }
+
     const fetchFrame = async (frameNumber) => {
 
       // console.log(requestQueue.pendingRequests.length);
@@ -70,6 +82,7 @@ function App() {
       .then(response => {      
         updateFrame(response.data);
         fetchTrackingData(frameNumber);
+        fetchPreprocessData(frameNumber);
       })
       .catch(error => {
         console.error("Error fetching frame: ", error);
@@ -138,7 +151,7 @@ function App() {
         <div className="column-container">
           <div className="left-column">
             <SelectComponent />
-            {frame && <FrameWithSquare imageURL={frame} trackingData={trackingData} ref={canvasRef}/>}
+            {frame && <FrameWithSquare imageURL={frame} trackingData={trackingData} contoursData={contoursData} ref={canvasRef}/>}
             <InteractiveText value={frameNumber} setValue={setFrameNumber} id="frame_number" labelText="Frame number  " />
             <InteractiveText value={videoFrameRate} setValue={setVideoFrameRate} id="playback_framerate" labelText="Playback Framerate  "  />
             <Slider isPlaying={isPlaying} frameNumber={frameNumber} setFrameNumber={setFrameNumber} sliderWidth={sliderWidth} />
