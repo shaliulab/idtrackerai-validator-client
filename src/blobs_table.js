@@ -8,6 +8,8 @@ const BlobsTable = ({ Data }) => {
               <th>X</th>
               <th>Y</th>
               <th>Identity</th>
+              <th>Fragment</th>
+              <th>Area</th>
               <th>YOLOv7</th>
               <th>ZT</th>
             </tr>
@@ -19,6 +21,8 @@ const BlobsTable = ({ Data }) => {
                     <td>{row.x}</td>
                     <td>{row.y}</td>
                     <td>{row.identity}</td>
+                    <td>{row.fragment}</td>
+                    <td>{row.area}</td>
                     <td>{row.modified.toString()}</td>
                     <td>{row.ZT}</td>
                 </tr>
