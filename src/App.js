@@ -8,6 +8,7 @@ import { FRAMERATE, MIN_FN, BACKEND_SERVER } from './constants';
 import { RequestQueue } from './queue'
 import BlobsTable from './blobs_table'
 import SelectComponent from './selectComponent'
+import { PLACEHOLDER_IMAGE } from './constants'
 
 const MAX_SIMULTANEOUS_REQUESTS = 1;
 const requestQueue = new RequestQueue(MAX_SIMULTANEOUS_REQUESTS);
@@ -31,14 +32,14 @@ function queuedAxiosGet(url) {
 
 
 function App() {
-  const [frame, setFrame] = useState(null);
+  const [frame, setFrame] = useState(PLACEHOLDER_IMAGE);
   const [frameNumber, setFrameNumber] = useState(MIN_FN); // Default frame number
   const [trackingData, setTrackingData] = useState([]); // Default frame number
   const [contoursData, setContoursData] = useState([]); // Default frame number
-  const canvasRef = useRef(null);
   const [sliderWidth, setSliderWidth] = useState(1192);
   const [isPlaying, setIsPlaying] = useState(false);
   const [videoFrameRate, setVideoFrameRate] = useState(FRAMERATE);
+  const FrameWithSquareRef = useRef(null);
 
 
   useEffect(() => {
@@ -46,8 +47,8 @@ function App() {
     const updateFrame = (value) => {
       setFrame(URL.createObjectURL(value));
 
-      if (canvasRef.current) {
-        setSliderWidth(canvasRef.current.width);
+      if (FrameWithSquareRef.current) {
+        setSliderWidth(FrameWithSquareRef.current.width);
       }
     }
 
@@ -151,8 +152,7 @@ function App() {
         <div className="column-container">
           <div className="left-column">
             <SelectComponent />
-            {frame && <FrameWithSquare imageURL={frame} trackingData={trackingData} contoursData={contoursData} ref={canvasRef}/>}
-            <InteractiveText value={frameNumber} setValue={setFrameNumber} id="frame_number" labelText="Frame number  " />
+            {frame && <FrameWithSquare imageURL={frame} trackingData={trackingData} contoursData={contoursData} frameNumber={frameNumber} setFrameNumber={setFrameNumber} ref={FrameWithSquareRef}/>}
             <InteractiveText value={videoFrameRate} setValue={setVideoFrameRate} id="playback_framerate" labelText="Playback Framerate  "  />
             <Slider isPlaying={isPlaying} frameNumber={frameNumber} setFrameNumber={setFrameNumber} sliderWidth={sliderWidth} />
           </div>
@@ -172,3 +172,9 @@ function App() {
 }
 
 export default App;
+
+
+/*
+            <InteractiveText value={frameNumber} setValue={setFrameNumber} id="frame_number" labelText="Frame number  " />
+
+            */

@@ -25,4 +25,4 @@ const InteractiveText = React.forwardRef(({ value, setValue, id, labelText }, re
 
 }); 
 
-export default InteractiveText
+export default InteractiveText;

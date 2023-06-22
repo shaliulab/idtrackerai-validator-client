@@ -1,4 +1,5 @@
 import React, { useRef, useEffect, useState } from 'react';
+import ScrollNumberInput from './scrollableNumber'; // adjust the path according to your file structure
 
 const HEIGHT=100;
 const WIDTH=100;
@@ -17,12 +18,12 @@ function generateColorPalette(numColors) {
 }
 
 
-const FrameWithSquare = React.forwardRef(({ imageURL, trackingData, contoursData}, ref) => {
+const FrameWithSquare = React.forwardRef(({ imageURL, trackingData, contoursData, frameNumber, setFrameNumber }, ref) => {
   const canvasRef = useRef();
   const inputRef = useRef(); // create a ref for the input field
   const [showBanner, setShowBanner] = useState(false);
   const [bannerText, setBannerText] = useState("");
-
+  const imgRef = useRef(); // create a ref for the img
 
   const handleClick = (event) => {
     // Get the bounding rectangle of the target element
@@ -62,76 +63,77 @@ const FrameWithSquare = React.forwardRef(({ imageURL, trackingData, contoursData
 
 
   useEffect(() => {
-    const context = ref.current.getContext('2d');
-    const img = canvasRef.current;
-    img.src = imageURL;
 
-    const number_of_animals=trackingData.length;
-    const colors = generateColorPalette(number_of_animals);
-    
-    img.onload = function() {
+    if (canvasRef.current) {
+      const context = canvasRef.current.getContext('2d');
+      const img = imgRef.current;
+      img.src = imageURL;
 
-      ref.current.width = img.width
-      ref.current.height = img.height
-      context.clearRect(0, 0, ref.current.width, ref.current.height);
-      context.drawImage(img, 0, 0, ref.current.width, ref.current.height);
+      const number_of_animals=trackingData.length;
+      const colors = generateColorPalette(number_of_animals);
+      
+      img.onload = function() {
 
-      trackingData.forEach(function(animal, index) {
-        const drawSquare = (context, animal, color) => {
-          context.beginPath();
-          context.rect(animal.x-WIDTH/2, animal.y-HEIGHT/2, WIDTH, HEIGHT);
-          context.lineWidth = 2;
-          context.strokeStyle = color;
-          console.log(color);
-          context.stroke();
-          context.closePath();
-        };    
+        canvasRef.current.width = img.width
+        canvasRef.current.height = img.height
+        context.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+        context.drawImage(img, 0, 0, canvasRef.current.width, canvasRef.current.height);
 
-        const writeIdentity = (context, animal, color) => {
+        trackingData.forEach(function(animal, index) {
+          const drawSquare = (context, animal, color) => {
+            context.beginPath();
+            context.rect(animal.x-WIDTH/2, animal.y-HEIGHT/2, WIDTH, HEIGHT);
+            context.lineWidth = 2;
+            context.strokeStyle = color;
+            context.stroke();
+            context.closePath();
+          };    
 
-            context.font = "35px Arial";
-            // Draw the index number on the top left corner of the square
-            context.fillStyle=color;
-            context.fillText(animal.identity.toString(), animal.x, animal.y);
-            // context.fillText(animal.identity.toString(), animal.x-WIDTH/2, animal.y-HEIGHT/2-10);
-          }
-        
-        var color = "#000000";
-        if (animal.identity != null & animal.identity != 0) {
-          color = colors[parseInt(animal.identity) % number_of_animals ]
-        }
+          const writeIdentity = (context, animal, color) => {
 
-        drawSquare(context, animal, color);
-        writeIdentity(context, animal, color);
-      });
-
-      let contour_color = "hsla(120, 100%, 50%, 0.2)";
-      console.log(contoursData.length);
-
-      contoursData.forEach(function(contour) {
-        // Start a new path
-        context.beginPath();
-    
-        // Draw the contour
-        contour.forEach(function(point, index) {
-            let x = point[0][0];
-            let y = point[0][1];
-    
-            // If it's the first point, we move to it. Otherwise, we draw a line from the last point
-            if (index === 0) {
-                context.moveTo(x, y);
-            } else {
-                context.lineTo(x, y);
+              context.font = "35px Arial";
+              // Draw the index number on the top left corner of the square
+              context.fillStyle=color;
+              context.fillText(animal.identity.toString(), animal.x, animal.y);
+              // context.fillText(animal.identity.toString(), animal.x-WIDTH/2, animal.y-HEIGHT/2-10);
             }
-        });
-        // Close the path if needed
-        context.closePath();
-        context.fillStyle = contour_color;
-        context.fill();
-      });
+          
+          var color = "#000000";
+          if (animal.identity != null & animal.identity != 0) {
+            color = colors[parseInt(animal.identity) % number_of_animals ]
+          }
 
-    };
-  }, [imageURL, trackingData, ref]);
+          drawSquare(context, animal, color);
+          writeIdentity(context, animal, color);
+        });
+
+        let contour_color = "hsla(120, 100%, 50%, 0.2)";
+
+        contoursData.forEach(function(contour) {
+          // Start a new path
+          context.beginPath();
+      
+          // Draw the contour
+          contour.forEach(function(point, index) {
+              let x = point[0][0];
+              let y = point[0][1];
+      
+              // If it's the first point, we move to it. Otherwise, we draw a line from the last point
+              if (index === 0) {
+                  context.moveTo(x, y);
+              } else {
+                  context.lineTo(x, y);
+              }
+          });
+          // Close the path if needed
+          context.closePath();
+          context.fillStyle = contour_color;
+          context.fill();
+        });
+
+      };
+    }
+  }, [imageURL, trackingData, frameNumber, ref]);
 
 
   // this effect runs whenever showBanner changes
@@ -151,8 +153,8 @@ const FrameWithSquare = React.forwardRef(({ imageURL, trackingData, contoursData
 
   return (
     <div onClick={handleClick}>
-      <canvas ref={ref} />
-      <img ref={canvasRef} style={{ display: 'none', width: 1000 }} alt="" />
+      <canvas ref={canvasRef} />
+      <img ref={imgRef} style={{ display: 'none', width: 1000 }} alt="" />
       {showBanner && (
         <form onSubmit={handleOkClick} className="banner">
           <input 
@@ -165,6 +167,7 @@ const FrameWithSquare = React.forwardRef(({ imageURL, trackingData, contoursData
           <button type="submit">OK</button>
         </form>
       )}
+      <ScrollNumberInput value={frameNumber} setValue={setFrameNumber} id="frame_number" labelText="Frame number " focusElementRef={canvasRef}/>
     </div>
   );
 });
