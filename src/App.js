@@ -3,8 +3,9 @@ import axios from 'axios';
 import FrameWithSquare from './FrameWithSquare';
 import Buttons from './buttons';
 import Slider from './slider';
+import Tab from './Tab' 
 import InteractiveText from './interactiveText' 
-import { FRAMERATE, MIN_FN, BACKEND_SERVER } from './constants';
+import { FRAMERATE, MIN_FN, CHUNKSIZE, BACKEND_SERVER } from './constants';
 import { RequestQueue } from './queue'
 import BlobsTable from './blobs_table'
 import SelectComponent from './selectComponent'
@@ -33,14 +34,14 @@ function queuedAxiosGet(url) {
 
 function App() {
   const [frame, setFrame] = useState(PLACEHOLDER_IMAGE);
-  const [frameNumber, setFrameNumber] = useState(MIN_FN); // Default frame number
+  const [frameNumber, setFrameNumber] = useState(CHUNKSIZE*50); // Default frame number
   const [trackingData, setTrackingData] = useState([]); // Default frame number
   const [contoursData, setContoursData] = useState([]); // Default frame number
   const [sliderWidth, setSliderWidth] = useState(1192);
   const [isPlaying, setIsPlaying] = useState(false);
   const [videoFrameRate, setVideoFrameRate] = useState(FRAMERATE);
   const FrameWithSquareRef = useRef(null);
-
+  const [activeTab, setActiveTab] = useState('idtrackerai_viewer');
 
   useEffect(() => {
 
@@ -51,6 +52,10 @@ function App() {
         setSliderWidth(FrameWithSquareRef.current.width);
       }
     }
+
+    // to debug:
+    
+
 
     function fetchTrackingData(value) {
         axios.get(`http://${BACKEND_SERVER}:5000/api/tracking/${parseInt(value)}`)
@@ -130,42 +135,70 @@ function App() {
     <div className="App">
       <h1>FlyHostel Viewer</h1>
       <h3>Developed at Liu Lab @ VIB-KU Leuven Center for Brain & Disease Research</h3>
-      
-      <h2>What can I do with this web application?</h2>
-      <ul>
-      
-      <li>Select from an array of experiments</li>
-      <li>Browse any frame from that experiment with a slider (like Youtube) and an input box</li>
-      <li>Move 1, 10, 45000 (1 chunk of 5 minutes) frames back and forth</li>
-      <li>Move to the beginning of the next chunk or the end of the previous one</li>
-      <li>Move to the previous/next frame where an AI has intervened (either YOLOv7 or idtrackerai)</li>
-      <li>Move to the previous/next frame where the AI could not solve an identity (there is at least one fly with identity=0)</li>
-      <li>Move to the first previous/next frame where all identities are restored</li>
-      <li>Playback the video at the desired framerate. 1 frame is displayed every half a second, and the number of frames skipped at each step is given by the playback framerate input box</li>
-      </ul>
 
-      <p>The goal is to 1) visualize the identity assignments produced by YOLOv7+idtrackerai, and 2) be able to correct or improve them if needed</p>
-      <p>3) The plots produced in the analysis will also be displayed, as well as behavioral labels</p>
-      <p>So far, only the first goal is achieved</p>
-
-      <div className="dashboard-container">
-        <div className="column-container">
-          <div className="left-column">
-            <SelectComponent />
-            {frame && <FrameWithSquare imageURL={frame} trackingData={trackingData} contoursData={contoursData} frameNumber={frameNumber} setFrameNumber={setFrameNumber} ref={FrameWithSquareRef}/>}
-            <InteractiveText value={videoFrameRate} setValue={setVideoFrameRate} id="playback_framerate" labelText="Playback Framerate  "  />
-            <Slider isPlaying={isPlaying} frameNumber={frameNumber} setFrameNumber={setFrameNumber} sliderWidth={sliderWidth} />
-          </div>
-          <div className="right-column">
-            <div className="table-container">
-              <BlobsTable Data={trackingData} />
-            </div>
-          </div>
-        </div>
-        <div className="button-group">
-          <Buttons frameNumber={frameNumber} setFrameNumber={setFrameNumber} setIsPlaying={setIsPlaying} requestQueue={requestQueue} />
-        </div>
+      {/* Tab headers */}
+      <div className="tabs">
+        <Tab id="idtrackerai_viewer" activeTab={activeTab} setActiveTab={setActiveTab}>Idtrackerai viewer</Tab>
+        <Tab id="pose_viewer" activeTab={activeTab} setActiveTab={setActiveTab}>Pose viewer</Tab>
       </div>
+
+      {/* Tab content */}
+      <div className="tab-content">
+        {activeTab === 'idtrackerai_viewer' && (
+          <div>
+            <h2>What can I do with this web application?</h2>
+            <ul>
+            
+            <li>Select from an array of experiments</li>
+            <li>Browse any frame from that experiment with a slider (like Youtube) and an input box</li>
+            <li>Move 1, 10, 45000 (1 chunk of 5 minutes) frames back and forth</li>
+            <li>Move to the beginning of the next chunk or the end of the previous one</li>
+            <li>Move to the previous/next frame where an AI has intervened (either YOLOv7 or idtrackerai)</li>
+            <li>Move to the previous/next frame where the AI could not solve an identity (there is at least one fly with identity=0)</li>
+            <li>Move to the first previous/next frame where all identities are restored</li>
+            <li>Playback the video at the desired framerate. 1 frame is displayed every half a second, and the number of frames skipped at each step is given by the playback framerate input box</li>
+            </ul>
+
+            <p>The goal is to 1) visualize the identity assignments produced by YOLOv7+idtrackerai, and 2) be able to correct or improve them if needed</p>
+            <p>3) The plots produced in the analysis will also be displayed, as well as behavioral labels</p>
+            <p>So far, only the first goal is achieved</p>
+
+            <ps>Remember to make sure the BACKEND_SERVER constant reflects the current ip address of the server</ps>
+
+            <div className="dashboard-container">
+              <div className="column-container">
+                <div className="left-column">
+                  <SelectComponent />
+                  {frame && <FrameWithSquare imageURL={frame} trackingData={trackingData} contoursData={contoursData} frameNumber={frameNumber} setFrameNumber={setFrameNumber} ref={FrameWithSquareRef}/>}
+                  <InteractiveText value={videoFrameRate} setValue={setVideoFrameRate} id="playback_framerate" labelText="Playback Framerate  "  />
+                  <Slider isPlaying={isPlaying} frameNumber={frameNumber} setFrameNumber={setFrameNumber} sliderWidth={sliderWidth} />
+                </div>
+                <div className="right-column">
+                  <div className="table-container">
+                    <BlobsTable Data={trackingData} />
+                  </div>
+                  <div className="new-element">
+                      <p>This is a new element under the table container</p>
+                  </div>
+
+                </div>
+              </div>
+              <div className="button-group">
+                <Buttons frameNumber={frameNumber} setFrameNumber={setFrameNumber} setIsPlaying={setIsPlaying} requestQueue={requestQueue} />
+              </div>
+            </div>
+
+          </div>
+        )}
+        {activeTab === 'pose_viewer' && (
+          <div>
+            {frame && <FrameWithSquare imageURL={frame} trackingData={trackingData} contoursData={contoursData} frameNumber={frameNumber} setFrameNumber={setFrameNumber} ref={FrameWithSquareRef}/>}
+            </div>
+
+        )}
+      </div>
+
+
     </div>
   );
   

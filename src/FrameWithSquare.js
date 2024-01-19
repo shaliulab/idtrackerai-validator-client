@@ -21,9 +21,8 @@ function generateColorPalette(numColors) {
 const FrameWithSquare = React.forwardRef(({ imageURL, trackingData, contoursData, frameNumber, setFrameNumber }, ref) => {
   const canvasRef = useRef();
   const inputRef = useRef(); // create a ref for the input field
-  const [showBanner, setShowBanner] = useState(false);
-  const [bannerText, setBannerText] = useState("");
   const imgRef = useRef(); // create a ref for the img
+  const [clickPairs, setClickPairs] = useState([]);
 
   const handleClick = (event) => {
     // Get the bounding rectangle of the target element
@@ -33,8 +32,7 @@ const FrameWithSquare = React.forwardRef(({ imageURL, trackingData, contoursData
     const x = event.clientX - rect.left;
     const y = event.clientY - rect.top;
 
-    // Log the coordinates
-    console.log(`Clicked at ${x}, ${y}`);
+    console.log([x, y]);
 
     // Check if the click falls within any of the rectangles
     trackingData.forEach((animal) => {
@@ -44,21 +42,65 @@ const FrameWithSquare = React.forwardRef(({ imageURL, trackingData, contoursData
         y >= animal.y - HEIGHT/2 &&
         y <= animal.y + HEIGHT/2
       ) {
-        setShowBanner(true);
-        console.log(`Clicked within rectangle for animal with identity ${animal.identity}`);
+        const identity = animal.identity;
+        const fragment = animal.fragment;
+        const timestamp = Date.now();
+        setClickPairs(prevData => {
+          
+          console.log(prevData);
+          const newData = prevData;
+          if (newData.length > 0) {
+            const index=newData[newData.length-1][0].index+1;
+            if (newData[newData.length-1].length % 2 === 0) {
+              // Start a new pair
+              newData.push([{ index, timestamp, frameNumber, x, y, identity, fragment }]);
+            } else {
+              // Finish the current pair
+              newData[newData.length - 1].push({ index, timestamp, frameNumber, x, y, identity, fragment });
+            }
+          } else {
+            const index = 0;
+            newData.push([{ index, timestamp, frameNumber, x, y, identity, fragment }]);
+          }
+
+          return newData;
+        });
       }
     });
   }
 
-  const handleInputChange = (e) => {
-    setBannerText(e.target.value);
+  const forgetLastClick = () => {
+    setClickPairs(prevData => {
+      const newData = [...prevData];
+      if (newData.length % 2 === 1) {
+        // If the last item is a pair, remove the second click
+        newData[newData.length - 1].pop();
+      } else if (newData.length != 0) {
+        // If the last item is a single click, remove it
+        newData.pop();
+      }
+      return newData;
+    });
   };
 
-  const closeBanner = () => {
-    console.log("User entered " + bannerText);
-    setShowBanner(false);
-    setBannerText("");
-  };
+
+  const forgetClickFactory = (index) => {
+
+    const forgetClick = () => {
+      const clicks = [];
+
+      for (let i=0; i<clickPairs.length; i++) {
+        console.log(clickPairs[i][0].index);
+        console.log(index);
+        if (clickPairs[i][0].index != index) {
+          clicks.push(clickPairs[i]);
+        }
+      }
+      console.log(clicks.length);
+      setClickPairs(clicks);
+    }
+    return forgetClick;
+  }
 
 
 
@@ -136,38 +178,64 @@ const FrameWithSquare = React.forwardRef(({ imageURL, trackingData, contoursData
   }, [imageURL, trackingData, frameNumber, ref]);
 
 
-  // this effect runs whenever showBanner changes
-  useEffect(() => {
-    if (showBanner && inputRef.current) {
-      inputRef.current.focus(); // focus the input field when the banner is shown
-    }
-  }, [showBanner]);
 
-
-  const handleOkClick = (e) => {
-    e.preventDefault(); // prevent form from refreshing the page
-    closeBanner();
-  };
-
+  function downloadCSV() {
+    let csvContent = 'Pair,Frame1,Fragment1,Identity1,Frame2,Fragment2,Identity2\n';
+    
+    clickPairs.forEach((pair, index) => {
+      csvContent += `${pair[0].index},${pair[0].frameNumber},${pair[0].fragment},${pair[0].identity},${pair[1] ? pair[1].frameNumber : ''},${pair[1] ? pair[1].fragment : ''},${pair[1] ? pair[1].identity : ''}\n`;
+    });
+  
+    const blob = new Blob([csvContent], {type: 'text/csv'});
+    const url = URL.createObjectURL(blob);
+    
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'click-pairs.csv';
+    
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }
+  
 
 
   return (
     <div onClick={handleClick}>
       <canvas ref={canvasRef} />
       <img ref={imgRef} style={{ display: 'none', width: 1000 }} alt="" />
-      {showBanner && (
-        <form onSubmit={handleOkClick} className="banner">
-          <input 
-            type="text"
-            onChange={handleInputChange}
-            value={bannerText} 
-            ref={inputRef} // assign the ref to the input field
+      <button onClick={forgetLastClick}>Cancel</button>
+      <ScrollNumberInput value={frameNumber} setValue={setFrameNumber} id="frame_number" labelText="" focusElementRef={canvasRef}/>
+      <table>
+        <thead>
+          <tr>
+            <th>Pair</th>
+            <th>Frame1</th>
+            <th>Fragment1</th>
+            <th>Identity1</th>
+            <th>Frame2</th>
+            <th>Fragment2</th>
+            <th>Identity2</th>
+            <th>Delete</th>
+          </tr>
+        </thead>
+        <tbody>
+          {clickPairs.map((pair, index) => (
+            <tr key={index}>
+              <td>{pair[0] ? pair[0].index : ''}</td>
+              <td>{pair[0] ? pair[0].frameNumber : ''}</td>
+              <td>{pair[0] ? pair[0].fragment : ''}</td>
+              <td>{pair[0] ? pair[0].identity: ''}</td>
+              <td>{pair[1] ? pair[1].frameNumber : ''}</td>
+              <td>{pair[1] ? pair[1].fragment : ''}</td>
+              <td>{pair[1] ? pair[1].identity : ''}</td>
+              <td><button onClick={forgetClickFactory(pair[0] ? pair[0].index : -1)}>Delete</button></td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <button onClick={downloadCSV}>Download CSV</button>
 
-          />
-          <button type="submit">OK</button>
-        </form>
-      )}
-      <ScrollNumberInput value={frameNumber} setValue={setFrameNumber} id="frame_number" labelText="Frame number " focusElementRef={canvasRef}/>
     </div>
   );
 });
