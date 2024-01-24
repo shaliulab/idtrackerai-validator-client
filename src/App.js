@@ -177,9 +177,6 @@ function App() {
                   <div className="table-container">
                     <BlobsTable Data={trackingData} />
                   </div>
-                  <div className="new-element">
-                      <p>This is a new element under the table container</p>
-                  </div>
 
                 </div>
               </div>

@@ -1,7 +1,9 @@
+import './TableStyles.css';
+
 const BlobsTable = ({ Data }) => {
 
     return (
-        <table>
+        <table className="data-table">
           <thead>
             <tr>
             <th>Frame Number</th>
