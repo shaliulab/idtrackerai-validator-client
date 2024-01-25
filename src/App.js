@@ -10,9 +10,14 @@ import { RequestQueue } from './queue'
 import BlobsTable from './blobs_table'
 import SelectComponent from './selectComponent'
 import { PLACEHOLDER_IMAGE } from './constants'
+import { BrowserRouter as Router, Route, Routes } from 'react-router-dom'; // v6
+
+
+import MyRouter from './myRouter';
 
 const MAX_SIMULTANEOUS_REQUESTS = 1;
 const requestQueue = new RequestQueue(MAX_SIMULTANEOUS_REQUESTS);
+
 
 function queuedAxiosGet(url) {
   const source = axios.CancelToken.source();
@@ -53,9 +58,6 @@ function App() {
       }
     }
 
-    // to debug:
-    
-
 
     function fetchTrackingData(value) {
         axios.get(`http://${BACKEND_SERVER}:5000/api/tracking/${parseInt(value)}`)
@@ -80,9 +82,8 @@ function App() {
       });
   }
 
-    const fetchFrame = async (frameNumber) => {
 
-      // console.log(requestQueue.pendingRequests.length);
+  const fetchFrame = async (frameNumber) => {
 
       queuedAxiosGet(`http://${BACKEND_SERVER}:5000/api/frame/${parseInt(frameNumber)}`)
       .then(response => {      
@@ -129,9 +130,9 @@ function App() {
     }
     return(filteredData);
   };
-
   
   return (
+    <Router>
     <div className="App">
       <h1>FlyHostel Viewer</h1>
       <h3>Developed at Liu Lab @ VIB-KU Leuven Center for Brain & Disease Research</h3>
@@ -159,12 +160,20 @@ function App() {
             <li>Playback the video at the desired framerate. 1 frame is displayed every half a second, and the number of frames skipped at each step is given by the playback framerate input box</li>
             </ul>
 
-            <p>The goal is to 1) visualize the identity assignments produced by YOLOv7+idtrackerai, and 2) be able to correct or improve them if needed</p>
+            <p>The goal is to:</p>
+            <p>1) visualize the identity assignments produced by YOLOv7+idtrackerai,</p>
+            <p>2) be able to correct or improve them if needed</p>
             <p>3) The plots produced in the analysis will also be displayed, as well as behavioral labels</p>
             <p>So far, only the first goal is achieved</p>
 
-            <ps>Remember to make sure the BACKEND_SERVER constant reflects the current ip address of the server</ps>
+            <p>Remember to make sure the BACKEND_SERVER constant reflects the current ip address of the server</p>
 
+            <Routes>
+            {/* Define routes here */}
+            <Route path="/get/:datasetName" element={<MyRouter/>}/>
+            {/* Other routes can be added here as needed */}
+            </Routes>
+          
             <div className="dashboard-container">
               <div className="column-container">
                 <div className="left-column">
@@ -197,14 +206,9 @@ function App() {
 
 
     </div>
+    </Router>
   );
   
 }
 
 export default App;
-
-
-/*
-            <InteractiveText value={frameNumber} setValue={setFrameNumber} id="frame_number" labelText="Frame number  " />
-
-            */
