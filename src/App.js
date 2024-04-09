@@ -8,12 +8,9 @@ import InteractiveText from './interactiveText'
 import { FRAMERATE, MIN_FN, CHUNKSIZE, BACKEND_SERVER } from './constants';
 import { RequestQueue } from './queue'
 import BlobsTable from './blobs_table'
-import SelectComponent from './selectComponent'
 import { PLACEHOLDER_IMAGE } from './constants'
 import { BrowserRouter as Router, Route, Routes } from 'react-router-dom'; // v6
 
-
-import MyRouter from './myRouter';
 
 const MAX_SIMULTANEOUS_REQUESTS = 1;
 const requestQueue = new RequestQueue(MAX_SIMULTANEOUS_REQUESTS);
@@ -63,6 +60,9 @@ function App() {
         axios.get(`http://${BACKEND_SERVER}:5000/api/tracking/${parseInt(value)}`)
         .then(response => {
           const validatedData = validateData(response.data);
+
+          console.log(validatedData);
+
 
           setTrackingData(validatedData);
         })
@@ -132,7 +132,6 @@ function App() {
   };
   
   return (
-    <Router>
     <div className="App">
       <h1>FlyHostel Viewer</h1>
       <h3>Developed at Liu Lab @ VIB-KU Leuven Center for Brain & Disease Research</h3>
@@ -168,16 +167,11 @@ function App() {
 
             <p>Remember to make sure the BACKEND_SERVER constant reflects the current ip address of the server</p>
 
-            <Routes>
-            {/* Define routes here */}
-            <Route path="/get/:datasetName" element={<MyRouter/>}/>
-            {/* Other routes can be added here as needed */}
-            </Routes>
+ 
           
             <div className="dashboard-container">
               <div className="column-container">
                 <div className="left-column">
-                  <SelectComponent />
                   {frame && <FrameWithSquare imageURL={frame} trackingData={trackingData} contoursData={contoursData} frameNumber={frameNumber} setFrameNumber={setFrameNumber} ref={FrameWithSquareRef}/>}
                   <InteractiveText value={videoFrameRate} setValue={setVideoFrameRate} id="playback_framerate" labelText="Playback Framerate  "  />
                   <Slider isPlaying={isPlaying} frameNumber={frameNumber} setFrameNumber={setFrameNumber} sliderWidth={sliderWidth} />
@@ -206,7 +200,6 @@ function App() {
 
 
     </div>
-    </Router>
   );
   
 }

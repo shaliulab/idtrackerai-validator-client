@@ -4,7 +4,7 @@ import axios from 'axios';
 import { BACKEND_SERVER } from './constants'
 
 const SelectComponent = () => {
-  const defaultOption = { value: "FlyHostel1/5X/2023-05-23_14-00-00", label: "Select or type an experiment..." };
+  const defaultOption = { value: "FlyHostel3/8X/2024-01-17_13-00-00", label: "Select or type an experiment..." };
   const [options, setOptions] = useState([defaultOption]);
   const [isLoading, setIsLoading] = useState(true);
 

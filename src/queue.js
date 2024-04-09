@@ -1,36 +1,3 @@
-// export class RequestQueue {
-//   constructor(maxSimultaneousRequests) {
-//     this.maxSimultaneousRequests = maxSimultaneousRequests;
-//     this.currentRequests = 0;
-//     this.queue = [];
-//   }
-
-//   async add(request) {
-//     return new Promise((resolve, reject) => {
-//       this.queue.push({ request, resolve, reject });
-
-//       this.process();
-//     });
-//   }
-
-//   process() {
-//     while (this.currentRequests < this.maxSimultaneousRequests && this.queue.length) {
-//       const { request, resolve, reject } = this.queue.shift();
-
-//       this.currentRequests++;
-
-//       request()
-//         .then(resolve)
-//         .catch(reject)
-//         .finally(() => {
-//           this.currentRequests--;
-//           this.process();
-//         });
-//     }
-//   }
-// }
-
-
 export class RequestQueue {
   constructor(maxSimultaneousRequests) {
     this.maxSimultaneousRequests = maxSimultaneousRequests;
