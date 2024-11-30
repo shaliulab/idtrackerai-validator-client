@@ -18,7 +18,7 @@ function generateColorPalette(numColors) {
 }
 
 
-const FrameWithSquare = React.forwardRef(({ imageURL, trackingData, contoursData, frameNumber, setFrameNumber }, ref) => {
+const FrameWithSquare = React.forwardRef(({ imageURL, trackingData, videoFrameRate, contoursData, frameNumber, setFrameNumber }, ref) => {
   const canvasRef = useRef();
   const inputRef = useRef(); // create a ref for the input field
   const imgRef = useRef(); // create a ref for the img
@@ -145,7 +145,7 @@ const FrameWithSquare = React.forwardRef(({ imageURL, trackingData, contoursData
             color = colors[parseInt(animal.identity) % number_of_animals ]
           }
 
-          drawSquare(context, animal, color);
+          // drawSquare(context, animal, color);
           writeIdentity(context, animal, color);
         });
 
@@ -205,7 +205,7 @@ const FrameWithSquare = React.forwardRef(({ imageURL, trackingData, contoursData
       <canvas ref={canvasRef} />
       <img ref={imgRef} style={{ display: 'none', width: 1000 }} alt="" />
       <button onClick={forgetLastClick}>Cancel</button>
-      <ScrollNumberInput value={frameNumber} setValue={setFrameNumber} id="frame_number" labelText="" focusElementRef={canvasRef}/>
+      <ScrollNumberInput value={frameNumber} setValue={setFrameNumber} videoFrameRate={videoFrameRate} id="frame_number" labelText="" focusElementRef={canvasRef}/>
       <table>
         <thead>
           <tr>

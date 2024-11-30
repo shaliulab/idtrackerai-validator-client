@@ -171,7 +171,7 @@ function App() {
             <div className="dashboard-container">
               <div className="column-container">
                 <div className="left-column">
-                  {frame && <FrameWithSquare imageURL={frame} trackingData={trackingData} contoursData={contoursData} frameNumber={frameNumber} setFrameNumber={setFrameNumber} ref={FrameWithSquareRef}/>}
+                  {frame && <FrameWithSquare imageURL={frame} videoFrameRate={videoFrameRate} trackingData={trackingData} contoursData={contoursData} frameNumber={frameNumber} setFrameNumber={setFrameNumber} ref={FrameWithSquareRef}/>}
                   <InteractiveText value={videoFrameRate} setValue={setVideoFrameRate} id="playback_framerate" labelText="Playback Framerate  "  />
                   <Slider isPlaying={isPlaying} frameNumber={frameNumber} setFrameNumber={setFrameNumber} sliderWidth={sliderWidth} />
                 </div>
