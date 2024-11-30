@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { BACKEND_SERVER } from './constants'
+import { BACKEND_PORT } from './constants'
 
 function MyRouter() {
     let { datasetName } = useParams();
@@ -8,7 +9,7 @@ function MyRouter() {
 
     useEffect(() => {
         console.log("Fetching to api/get");
-        fetch(`http://${BACKEND_SERVER}:5000/api/get/${datasetName}`, {
+        fetch(`http://${BACKEND_SERVER}:${BACKEND_PORT}/api/get/${datasetName}`, {
             method: 'GET',
             headers: {
                 'Content-Type': 'application/json',

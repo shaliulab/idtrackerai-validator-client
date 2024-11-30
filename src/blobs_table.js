@@ -12,6 +12,7 @@ const BlobsTable = ({ Data }) => {
               <th>X</th>
               <th>Y</th>
               <th>Identity</th>
+              <th>In frame index</th>
               <th>Local Identity</th>
               <th>Fragment</th>
               <th>Area</th>
@@ -28,6 +29,7 @@ const BlobsTable = ({ Data }) => {
                     <td>{row.x}</td>
                     <td>{row.y}</td>
                     <td>{row.identity}</td>
+                    <td>{row.in_frame_index}</td>
                     <td>{row.local_identity}</td>
                     <td>{row.fragment}</td>
                     <td>{row.area}</td>

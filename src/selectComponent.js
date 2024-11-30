@@ -2,6 +2,8 @@ import React, { useEffect, useState } from "react";
 import Select from 'react-select';
 import axios from 'axios';
 import { BACKEND_SERVER } from './constants'
+import { BACKEND_PORT } from './constants'
+
 
 const SelectComponent = () => {
   const defaultOption = { value: "FlyHostel3/8X/2024-01-17_13-00-00", label: "Select or type an experiment..." };
@@ -10,7 +12,7 @@ const SelectComponent = () => {
 
   const fetchData = async () => {
     setIsLoading(true);
-    const response = await axios.get(`http://${BACKEND_SERVER}:5000/api/list`);
+    const response = await axios.get(`http://${BACKEND_SERVER}:${BACKEND_PORT}/api/list`);
     const data = response.data["experiments"];
 
     if (data != null) {
@@ -30,7 +32,7 @@ const SelectComponent = () => {
     console.log(`Option selected:`, selectedOption["value"]);
     let config={}
 
-    await axios.post(`http://${BACKEND_SERVER}:5000/api/load`, {"experiment": selectedOption["value"]}, config)
+    await axios.post(`http://${BACKEND_SERVER}:${BACKEND_PORT}/api/load`, {"experiment": selectedOption["value"]}, config)
     .then(response => {
     if (response.status === 0) {
     } else if (response.status === 200) {

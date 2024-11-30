@@ -5,10 +5,12 @@ import Buttons from './buttons';
 import Slider from './slider';
 import Tab from './Tab' 
 import InteractiveText from './interactiveText' 
-import { FRAMERATE, MIN_FN, CHUNKSIZE, BACKEND_SERVER } from './constants';
 import { RequestQueue } from './queue'
 import BlobsTable from './blobs_table'
+import { FRAMERATE, MIN_FN, CHUNKSIZE, BACKEND_SERVER } from './constants';
 import { PLACEHOLDER_IMAGE } from './constants'
+import { BACKEND_PORT } from './constants'
+
 import { BrowserRouter as Router, Route, Routes } from 'react-router-dom'; // v6
 
 
@@ -57,13 +59,10 @@ function App() {
 
 
     function fetchTrackingData(value) {
-        axios.get(`http://${BACKEND_SERVER}:5000/api/tracking/${parseInt(value)}`)
+        axios.get(`http://${BACKEND_SERVER}:${BACKEND_PORT}/api/tracking/${parseInt(value)}`)
         .then(response => {
           const validatedData = validateData(response.data);
-
           console.log(validatedData);
-
-
           setTrackingData(validatedData);
         })
         .catch(error => {
@@ -72,7 +71,7 @@ function App() {
     }
 
   function fetchPreprocessData(value) {
-      axios.get(`http://${BACKEND_SERVER}:5000/api/preprocess/${parseInt(value)}`)
+      axios.get(`http://${BACKEND_SERVER}:${BACKEND_PORT}/api/preprocess/${parseInt(value)}`)
       .then(response => {
         const contours = response.data["contours"];
         setContoursData(contours);
@@ -85,7 +84,7 @@ function App() {
 
   const fetchFrame = async (frameNumber) => {
 
-      queuedAxiosGet(`http://${BACKEND_SERVER}:5000/api/frame/${parseInt(frameNumber)}`)
+      queuedAxiosGet(`http://${BACKEND_SERVER}:${BACKEND_PORT}/api/frame/${parseInt(frameNumber)}`)
       .then(response => {      
         updateFrame(response.data);
         fetchTrackingData(frameNumber);
