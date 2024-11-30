@@ -1,8 +1,12 @@
 import React, { useRef, useEffect, useState } from 'react';
 import ScrollNumberInput from './scrollableNumber'; // adjust the path according to your file structure
 
-const HEIGHT=100;
-const WIDTH=100;
+import { SQUARE_HEIGHT } from './constants'
+import { SQUARE_WIDTH } from './constants'
+import { TEXT_SIZE } from './constants'
+import { TEXT_FAMILY } from './constants'
+
+
 
 function generateColorPalette(numColors) {
   const colors = [];
@@ -37,10 +41,10 @@ const FrameWithSquare = React.forwardRef(({ imageURL, trackingData, videoFrameRa
     // Check if the click falls within any of the rectangles
     trackingData.forEach((animal) => {
       if (
-        x >= animal.x - WIDTH/2 &&
-        x <= animal.x + WIDTH/2 &&
-        y >= animal.y - HEIGHT/2 &&
-        y <= animal.y + HEIGHT/2
+        x >= animal.x - SQUARE_WIDTH/2 &&
+        x <= animal.x + SQUARE_WIDTH/2 &&
+        y >= animal.y - SQUARE_HEIGHT/2 &&
+        y <= animal.y + SQUARE_HEIGHT/2
       ) {
         const identity = animal.identity;
         const fragment = animal.fragment;
@@ -124,7 +128,7 @@ const FrameWithSquare = React.forwardRef(({ imageURL, trackingData, videoFrameRa
         trackingData.forEach(function(animal, index) {
           const drawSquare = (context, animal, color) => {
             context.beginPath();
-            context.rect(animal.x-WIDTH/2, animal.y-HEIGHT/2, WIDTH, HEIGHT);
+            context.rect(animal.x-SQUARE_WIDTH/2, animal.y-SQUARE_HEIGHT/2, SQUARE_WIDTH, SQUARE_HEIGHT);
             context.lineWidth = 2;
             context.strokeStyle = color;
             context.stroke();
@@ -133,7 +137,7 @@ const FrameWithSquare = React.forwardRef(({ imageURL, trackingData, videoFrameRa
 
           const writeIdentity = (context, animal, color) => {
 
-              context.font = "35px Arial";
+              context.font = TEXT_SIZE.toString().concat("px ", TEXT_FAMILY.toString());
               // Draw the index number on the top left corner of the square
               context.fillStyle=color;
               context.fillText(animal.identity.toString(), animal.x, animal.y);
@@ -145,7 +149,7 @@ const FrameWithSquare = React.forwardRef(({ imageURL, trackingData, videoFrameRa
             color = colors[parseInt(animal.identity) % number_of_animals ]
           }
 
-          // drawSquare(context, animal, color);
+          // drawSquare(context, animal, color); // TODO Uncomment if you want the square around the animal rendered
           writeIdentity(context, animal, color);
         });
 
