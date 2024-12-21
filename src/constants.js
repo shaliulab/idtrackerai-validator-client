@@ -4,7 +4,7 @@ export const BACKEND_SERVER="10.43.207.98"; // TODO Update this if the IP of the
 export const BACKEND_PORT=5000;
 
 export const CHUNKSIZE=45000
-export const FRAMERATE=150;
+export const FRAMERATE=10;
 export const MAX_FN=CHUNKSIZE*450-1;
 export const MIN_FN=CHUNKSIZE*0;
 
