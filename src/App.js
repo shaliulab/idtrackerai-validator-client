@@ -45,6 +45,7 @@ function App() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [videoFrameRate, setVideoFrameRate] = useState(FRAMERATE);
   const FrameWithSquareRef = useRef(null);
+  const [number_of_animals, setNumberOfAnimals] = useState(6);
   const [activeTab, setActiveTab] = useState('idtrackerai_viewer');
 
   useEffect(() => {
@@ -61,9 +62,10 @@ function App() {
     function fetchTrackingData(value) {
         axios.get(`http://${BACKEND_SERVER}:${BACKEND_PORT}/api/tracking/${parseInt(value)}`)
         .then(response => {
-          const validatedData = validateData(response.data);
+          const validatedData = validateData(response.data["tracking_data"]);
           console.log(validatedData);
           setTrackingData(validatedData);
+          setNumberOfAnimals(response.data["number_of_animals"])
         })
         .catch(error => {
           console.error("Error fetching frame: ", error);
@@ -171,7 +173,7 @@ function App() {
             <div className="dashboard-container">
               <div className="column-container">
                 <div className="left-column">
-                  {frame && <FrameWithSquare imageURL={frame} videoFrameRate={videoFrameRate} trackingData={trackingData} contoursData={contoursData} frameNumber={frameNumber} setFrameNumber={setFrameNumber} ref={FrameWithSquareRef}/>}
+                  {frame && <FrameWithSquare imageURL={frame} videoFrameRate={videoFrameRate} trackingData={trackingData} contoursData={contoursData} frameNumber={frameNumber} setFrameNumber={setFrameNumber} number_of_animals={number_of_animals} ref={FrameWithSquareRef}/>}
                   <InteractiveText value={videoFrameRate} setValue={setVideoFrameRate} id="playback_framerate" labelText="Playback Framerate  "  />
                   <Slider isPlaying={isPlaying} frameNumber={frameNumber} setFrameNumber={setFrameNumber} sliderWidth={sliderWidth} />
                 </div>
@@ -188,12 +190,6 @@ function App() {
             </div>
 
           </div>
-        )}
-        {activeTab === 'pose_viewer' && (
-          <div>
-            {frame && <FrameWithSquare imageURL={frame} trackingData={trackingData} contoursData={contoursData} frameNumber={frameNumber} setFrameNumber={setFrameNumber} ref={FrameWithSquareRef}/>}
-            </div>
-
         )}
       </div>
 

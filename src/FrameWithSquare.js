@@ -22,7 +22,7 @@ function generateColorPalette(numColors) {
 }
 
 
-const FrameWithSquare = React.forwardRef(({ imageURL, trackingData, videoFrameRate, contoursData, frameNumber, setFrameNumber }, ref) => {
+const FrameWithSquare = React.forwardRef(({ imageURL, trackingData, videoFrameRate, contoursData, frameNumber, setFrameNumber, number_of_animals }, ref) => {
   const canvasRef = useRef();
   const inputRef = useRef(); // create a ref for the input field
   const imgRef = useRef(); // create a ref for the img
@@ -115,7 +115,6 @@ const FrameWithSquare = React.forwardRef(({ imageURL, trackingData, videoFrameRa
       const img = imgRef.current;
       img.src = imageURL;
 
-      const number_of_animals=trackingData.length;
       const colors = generateColorPalette(number_of_animals);
       
       img.onload = function() {
