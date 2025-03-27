@@ -9,6 +9,7 @@ export const FRAMERATE=10;
 export const RECORDING_FRAMERATE=150;
 export const MAX_FN=CHUNKSIZE*450-1;
 export const MIN_FN=CHUNKSIZE*0;
+export const DEFAULT_CHUNK=50;
 
 export const SQUARE_HEIGHT=100;
 export const SQUARE_WIDTH=100;

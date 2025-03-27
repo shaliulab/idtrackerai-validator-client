@@ -6,8 +6,8 @@ import Slider from './slider';
 import Tab from './Tab' 
 import InteractiveText from './interactiveText' 
 import { RequestQueue } from './queue'
-import BlobsTable from './blobs_table'
-import { FRAMERATE, MIN_FN, CHUNKSIZE, BACKEND_SERVER } from './constants';
+import { BlobsTable, VerticalBlobsTable } from './blobs_table'
+import { FRAMERATE, MIN_FN, CHUNKSIZE, BACKEND_SERVER, DEFAULT_CHUNK } from './constants';
 import { PLACEHOLDER_IMAGE } from './constants'
 import { BACKEND_PORT } from './constants'
 
@@ -38,7 +38,7 @@ function queuedAxiosGet(url) {
 
 function App() {
   const [frame, setFrame] = useState(PLACEHOLDER_IMAGE);
-  const [frameNumber, setFrameNumber] = useState(CHUNKSIZE*50); // Default frame number
+  const [frameNumber, setFrameNumber] = useState(CHUNKSIZE*DEFAULT_CHUNK); // Default frame number
   const [trackingData, setTrackingData] = useState([]); // Default frame number
   const [contoursData, setContoursData] = useState([]); // Default frame number
   const [sliderWidth, setSliderWidth] = useState(1192);
@@ -181,11 +181,10 @@ function App() {
                   <div className="table-container">
                     <BlobsTable Data={trackingData} />
                   </div>
-
                 </div>
               </div>
               <div className="button-group">
-                <Buttons frameNumber={frameNumber} setFrameNumber={setFrameNumber} setIsPlaying={setIsPlaying} requestQueue={requestQueue} />
+                <Buttons frameNumber={frameNumber} setFrameNumber={setFrameNumber} isPlaying={isPlaying} setIsPlaying={setIsPlaying} requestQueue={requestQueue} />
               </div>
             </div>
 

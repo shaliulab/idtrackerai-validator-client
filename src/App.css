@@ -57,3 +57,11 @@
   display: flex;
   justify-content: space-around;
 }
+
+.button-group {
+  display: flex;
+  flex-direction: row;
+  align-items: center; /* optional: vertically center the buttons */
+  justify-content: center; /* or space-around, space-between, etc. */
+  gap: 10px; /* optional: adds spacing between buttons */
+}

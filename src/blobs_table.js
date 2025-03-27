@@ -42,4 +42,58 @@ const BlobsTable = ({ Data }) => {
     );
 };
 
-export default BlobsTable
+
+
+
+const VerticalBlobsTable = ({ Data }) => {
+  // Define the header labels in order
+  const headers = [
+    "Frame Number",
+    "Chunk",
+    "Frame idx",
+    "X",
+    "Y",
+    "Identity",
+    "Local Identity",
+    "In frame index",
+    "Fragment",
+    "Area",
+    "YOLOv7",
+    "ZT"
+  ];
+
+  // Create an array of extractor functions corresponding to each header.
+  const extractors = [
+    row => row.frame_number,
+    row => Math.floor(row.frame_number / 45000),
+    row => row.frame_number % 45000,
+    row => row.x,
+    row => row.y,
+    row => row.identity,
+    row => row.local_identity,
+    row => row.in_frame_index,
+    row => row.fragment,
+    row => row.area,
+    row => row.modified.toString(),
+    row => row.ZT
+  ];
+
+  return (
+    <table className="data-table">
+      <tbody>
+        {headers.map((header, headerIndex) => (
+          <tr key={header}>
+            {/* The header becomes the first cell in each row */}
+            <th>{header}</th>
+            {/* For each data record, get the value corresponding to this header */}
+            {Data.map((row, rowIndex) => (
+              <td key={rowIndex}>{extractors[headerIndex](row)}</td>
+            ))}
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+};
+
+export { BlobsTable, VerticalBlobsTable }
