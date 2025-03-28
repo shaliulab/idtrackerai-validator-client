@@ -40,6 +40,7 @@ function App() {
   const [frame, setFrame] = useState(PLACEHOLDER_IMAGE);
   const [frameNumber, setFrameNumber] = useState(CHUNKSIZE*DEFAULT_CHUNK); // Default frame number
   const [trackingData, setTrackingData] = useState([]); // Default frame number
+  const [trackingPoseData, setTrackingPoseData] = useState([]); // Default frame number
   const [contoursData, setContoursData] = useState([]); // Default frame number
   const [sliderWidth, setSliderWidth] = useState(1192);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -63,8 +64,9 @@ function App() {
         axios.get(`http://${BACKEND_SERVER}:${BACKEND_PORT}/api/tracking/${parseInt(value)}`)
         .then(response => {
           const validatedData = validateData(response.data["tracking_data"]);
-          console.log(validatedData);
+          const poseData = validatePoseData(response.data["pose"]);
           setTrackingData(validatedData);
+          setTrackingPoseData(poseData);
           setNumberOfAnimals(response.data["number_of_animals"])
         })
         .catch(error => {
@@ -131,6 +133,13 @@ function App() {
     }
     return(filteredData);
   };
+
+
+  const validatePoseData = (dataArray) => {
+    const poseData=dataArray;
+    return (poseData);
+
+  };
   
   return (
     <div className="App">
@@ -173,7 +182,7 @@ function App() {
             <div className="dashboard-container">
               <div className="column-container">
                 <div className="left-column">
-                  {frame && <FrameWithSquare imageURL={frame} videoFrameRate={videoFrameRate} trackingData={trackingData} contoursData={contoursData} frameNumber={frameNumber} setFrameNumber={setFrameNumber} number_of_animals={number_of_animals} ref={FrameWithSquareRef}/>}
+                  {frame && <FrameWithSquare imageURL={frame} videoFrameRate={videoFrameRate} trackingData={trackingData} contoursData={contoursData} frameNumber={frameNumber} setFrameNumber={setFrameNumber} number_of_animals={number_of_animals} poseData={trackingPoseData} ref={FrameWithSquareRef}/>}
                   <InteractiveText value={videoFrameRate} setValue={setVideoFrameRate} id="playback_framerate" labelText="Playback Framerate  "  />
                   <Slider isPlaying={isPlaying} frameNumber={frameNumber} setFrameNumber={setFrameNumber} sliderWidth={sliderWidth} />
                 </div>

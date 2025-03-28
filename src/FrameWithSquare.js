@@ -6,6 +6,18 @@ import { SQUARE_WIDTH } from './constants'
 import { TEXT_SIZE } from './constants'
 import { TEXT_FAMILY } from './constants'
 
+const SKELETON=[
+  ["head", "thorax"],
+  ["thorax", "abdomen"],
+  ["thorax", "fLL"],
+  ["thorax", "mLL"],
+  ["thorax", "rLL"],
+  ["thorax", "fRL"],
+  ["thorax", "mRL"],
+  ["thorax", "rRL"],
+  ["thorax", "lW"],
+  ["thorax", "rW"]
+]
 
 
 function generateColorPalette(numColors) {
@@ -22,7 +34,7 @@ function generateColorPalette(numColors) {
 }
 
 
-const FrameWithSquare = React.forwardRef(({ imageURL, trackingData, videoFrameRate, contoursData, frameNumber, setFrameNumber, number_of_animals }, ref) => {
+const FrameWithSquare = React.forwardRef(({ imageURL, trackingData, videoFrameRate, contoursData, frameNumber, setFrameNumber, number_of_animals, poseData }, ref) => {
   const canvasRef = useRef();
   const inputRef = useRef(); // create a ref for the input field
   const imgRef = useRef(); // create a ref for the img
@@ -151,6 +163,28 @@ const FrameWithSquare = React.forwardRef(({ imageURL, trackingData, videoFrameRa
           // drawSquare(context, animal, color); // TODO Uncomment if you want the square around the animal rendered
           writeIdentity(context, animal, color);
         });
+  
+
+        for (let identity in poseData) {
+          var color = "#000000";
+          for (const [partA, partB] of SKELETON) {
+            const [x1, y1] = poseData[identity][partA];
+            const [x2, y2] = poseData[identity][partB];
+            if ([x1, y1, x2, y2].includes(null)) continue;
+            
+            color=colors[parseInt(identity) % number_of_animals];
+            
+            context.beginPath();
+            context.moveTo(x1, y1);
+            context.lineTo(x2, y2);
+            context.lineWidth = 1;
+            context.globalAlpha = 0.5; // Set 50% transparency
+            context.strokeStyle = color;
+            context.stroke();
+            context.closePath();
+          }
+        }
+
 
         let contour_color = "hsla(120, 100%, 50%, 0.2)";
 
