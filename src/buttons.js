@@ -93,6 +93,13 @@ const Buttons = ({ frameNumber, setFrameNumber, isPlaying, setIsPlaying, request
   // Add keyboard shortcuts for the 9 buttons
   useEffect(() => {
     const handleKeyDown = (event) => {
+      const tag = event.target.tagName.toLowerCase();
+      const editable = event.target.isContentEditable;
+      
+      if (tag === 'input' || tag === 'textarea' || editable) {
+        return; // Don't process shortcuts when typing in input or editable element
+      }
+    
       switch (event.key) {
         case '1':
           prev_chunk();
@@ -104,7 +111,6 @@ const Buttons = ({ frameNumber, setFrameNumber, isPlaying, setIsPlaying, request
           seconds1_back();
           break;
         case '4':
-          // Toggle play/pause based on current state
           isPlaying ? pause() : play();
           break;
         case '5':
