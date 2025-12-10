@@ -1,5 +1,4 @@
 import './TableStyles.css';
-import { FRAMERATE, MIN_FN, CHUNKSIZE, BACKEND_SERVER, DEFAULT_CHUNK } from './constants';
 
 
 
@@ -27,8 +26,8 @@ const BlobsTable = ({ Data }) => {
             {Data.map((row, index) => (
                 <tr key={index}>
                     <td>{row.frame_number}</td>
-                    <td>{Math.floor(row.frame_number/CHUNKSIZE)}</td>
-                    <td>{row.frame_number%CHUNKSIZE}</td>
+                    <td>{Math.floor(row.frame_number/row.chunksize)}</td>
+                    <td>{row.frame_number%row.chunksize}</td>
                     <td>{row.x}</td>
                     <td>{row.y}</td>
                     <td>{row.identity}</td>
@@ -68,8 +67,8 @@ const VerticalBlobsTable = ({ Data }) => {
   // Create an array of extractor functions corresponding to each header.
   const extractors = [
     row => row.frame_number,
-    row => Math.floor(row.frame_number / CHUNKSIZE),
-    row => row.frame_number % CHUNKSIZE,
+    row => Math.floor(row.frame_number / row.chunksize),
+    row => row.frame_number % row.chunksize,
     row => row.x,
     row => row.y,
     row => row.identity,

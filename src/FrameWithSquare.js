@@ -118,8 +118,6 @@ const FrameWithSquare = React.forwardRef(({ imageURL, trackingData, videoFrameRa
     return forgetClick;
   }
 
-
-
   useEffect(() => {
 
     if (canvasRef.current) {
@@ -163,7 +161,7 @@ const FrameWithSquare = React.forwardRef(({ imageURL, trackingData, videoFrameRa
           // drawSquare(context, animal, color); // TODO Uncomment if you want the square around the animal rendered
           writeIdentity(context, animal, color);
         });
-  
+
 
         for (let identity in poseData) {
           var color = "#000000";
@@ -187,7 +185,6 @@ const FrameWithSquare = React.forwardRef(({ imageURL, trackingData, videoFrameRa
             context.closePath();
           }
         }
-
 
         let contour_color = "hsla(120, 100%, 50%, 0.2)";
 

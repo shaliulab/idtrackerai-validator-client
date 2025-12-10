@@ -7,9 +7,7 @@ import Tab from './Tab';
 import InteractiveText from './interactiveText';
 import { RequestQueue } from './queue';
 import { BlobsTable, VerticalBlobsTable } from './blobs_table';
-import { FRAMERATE, MIN_FN, CHUNKSIZE, BACKEND_SERVER, DEFAULT_CHUNK } from './constants';
-import { PLACEHOLDER_IMAGE } from './constants';
-import { BACKEND_PORT } from './constants';
+import { FIRST_FRAME, BACKEND_SERVER, PLACEHOLDER_IMAGE, BACKEND_PORT } from './constants';
 import { BrowserRouter as Router, Route, Routes } from 'react-router-dom'; // v6
 
 const MAX_SIMULTANEOUS_REQUESTS = 1;
@@ -19,12 +17,12 @@ function queuedAxiosGet(url) {
   const source = axios.CancelToken.source();
   const request = () =>
     axios
-      .get(url, { 
+      .get(url, {
         responseType: 'blob',
         cancelToken: source.token,
       })
       .finally(() => {
-        let index = requestQueue.pendingRequests.indexOf(request);
+        const index = requestQueue.pendingRequests.indexOf(request);
         if (index !== -1) {
           requestQueue.pendingRequests.splice(index, 1);
         }
@@ -36,16 +34,59 @@ function queuedAxiosGet(url) {
 
 function App() {
   const [frame, setFrame] = useState(PLACEHOLDER_IMAGE);
-  const [frameNumber, setFrameNumber] = useState(CHUNKSIZE * DEFAULT_CHUNK);
+  const [frameNumber, setFrameNumber] = useState(FIRST_FRAME);
   const [trackingData, setTrackingData] = useState([]);
   const [trackingPoseData, setTrackingPoseData] = useState([]);
   const [contoursData, setContoursData] = useState([]);
   const [sliderWidth, setSliderWidth] = useState(1192);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [videoFrameRate, setVideoFrameRate] = useState(FRAMERATE);
+
+  // Playback framerate: how many frames to advance on each playback tick.
+  const [videoFrameRate, setVideoFrameRate] = useState(1);
+
+  // Recording framerate: frames per second of the dataset (comes from backend).
+  const [recordingFramerate, setRecordingFramerate] = useState(null);
+
   const FrameWithSquareRef = useRef(null);
   const [number_of_animals, setNumberOfAnimals] = useState(6);
   const [activeTab, setActiveTab] = useState('idtrackerai_viewer');
+
+  // Fetch recording framerate from backend
+  useEffect(() => {
+    let isMounted = true;
+
+    const fetchFramerate = async () => {
+      try {
+        const url = `http://${BACKEND_SERVER}:${BACKEND_PORT}/api/framerate`;
+        const response = await axios.get(url);
+
+        // Accept a few possible shapes, e.g. { framerate: 150 } or { RECORDING_FRAMERATE: 150 } or plain number
+        const raw =
+          response.data?.framerate ??
+          response.data?.RECORDING_FRAMERATE ??
+          response.data;
+
+        const numeric = Number(raw);
+
+        if (isMounted && Number.isFinite(numeric) && numeric > 0) {
+          setRecordingFramerate(numeric);
+
+          // By default, sync playback step with recording framerate
+          setVideoFrameRate(numeric);
+        } else {
+          console.warn('Invalid framerate from backend:', response.data);
+        }
+      } catch (error) {
+        console.error('Error fetching recording framerate:', error);
+      }
+    };
+
+    fetchFramerate();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   // Updates the frame image and slider width.
   const updateFrame = (blobData) => {
@@ -57,7 +98,7 @@ function App() {
 
   // Validates the tracking data.
   const validateData = (dataArray) => {
-    const filteredData = dataArray.filter(item => {
+    const filteredData = dataArray.filter((item) => {
       return (
         item.frame_number != null &&
         item.in_frame_index != null &&
@@ -68,9 +109,10 @@ function App() {
       );
     });
     for (let i = 0; i < filteredData.length; i++) {
-      filteredData[i]["x"] = Math.round(filteredData[i]["x"]);
-      filteredData[i]["y"] = Math.round(filteredData[i]["y"]);
-      filteredData[i]["ZT"] = (filteredData[i]["t"] / 3600).toFixed(2);
+      filteredData[i]['x'] = Math.round(filteredData[i]['x']);
+      filteredData[i]['y'] = Math.round(filteredData[i]['y']);
+      filteredData[i]["ZT"]=(filteredData[i]["ZT"]);
+
     }
     return filteredData;
   };
@@ -83,30 +125,32 @@ function App() {
   // Fetches the frame, tracking, and preprocess data concurrently.
   const fetchFrame = async (frameNumber) => {
     try {
-      const frameUrl = `http://${BACKEND_SERVER}:${BACKEND_PORT}/api/frame/${parseInt(frameNumber)}`;
-      const trackingUrl = `http://${BACKEND_SERVER}:${BACKEND_PORT}/api/tracking/${parseInt(frameNumber)}`;
-      const preprocessUrl = `http://${BACKEND_SERVER}:${BACKEND_PORT}/api/preprocess/${parseInt(frameNumber)}`;
+      const fn = parseInt(frameNumber, 10);
+
+      const frameUrl = `http://${BACKEND_SERVER}:${BACKEND_PORT}/api/frame/${fn}`;
+      const trackingUrl = `http://${BACKEND_SERVER}:${BACKEND_PORT}/api/tracking/${fn}`;
+      const preprocessUrl = `http://${BACKEND_SERVER}:${BACKEND_PORT}/api/preprocess/${fn}`;
 
       const [frameResponse, trackingResponse, preprocessResponse] = await Promise.all([
         queuedAxiosGet(frameUrl),
         axios.get(trackingUrl),
-        axios.get(preprocessUrl)
+        axios.get(preprocessUrl),
       ]);
 
       // Update frame image only after all responses are ready.
       updateFrame(frameResponse.data);
 
       // Process and update tracking and pose data.
-      const validatedData = validateData(trackingResponse.data["tracking_data"]);
-      const poseData = validatePoseData(trackingResponse.data["pose"]);
+      const validatedData = validateData(trackingResponse.data['tracking_data']);
+      const poseData = validatePoseData(trackingResponse.data['pose']);
       setTrackingData(validatedData);
       setTrackingPoseData(poseData);
-      setNumberOfAnimals(trackingResponse.data["number_of_animals"]);
+      setNumberOfAnimals(trackingResponse.data['number_of_animals']);
 
       // Process and update contours data.
-      setContoursData(preprocessResponse.data["contours"]);
+      setContoursData(preprocessResponse.data['contours']);
     } catch (error) {
-      console.error("Error fetching data: ", error);
+      console.error('Error fetching data: ', error);
     }
   };
 
@@ -117,12 +161,15 @@ function App() {
 
   // Effect hook: playback functionality.
   useEffect(() => {
-    if (isPlaying) {
-      const intervalId = setInterval(() => {
-        setFrameNumber(prevFrameNumber => (prevFrameNumber + videoFrameRate) % 15750000);
-      }, 500);
-      return () => clearInterval(intervalId);
+    if (!isPlaying || !videoFrameRate) {
+      return;
     }
+
+    const intervalId = setInterval(() => {
+      setFrameNumber((prevFrameNumber) => (prevFrameNumber + videoFrameRate) % 15750000);
+    }, 500);
+
+    return () => clearInterval(intervalId);
   }, [isPlaying, videoFrameRate]);
 
   return (
@@ -162,14 +209,11 @@ function App() {
             <p>The goal is to:</p>
             <p>1) visualize the identity assignments produced by YOLOv7+idtrackerai,</p>
             <p>2) be able to correct or improve them if needed</p>
-            <p>
-              3) The plots produced in the analysis will also be displayed, as well as behavioral labels
-            </p>
+            <p>3) The plots produced in the analysis will also be displayed, as well as behavioral labels</p>
             <p>So far, only the first goal is achieved</p>
 
             <p>
-              Remember to make sure the BACKEND_SERVER constant reflects the current ip address of the
-              server
+              Remember to make sure the BACKEND_SERVER constant reflects the current ip address of the server
             </p>
 
             <div className="dashboard-container">
@@ -196,6 +240,7 @@ function App() {
                   />
                   <Slider
                     isPlaying={isPlaying}
+                    recordingFramerate={recordingFramerate}
                     frameNumber={frameNumber}
                     setFrameNumber={setFrameNumber}
                     sliderWidth={sliderWidth}
@@ -214,6 +259,7 @@ function App() {
                   isPlaying={isPlaying}
                   setIsPlaying={setIsPlaying}
                   requestQueue={requestQueue}
+                  recordingFramerate={recordingFramerate}
                 />
               </div>
             </div>

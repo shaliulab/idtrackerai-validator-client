@@ -1,4 +1,5 @@
-import React, { useEffect } from 'react';
+// Buttons.jsx
+import React, { useEffect, useState } from 'react';
 import {
   get_prev_chunk,
   get_next_chunk,
@@ -21,10 +22,29 @@ import {
   PreviousRejectionButton, 
   NextRejectionButton, 
   TogglePlayButton 
-} from './icons'; // Updated import
+} from './icons';
 
 const Buttons = ({ frameNumber, setFrameNumber, isPlaying, setIsPlaying, requestQueue }) => {
-  
+  const [frameRate, setFrameRate] = useState(null);
+
+  // Fetch framerate for the currently selected dataset
+  useEffect(() => {
+    axios
+      .get(`http://${BACKEND_SERVER}:${BACKEND_PORT}/api/framerate`)
+      .then((response) => {
+        // Adjust the property name depending on what your backend returns:
+        // e.g. { "framerate": 150 } or { "RECORDING_FRAMERATE": 150 }
+        const value =
+          response.data.framerate ??
+          response.data.RECORDING_FRAMERATE ??
+          response.data;
+        setFrameRate(Number(value));
+      })
+      .catch((err) => {
+        console.error('Error fetching framerate:', err);
+      });
+  }, []);
+
   const play = () => {
     setFrameNumber(frameNumber);
     setIsPlaying(true);
@@ -45,35 +65,43 @@ const Buttons = ({ frameNumber, setFrameNumber, isPlaying, setIsPlaying, request
   };
 
   const chunk_back = () => {
-    setFrameNumber(get_chunk_back(frameNumber));
+    if (frameRate == null) return;
+    setFrameNumber((prev) => get_chunk_back(prev, frameRate));
   };
     
   const chunk_forward = () => {
-    setFrameNumber(get_chunk_forward(frameNumber));
+    if (frameRate == null) return;
+    setFrameNumber((prev) => get_chunk_forward(prev, frameRate));
   };
 
   const prev_chunk = () => {
-    setFrameNumber(get_prev_chunk(frameNumber));
+    if (frameRate == null) return;
+    setFrameNumber((prev) => get_prev_chunk(prev, frameRate));
   };
     
   const next_chunk = () => {
-    setFrameNumber(get_next_chunk(frameNumber));
+    if (frameRate == null) return;
+    setFrameNumber((prev) => get_next_chunk(prev, frameRate));
   };
   
   const seconds1_back = () => {
-    setFrameNumber(get_1seconds_back(frameNumber));
+    if (frameRate == null) return;
+    setFrameNumber((prev) => get_1seconds_back(prev, frameRate));
   };
     
   const seconds1_forward = () => {
-    setFrameNumber(get_1seconds_forward(frameNumber));
+    if (frameRate == null) return;
+    setFrameNumber((prev) => get_1seconds_forward(prev, frameRate));
   };
 
   const seconds10_back = () => {
-    setFrameNumber(get_10seconds_back(frameNumber));
+    if (frameRate == null) return;
+    setFrameNumber((prev) => get_10seconds_back(prev, frameRate));
   };
     
   const seconds10_forward = () => {
-    setFrameNumber(get_10seconds_forward(frameNumber));
+    if (frameRate == null) return;
+    setFrameNumber((prev) => get_10seconds_forward(prev, frameRate));
   };
 
   const prev_rejection = () => {
@@ -90,14 +118,14 @@ const Buttons = ({ frameNumber, setFrameNumber, isPlaying, setIsPlaying, request
       });
   };
 
-  // Add keyboard shortcuts for the 9 buttons
+  // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (event) => {
       const tag = event.target.tagName.toLowerCase();
       const editable = event.target.isContentEditable;
       
       if (tag === 'input' || tag === 'textarea' || editable) {
-        return; // Don't process shortcuts when typing in input or editable element
+        return;
       }
     
       switch (event.key) {

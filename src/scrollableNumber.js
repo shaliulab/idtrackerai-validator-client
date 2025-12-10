@@ -20,7 +20,7 @@ const ScrollNumberInput = ({ value, setValue, videoFrameRate, id, labelText, foc
     useEffect(() => {
         const handleWheel = (event) => {
             event.preventDefault();
-            const delta = event.deltaY < 0 ? videoFrameRateRef.current : -videoFrameRateRef.current;
+            const delta = event.deltaY < 0 ? Math.floor(videoFrameRateRef.current) : Math.ceil(-videoFrameRateRef.current);
 
             // Pass the update function to the debounced handler
             debouncedSetValue((prevValue) => prevValue + delta);
