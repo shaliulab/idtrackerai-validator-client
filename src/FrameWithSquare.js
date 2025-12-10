@@ -168,6 +168,9 @@ const FrameWithSquare = React.forwardRef(({ imageURL, trackingData, videoFrameRa
         for (let identity in poseData) {
           var color = "#000000";
           for (const [partA, partB] of SKELETON) {
+            if (poseData[identity].length == null) {
+              continue;
+            }
             const [x1, y1] = poseData[identity][partA];
             const [x2, y2] = poseData[identity][partB];
             if ([x1, y1, x2, y2].includes(null)) continue;
