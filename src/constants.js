@@ -1,6 +1,6 @@
 
 export const PLACEHOLDER_IMAGE="./assets/placeholder.png"
-export const BACKEND_SERVER="10.43.207.98"; // TODO Update this if the IP of the server changes
+export const BACKEND_SERVER="cv3"; // TODO Update this if the IP of the server changes
 export const BACKEND_PORT = process.env.REACT_APP_BACKEND_PORT || 5000;
 console.log(`Backend is running on ${BACKEND_PORT}`);
 
