@@ -18,7 +18,7 @@ const SKELETON=[
   ["thorax", "lW"],
   ["thorax", "rW"]
 ]
-
+const LABEL_FIELD = "identity"; // e.g. "fragment", "id", "track_id", ...
 
 function generateColorPalette(numColors) {
   const colors = [];
@@ -149,8 +149,9 @@ const FrameWithSquare = React.forwardRef(({ imageURL, trackingData, videoFrameRa
               context.font = TEXT_SIZE.toString().concat("px ", TEXT_FAMILY.toString());
               // Draw the index number on the top left corner of the square
               context.fillStyle=color;
-              context.fillText(animal.identity.toString(), animal.x, animal.y);
-              // context.fillText(animal.identity.toString(), animal.x-WIDTH/2, animal.y-HEIGHT/2-10);
+              
+              const v = animal?.[LABEL_FIELD] ?? animal?.identity ?? "";
+              context.fillText(String(v), animal.x, animal.y);
             }
           
           var color = "#000000";
