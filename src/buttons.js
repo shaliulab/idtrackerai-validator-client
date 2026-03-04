@@ -5,6 +5,8 @@ import {
   get_next_chunk,
   get_chunk_back,
   get_chunk_forward,
+  get_30seconds_back,
+  get_30seconds_forward,
   get_10seconds_back,
   get_10seconds_forward,
   get_1seconds_back,
@@ -14,9 +16,11 @@ import axios from 'axios';
 import { BACKEND_SERVER, BACKEND_PORT } from './constants';
 import { 
   ChunkBackButton, 
+  ThirtySecondsBackButton, 
   TenSecondsBackButton, 
   OneSecondBackButton, 
   ChunkForthButton, 
+  ThirtySecondsForthButton, 
   TenSecondsForthButton, 
   OneSecondForthButton, 
   PreviousRejectionButton, 
@@ -103,6 +107,16 @@ const Buttons = ({ frameNumber, setFrameNumber, isPlaying, setIsPlaying, request
     if (frameRate == null) return;
     setFrameNumber((prev) => get_10seconds_forward(prev, frameRate));
   };
+  
+  const seconds30_back = () => {
+    if (frameRate == null) return;
+    setFrameNumber((prev) => get_30seconds_back(prev, frameRate));
+  };
+    
+  const seconds30_forward = () => {
+    if (frameRate == null) return;
+    setFrameNumber((prev) => get_30seconds_forward(prev, frameRate));
+  };
 
   const prev_rejection = () => {
     axios.get(`http://${BACKEND_SERVER}:${BACKEND_PORT}/api/prev_rejection/${parseInt(frameNumber)}`)
@@ -182,11 +196,13 @@ const Buttons = ({ frameNumber, setFrameNumber, isPlaying, setIsPlaying, request
   return (
     <div className="button-group">
       <ChunkBackButton onClick={prev_chunk} />
+      <ThirtySecondsBackButton onClick={seconds30_back} />
       <TenSecondsBackButton onClick={seconds10_back} />
       <OneSecondBackButton onClick={seconds1_back} />
       <TogglePlayButton isPlaying={isPlaying} play={play} pause={pause} />
       <OneSecondForthButton onClick={seconds1_forward} />
       <TenSecondsForthButton onClick={seconds10_forward} />
+      <ThirtySecondsForthButton onClick={seconds30_forward} />
       <ChunkForthButton onClick={next_chunk} />
       <PreviousRejectionButton onClick={prev_rejection} />
       <NextRejectionButton onClick={next_rejection} />

@@ -66,3 +66,18 @@ export const get_10seconds_forward = (value, recordingFramerate) => {
   const max_fn = Math.floor(recordingFramerate*CHUNK_SECONDS*400);
   return Math.min(v + recordingFramerate * 10, max_fn);
 };
+
+
+export const get_30seconds_back = (value, recordingFramerate) => {
+  const v = toInt(value);
+  const min_fn = Math.floor(recordingFramerate*CHUNK_SECONDS*20);
+  const max_fn = Math.floor(recordingFramerate*CHUNK_SECONDS*400);
+  return Math.max(v - recordingFramerate * 30, min_fn);
+};
+
+export const get_30seconds_forward = (value, recordingFramerate) => {
+  const v = toInt(value);
+  const min_fn = Math.floor(recordingFramerate*CHUNK_SECONDS*20);
+  const max_fn = Math.floor(recordingFramerate*CHUNK_SECONDS*400);
+  return Math.min(v + recordingFramerate * 30, max_fn);
+};

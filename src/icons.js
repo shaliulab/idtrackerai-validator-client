@@ -2,10 +2,14 @@
 import React from 'react';
 import { ReactComponent as OneBackIcon } from './assets/icons/oneback.svg';
 import { ReactComponent as TenBackIcon } from './assets/icons/tenback.svg';
+import { ReactComponent as ThirtyBackIcon } from './assets/icons/thirtyback.svg';
+// import { ReactComponent as ThirtyBackIcon } from './assets/icons/tenback.svg';
 import { ReactComponent as ChunkBackIcon } from './assets/icons/chunkback.svg';
 
 import { ReactComponent as OneForthIcon } from './assets/icons/oneforth.svg';
 import { ReactComponent as TenForthIcon } from './assets/icons/tenforth.svg';
+import { ReactComponent as ThirtyForthIcon } from './assets/icons/thirtyforth.svg';
+// import { ReactComponent as ThirtyForthIcon } from './assets/icons/tenforth.svg';
 import { ReactComponent as ChunkForthIcon } from './assets/icons/chunkforth.svg';
 
 import { ReactComponent as PreviousRejectionIcon } from './assets/icons/previousRejection.svg';
@@ -15,6 +19,12 @@ import { ReactComponent as NextRejectionIcon } from './assets/icons/nextRejectio
 const OneSecondBackButton = ({ onClick }) => (
     <button className="btn" onClick={onClick}>
       <OneBackIcon />
+    </button>
+  );
+  
+  const ThirtySecondsBackButton = ({ onClick }) => (
+    <button className="btn" onClick={onClick}>
+      <ThirtyBackIcon/>
     </button>
   );
   
@@ -41,6 +51,12 @@ const OneSecondForthButton = ({ onClick }) => (
   const TenSecondsForthButton = ({ onClick }) => (
     <button className="btn" onClick={onClick}>
       <TenForthIcon />
+    </button>
+  );
+
+  const ThirtySecondsForthButton = ({ onClick }) => (
+    <button className="btn" onClick={onClick}>
+      <ThirtyForthIcon />
     </button>
   );
   
@@ -83,7 +99,7 @@ const NextRejectionButton = ({ onClick }) => (
   };
 
 export { 
-    OneSecondBackButton,TenSecondsBackButton, ChunkBackButton,
-    OneSecondForthButton,TenSecondsForthButton, ChunkForthButton,
+    OneSecondBackButton,TenSecondsBackButton, ThirtySecondsBackButton, ChunkBackButton,
+    OneSecondForthButton,TenSecondsForthButton, ThirtySecondsForthButton, ChunkForthButton,
     NextRejectionButton, PreviousRejectionButton, TogglePlayButton
 };
