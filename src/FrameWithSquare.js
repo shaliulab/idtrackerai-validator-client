@@ -5,6 +5,8 @@ import { SQUARE_HEIGHT } from './constants'
 import { SQUARE_WIDTH } from './constants'
 import { TEXT_SIZE } from './constants'
 import { TEXT_FAMILY } from './constants'
+import { LABEL_FIELD } from './constants'
+import { PRINT_CONTOUR } from './constants'
 
 const SKELETON=[
   ["head", "thorax"],
@@ -18,7 +20,6 @@ const SKELETON=[
   ["thorax", "lW"],
   ["thorax", "rW"]
 ]
-const LABEL_FIELD = "identity"; // e.g. "fragment", "id", "track_id", ...
 
 function generateColorPalette(numColors) {
   const colors = [];
@@ -29,7 +30,6 @@ function generateColorPalette(numColors) {
     // Saturation is 100%, lightness is 50% for the most vibrant colors
     colors.push(`hsl(${hue}, 100%, 50%)`);
   }
-
   return colors;
 }
 
@@ -188,28 +188,30 @@ const FrameWithSquare = React.forwardRef(({ imageURL, trackingData, videoFrameRa
         }
 
         let contour_color = "hsla(120, 100%, 50%, 0.2)";
+        if  (PRINT_CONTOUR) {
 
-        contoursData.forEach(function(contour) {
-          // Start a new path
-          context.beginPath();
-      
-          // Draw the contour
-          contour.forEach(function(point, index) {
-              let x = point[0][0];
-              let y = point[0][1];
-      
-              // If it's the first point, we move to it. Otherwise, we draw a line from the last point
-              if (index === 0) {
-                  context.moveTo(x, y);
-              } else {
-                  context.lineTo(x, y);
-              }
+          contoursData.forEach(function(contour) {
+            // Start a new path
+            context.beginPath();
+        
+            // Draw the contour
+            contour.forEach(function(point, index) {
+                let x = point[0][0];
+                let y = point[0][1];
+        
+                // If it's the first point, we move to it. Otherwise, we draw a line from the last point
+                if (index === 0) {
+                    context.moveTo(x, y);
+                } else {
+                    context.lineTo(x, y);
+                }
+            });
+            // Close the path if needed
+            context.closePath();
+            context.fillStyle = contour_color;
+            context.fill();
           });
-          // Close the path if needed
-          context.closePath();
-          context.fillStyle = contour_color;
-          context.fill();
-        });
+        }
 
       };
     }

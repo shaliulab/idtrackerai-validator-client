@@ -11,3 +11,5 @@ export const SQUARE_HEIGHT=100;
 export const SQUARE_WIDTH=100;
 export const TEXT_SIZE=20;
 export const TEXT_FAMILY="Arial";
+export const LABEL_FIELD = "identity";
+export const PRINT_CONTOUR = false;
