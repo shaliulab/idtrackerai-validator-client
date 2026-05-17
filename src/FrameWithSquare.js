@@ -23,6 +23,13 @@ const SKELETON = [
   ["thorax", "rW"],
 ];
 
+// --- MAGNIFIER CONFIG ---
+const INSET_NATIVE_SIZE = 200;    // size of region sampled from native image, in native px
+const INSET_DISPLAY_SIZE = 250;   // size of the inset rendered on the canvas, in display px
+const INSET_BORDER_COLOR = '#ffffff';
+const INSET_BORDER_WIDTH = 2;
+// -------------------------
+
 function generateColorPalette(numColors) {
   const colors = [];
   for (let i = 0; i < numColors; i++) {
@@ -45,18 +52,18 @@ const FrameWithSquare = React.forwardRef(
       poseData,
       displayWidth = 1000,
       displayHeight = 1000,
-      nativeSize, // { width, height } | null
+      nativeSize,
     },
     ref,
   ) => {
     const canvasRef = useRef();
-    const inputRef = useRef();
     const imgRef = useRef();
     const [clickPairs, setClickPairs] = useState([]);
 
-    // Scale factors. Both default to 1 if nativeSize isn't known yet,
-    // which means the first frame may draw labels in the wrong place
-    // until probeImageSize completes — usually invisible to the eye.
+    // Magnifier state: cursor position on the canvas, in display coords.
+    // null when the cursor is outside the canvas.
+    const [hoverPos, setHoverPos] = useState(null);
+
     const sx = nativeSize ? displayWidth / nativeSize.width : 1;
     const sy = nativeSize ? displayHeight / nativeSize.height : 1;
 
@@ -65,8 +72,6 @@ const FrameWithSquare = React.forwardRef(
       const xDisp = event.clientX - rect.left;
       const yDisp = event.clientY - rect.top;
 
-      // Hit-test: animals are in native space, so scale them to display
-      // space for comparison with the click position.
       trackingData.forEach((animal) => {
         const ax = animal.x * sx;
         const ay = animal.y * sy;
@@ -127,23 +132,51 @@ const FrameWithSquare = React.forwardRef(
       setClickPairs(clicks);
     };
 
+    // NEW: mouse handlers for the magnifier
+    const handleMouseMove = (event) => {
+      const rect = event.currentTarget.getBoundingClientRect();
+      setHoverPos({
+        x: event.clientX - rect.left,
+        y: event.clientY - rect.top,
+      });
+    };
+    const handleMouseLeave = () => setHoverPos(null);
+
+    // Wheel-to-scrub: scrolling on the canvas advances/rewinds by videoFrameRate frames.
+    // Must attach as a non-passive native listener so we can preventDefault and
+    // stop the page from scrolling.
+    useEffect(() => {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+
+      const handleWheel = (e) => {
+        e.preventDefault();
+        // deltaY > 0 means scroll down / wheel away -> advance frames
+        const step = videoFrameRate || 1;
+        const direction = e.deltaY > 0 ? 1 : -1;
+        setFrameNumber((prev) => Math.max(0, prev + direction * step));
+      };
+
+      canvas.addEventListener('wheel', handleWheel, { passive: false });
+      return () => canvas.removeEventListener('wheel', handleWheel);
+    }, [videoFrameRate, setFrameNumber]);
+
+
     useEffect(() => {
       if (!canvasRef.current) return;
 
       const context = canvasRef.current.getContext('2d');
       const img = imgRef.current;
-      img.src = imageURL;
-
       const colors = generateColorPalette(number_of_animals);
 
-      img.onload = function () {
+      const draw = () => {
         canvasRef.current.width = displayWidth;
         canvasRef.current.height = displayHeight;
 
         context.clearRect(0, 0, displayWidth, displayHeight);
         context.drawImage(img, 0, 0, displayWidth, displayHeight);
 
-        // Tracking labels — scale native coords to display space at draw time.
+        // Tracking labels
         trackingData.forEach(function (animal) {
           const writeIdentity = (ctx, a, color) => {
             ctx.font = TEXT_SIZE.toString().concat('px ', TEXT_FAMILY.toString());
@@ -169,7 +202,6 @@ const FrameWithSquare = React.forwardRef(
             if ([x1, y1, x2, y2].includes(null)) continue;
 
             color = colors[parseInt(identity) % number_of_animals];
-
             context.beginPath();
             context.moveTo(x1 * sx, y1 * sy);
             context.lineTo(x2 * sx, y2 * sy);
@@ -200,7 +232,62 @@ const FrameWithSquare = React.forwardRef(
             context.fill();
           });
         }
+
+        // --- MAGNIFIER OVERLAY ---
+        // Draw last so it sits on top of everything else.
+        if (hoverPos && nativeSize && img.naturalWidth > 0) {
+          // Convert cursor position from display -> native coords.
+          const nx = hoverPos.x / sx;
+          const ny = hoverPos.y / sy;
+
+          // Source rect: 200x200 native px centered on cursor, clamped to image bounds.
+          const half = INSET_NATIVE_SIZE / 2;
+          let srcX = nx - half;
+          let srcY = ny - half;
+          srcX = Math.max(0, Math.min(srcX, nativeSize.width - INSET_NATIVE_SIZE));
+          srcY = Math.max(0, Math.min(srcY, nativeSize.height - INSET_NATIVE_SIZE));
+
+          // Destination rect: INSET_DISPLAY_SIZE centered on cursor, clamped to canvas bounds.
+          const halfDisp = INSET_DISPLAY_SIZE / 2;
+          let dstX = hoverPos.x - halfDisp;
+          let dstY = hoverPos.y - halfDisp;
+          dstX = Math.max(0, Math.min(dstX, displayWidth - INSET_DISPLAY_SIZE));
+          dstY = Math.max(0, Math.min(dstY, displayHeight - INSET_DISPLAY_SIZE));
+
+          // Use nearest-neighbor for sharper pixels — comment out for smooth.
+          context.imageSmoothingEnabled = false;
+          context.drawImage(
+            img,
+            srcX, srcY, INSET_NATIVE_SIZE, INSET_NATIVE_SIZE,
+            dstX, dstY, INSET_DISPLAY_SIZE, INSET_DISPLAY_SIZE,
+          );
+          context.imageSmoothingEnabled = true;
+
+          // Border around the inset
+          context.strokeStyle = INSET_BORDER_COLOR;
+          context.lineWidth = INSET_BORDER_WIDTH;
+          context.strokeRect(dstX, dstY, INSET_DISPLAY_SIZE, INSET_DISPLAY_SIZE);
+
+          // Small crosshair at the actual cursor position (useful when inset
+          // is offset due to clamping near edges).
+          context.strokeStyle = INSET_BORDER_COLOR;
+          context.lineWidth = 1;
+          context.beginPath();
+          context.moveTo(hoverPos.x - 6, hoverPos.y);
+          context.lineTo(hoverPos.x + 6, hoverPos.y);
+          context.moveTo(hoverPos.x, hoverPos.y - 6);
+          context.lineTo(hoverPos.x, hoverPos.y + 6);
+          context.stroke();
+        }
+        // -------------------------
       };
+
+      if (img.src === imageURL && img.complete && img.naturalWidth > 0) {
+        draw();
+      } else {
+        img.onload = draw;
+        img.src = imageURL;
+      }
     }, [
       imageURL,
       trackingData,
@@ -212,63 +299,28 @@ const FrameWithSquare = React.forwardRef(
       sx,
       sy,
       frameNumber,
+      hoverPos,        // <-- redraw when cursor moves
+      nativeSize,
       ref,
     ]);
 
-    // function downloadCSV() {
-    //   let csvContent =
-    //     'Pair,Frame1,Fragment1,Identity1,X1_native,Y1_native,Frame2,Fragment2,Identity2,X2_native,Y2_native\n';
-
-    //   clickPairs.forEach((pair) => {
-    //     const a = pair[0];
-    //     const b = pair[1];
-    //     csvContent +=
-    //       `${a.index},${a.frameNumber},${a.fragment},${a.identity},${a.x_native ?? ''},${a.y_native ?? ''},` +
-    //       `${b ? b.frameNumber : ''},${b ? b.fragment : ''},${b ? b.identity : ''},${b ? (b.x_native ?? '') : ''},${b ? (b.y_native ?? '') : ''}\n`;
-    //   });
-
-    //   const blob = new Blob([csvContent], { type: 'text/csv' });
-    //   const url = URL.createObjectURL(blob);
-    //   const link = document.createElement('a');
-    //   link.href = url;
-    //   link.download = 'click-pairs.csv';
-    //   document.body.appendChild(link);
-    //   link.click();
-    //   document.body.removeChild(link);
-    // }
-    
     return (
       <div>
         <div style={{ width: displayWidth }}>
-
-          {/* Controls above the frame
-          <div style={{ marginBottom: 8, display: 'flex', gap: 8, alignItems: 'center' }}>
-            <button onClick={forgetLastClick}>Cancel</button>
-            <button onClick={downloadCSV}>Download CSV</button>
-            <ScrollNumberInput
-              value={frameNumber}
-              setValue={setFrameNumber}
-              videoFrameRate={videoFrameRate}
-              id="frame_number"
-              labelText=""
-              focusElementRef={canvasRef}
-            />
-          </div> */}
-
-          {/* The frame */}
-          <div onClick={handleClick}>
+          <div
+            onClick={handleClick}
+            onMouseMove={handleMouseMove}
+            onMouseLeave={handleMouseLeave}
+          >
             <canvas
               ref={canvasRef}
               style={{ width: displayWidth, height: displayHeight, display: 'block' }}
             />
           </div>
-
           <img ref={imgRef} style={{ display: 'none' }} alt="" />
         </div>
       </div>
     );
-
-
   },
 );
 
