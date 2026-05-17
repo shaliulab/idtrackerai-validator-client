@@ -215,77 +215,60 @@ const FrameWithSquare = React.forwardRef(
       ref,
     ]);
 
-    function downloadCSV() {
-      let csvContent =
-        'Pair,Frame1,Fragment1,Identity1,X1_native,Y1_native,Frame2,Fragment2,Identity2,X2_native,Y2_native\n';
+    // function downloadCSV() {
+    //   let csvContent =
+    //     'Pair,Frame1,Fragment1,Identity1,X1_native,Y1_native,Frame2,Fragment2,Identity2,X2_native,Y2_native\n';
 
-      clickPairs.forEach((pair) => {
-        const a = pair[0];
-        const b = pair[1];
-        csvContent +=
-          `${a.index},${a.frameNumber},${a.fragment},${a.identity},${a.x_native ?? ''},${a.y_native ?? ''},` +
-          `${b ? b.frameNumber : ''},${b ? b.fragment : ''},${b ? b.identity : ''},${b ? (b.x_native ?? '') : ''},${b ? (b.y_native ?? '') : ''}\n`;
-      });
+    //   clickPairs.forEach((pair) => {
+    //     const a = pair[0];
+    //     const b = pair[1];
+    //     csvContent +=
+    //       `${a.index},${a.frameNumber},${a.fragment},${a.identity},${a.x_native ?? ''},${a.y_native ?? ''},` +
+    //       `${b ? b.frameNumber : ''},${b ? b.fragment : ''},${b ? b.identity : ''},${b ? (b.x_native ?? '') : ''},${b ? (b.y_native ?? '') : ''}\n`;
+    //   });
 
-      const blob = new Blob([csvContent], { type: 'text/csv' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = 'click-pairs.csv';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-    }
-
+    //   const blob = new Blob([csvContent], { type: 'text/csv' });
+    //   const url = URL.createObjectURL(blob);
+    //   const link = document.createElement('a');
+    //   link.href = url;
+    //   link.download = 'click-pairs.csv';
+    //   document.body.appendChild(link);
+    //   link.click();
+    //   document.body.removeChild(link);
+    // }
+    
     return (
-      <div onClick={handleClick}>
-        <canvas
-          ref={canvasRef}
-          style={{ width: displayWidth, height: displayHeight, display: 'block' }}
-        />
-        <img ref={imgRef} style={{ display: 'none' }} alt="" />
-        <button onClick={forgetLastClick}>Cancel</button>
-        <ScrollNumberInput
-          value={frameNumber}
-          setValue={setFrameNumber}
-          videoFrameRate={videoFrameRate}
-          id="frame_number"
-          labelText=""
-          focusElementRef={canvasRef}
-        />
-        <table>
-          <thead>
-            <tr>
-              <th>Pair</th>
-              <th>Frame1</th>
-              <th>Fragment1</th>
-              <th>Identity1</th>
-              <th>Frame2</th>
-              <th>Fragment2</th>
-              <th>Identity2</th>
-              <th>Delete</th>
-            </tr>
-          </thead>
-          <tbody>
-            {clickPairs.map((pair, index) => (
-              <tr key={index}>
-                <td>{pair[0] ? pair[0].index : ''}</td>
-                <td>{pair[0] ? pair[0].frameNumber : ''}</td>
-                <td>{pair[0] ? pair[0].fragment : ''}</td>
-                <td>{pair[0] ? pair[0].identity : ''}</td>
-                <td>{pair[1] ? pair[1].frameNumber : ''}</td>
-                <td>{pair[1] ? pair[1].fragment : ''}</td>
-                <td>{pair[1] ? pair[1].identity : ''}</td>
-                <td>
-                  <button onClick={forgetClickFactory(pair[0] ? pair[0].index : -1)}>Delete</button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        <button onClick={downloadCSV}>Download CSV</button>
+      <div>
+        <div style={{ width: displayWidth }}>
+
+          {/* Controls above the frame
+          <div style={{ marginBottom: 8, display: 'flex', gap: 8, alignItems: 'center' }}>
+            <button onClick={forgetLastClick}>Cancel</button>
+            <button onClick={downloadCSV}>Download CSV</button>
+            <ScrollNumberInput
+              value={frameNumber}
+              setValue={setFrameNumber}
+              videoFrameRate={videoFrameRate}
+              id="frame_number"
+              labelText=""
+              focusElementRef={canvasRef}
+            />
+          </div> */}
+
+          {/* The frame */}
+          <div onClick={handleClick}>
+            <canvas
+              ref={canvasRef}
+              style={{ width: displayWidth, height: displayHeight, display: 'block' }}
+            />
+          </div>
+
+          <img ref={imgRef} style={{ display: 'none' }} alt="" />
+        </div>
       </div>
     );
+
+
   },
 );
 

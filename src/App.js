@@ -7,14 +7,11 @@ import Tab from './Tab';
 import InteractiveText from './interactiveText';
 import { RequestQueue } from './queue';
 import { BlobsTable, VerticalBlobsTable } from './blobs_table';
-import { FIRST_FRAME, BACKEND_SERVER, PLACEHOLDER_IMAGE, BACKEND_PORT } from './constants';
+import { FIRST_FRAME, BACKEND_SERVER, PLACEHOLDER_IMAGE, BACKEND_PORT, DISPLAY_SIZE } from './constants';
 import { BrowserRouter as Router, Route, Routes } from 'react-router-dom';
 
 const MAX_SIMULTANEOUS_REQUESTS = 1;
 const requestQueue = new RequestQueue(MAX_SIMULTANEOUS_REQUESTS);
-
-// Target display size on the client.
-const DISPLAY_SIZE = 1000;
 
 function queuedAxiosGet(url) {
   const source = axios.CancelToken.source();
@@ -193,44 +190,53 @@ function App() {
             <p>Remember to make sure the BACKEND_SERVER constant reflects the current ip address of the server</p>
 
             <div className="dashboard-container">
-              <div className="column-container">
-                <div className="left-column">
-                  {frame && (
-                    <FrameWithSquare
-                      imageURL={frame}
-                      videoFrameRate={videoFrameRate}
-                      trackingData={trackingData}
-                      contoursData={contoursData}
-                      frameNumber={frameNumber}
-                      setFrameNumber={setFrameNumber}
-                      number_of_animals={number_of_animals}
-                      poseData={trackingPoseData}
-                      ref={FrameWithSquareRef}
-                      displayWidth={DISPLAY_SIZE}
-                      displayHeight={DISPLAY_SIZE}
-                      nativeSize={nativeSize}
-                    />
-                  )}
-                  <InteractiveText
-                    value={videoFrameRate}
-                    setValue={setVideoFrameRate}
-                    id="playback_framerate"
-                    labelText="Playback Framerate  "
-                  />
-                  <Slider
-                    isPlaying={isPlaying}
-                    recordingFramerate={recordingFramerate}
-                    frameNumber={frameNumber}
-                    setFrameNumber={setFrameNumber}
-                    sliderWidth={sliderWidth}
-                  />
+              <div style={{ width: DISPLAY_SIZE, margin: '0 auto' }}>
+
+                {/* Table above the frame, matched to frame width */}
+                <div
+                  style={{
+                    width: '100%',
+                    maxHeight: 220,
+                    overflowY: 'auto',
+                    marginBottom: 8,
+                    border: '1px solid #ccc',
+                    boxSizing: 'border-box',
+                  }}
+                >
+                  <BlobsTable Data={trackingData} />
                 </div>
-                <div className="right-column">
-                  <div className="table-container">
-                    <BlobsTable Data={trackingData} />
-                  </div>
-                </div>
+
+                {/* Frame + its controls */}
+                <FrameWithSquare
+                  imageURL={frame}
+                  videoFrameRate={videoFrameRate}
+                  trackingData={trackingData}
+                  contoursData={contoursData}
+                  frameNumber={frameNumber}
+                  setFrameNumber={setFrameNumber}
+                  number_of_animals={number_of_animals}
+                  poseData={trackingPoseData}
+                  ref={FrameWithSquareRef}
+                  displayWidth={DISPLAY_SIZE}
+                  displayHeight={DISPLAY_SIZE}
+                  nativeSize={nativeSize}
+                />
+
+                <InteractiveText
+                  value={videoFrameRate}
+                  setValue={setVideoFrameRate}
+                  id="playback_framerate"
+                  labelText="Playback Framerate  "
+                />
+                <Slider
+                  isPlaying={isPlaying}
+                  recordingFramerate={recordingFramerate}
+                  frameNumber={frameNumber}
+                  setFrameNumber={setFrameNumber}
+                  sliderWidth={sliderWidth}
+                />
               </div>
+
               <div className="button-group">
                 <Buttons
                   frameNumber={frameNumber}
@@ -242,6 +248,7 @@ function App() {
                 />
               </div>
             </div>
+
           </div>
         )}
       </div>
