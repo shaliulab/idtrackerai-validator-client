@@ -1,14 +1,16 @@
 import React, { useRef, useEffect, useState } from 'react';
-import ScrollNumberInput from './scrollableNumber'; // adjust the path according to your file structure
+import ScrollNumberInput from './scrollableNumber';
 
-import { SQUARE_HEIGHT } from './constants'
-import { SQUARE_WIDTH } from './constants'
-import { TEXT_SIZE } from './constants'
-import { TEXT_FAMILY } from './constants'
-import { LABEL_FIELD } from './constants'
-import { PRINT_CONTOUR } from './constants'
+import {
+  SQUARE_HEIGHT,
+  SQUARE_WIDTH,
+  TEXT_SIZE,
+  TEXT_FAMILY,
+  LABEL_FIELD,
+  PRINT_CONTOUR,
+} from './constants';
 
-const SKELETON=[
+const SKELETON = [
   ["head", "thorax"],
   ["thorax", "abdomen"],
   ["thorax", "fLL"],
@@ -18,266 +20,273 @@ const SKELETON=[
   ["thorax", "mRL"],
   ["thorax", "rRL"],
   ["thorax", "lW"],
-  ["thorax", "rW"]
-]
+  ["thorax", "rW"],
+];
 
 function generateColorPalette(numColors) {
   const colors = [];
-
   for (let i = 0; i < numColors; i++) {
-    // Hue value changes for each color, covering the whole spectrum (0-360)
     const hue = Math.floor((i / numColors) * 360);
-    // Saturation is 100%, lightness is 50% for the most vibrant colors
     colors.push(`hsl(${hue}, 100%, 50%)`);
   }
   return colors;
 }
 
+const FrameWithSquare = React.forwardRef(
+  (
+    {
+      imageURL,
+      trackingData,
+      videoFrameRate,
+      contoursData,
+      frameNumber,
+      setFrameNumber,
+      number_of_animals,
+      poseData,
+      displayWidth = 1000,
+      displayHeight = 1000,
+      nativeSize, // { width, height } | null
+    },
+    ref,
+  ) => {
+    const canvasRef = useRef();
+    const inputRef = useRef();
+    const imgRef = useRef();
+    const [clickPairs, setClickPairs] = useState([]);
 
-const FrameWithSquare = React.forwardRef(({ imageURL, trackingData, videoFrameRate, contoursData, frameNumber, setFrameNumber, number_of_animals, poseData }, ref) => {
-  const canvasRef = useRef();
-  const inputRef = useRef(); // create a ref for the input field
-  const imgRef = useRef(); // create a ref for the img
-  const [clickPairs, setClickPairs] = useState([]);
+    // Scale factors. Both default to 1 if nativeSize isn't known yet,
+    // which means the first frame may draw labels in the wrong place
+    // until probeImageSize completes — usually invisible to the eye.
+    const sx = nativeSize ? displayWidth / nativeSize.width : 1;
+    const sy = nativeSize ? displayHeight / nativeSize.height : 1;
 
-  const handleClick = (event) => {
-    // Get the bounding rectangle of the target element
-    const rect = event.target.getBoundingClientRect();
+    const handleClick = (event) => {
+      const rect = event.target.getBoundingClientRect();
+      const xDisp = event.clientX - rect.left;
+      const yDisp = event.clientY - rect.top;
 
-    // Calculate the click coordinates relative to the element
-    const x = event.clientX - rect.left;
-    const y = event.clientY - rect.top;
+      // Hit-test: animals are in native space, so scale them to display
+      // space for comparison with the click position.
+      trackingData.forEach((animal) => {
+        const ax = animal.x * sx;
+        const ay = animal.y * sy;
+        if (
+          xDisp >= ax - SQUARE_WIDTH / 2 &&
+          xDisp <= ax + SQUARE_WIDTH / 2 &&
+          yDisp >= ay - SQUARE_HEIGHT / 2 &&
+          yDisp <= ay + SQUARE_HEIGHT / 2
+        ) {
+          const identity = animal.identity;
+          const fragment = animal.fragment;
+          const timestamp = Date.now();
+          const x_native = animal.x;
+          const y_native = animal.y;
 
-    console.log([x, y]);
-
-    // Check if the click falls within any of the rectangles
-    trackingData.forEach((animal) => {
-      if (
-        x >= animal.x - SQUARE_WIDTH/2 &&
-        x <= animal.x + SQUARE_WIDTH/2 &&
-        y >= animal.y - SQUARE_HEIGHT/2 &&
-        y <= animal.y + SQUARE_HEIGHT/2
-      ) {
-        const identity = animal.identity;
-        const fragment = animal.fragment;
-        const timestamp = Date.now();
-        setClickPairs(prevData => {
-          
-          console.log(prevData);
-          const newData = prevData;
-          if (newData.length > 0) {
-            const index=newData[newData.length-1][0].index+1;
-            if (newData[newData.length-1].length % 2 === 0) {
-              // Start a new pair
-              newData.push([{ index, timestamp, frameNumber, x, y, identity, fragment }]);
+          setClickPairs((prevData) => {
+            const newData = prevData;
+            if (newData.length > 0) {
+              const index = newData[newData.length - 1][0].index + 1;
+              if (newData[newData.length - 1].length % 2 === 0) {
+                newData.push([
+                  { index, timestamp, frameNumber, x: xDisp, y: yDisp, x_native, y_native, identity, fragment },
+                ]);
+              } else {
+                newData[newData.length - 1].push({
+                  index, timestamp, frameNumber, x: xDisp, y: yDisp, x_native, y_native, identity, fragment,
+                });
+              }
             } else {
-              // Finish the current pair
-              newData[newData.length - 1].push({ index, timestamp, frameNumber, x, y, identity, fragment });
+              const index = 0;
+              newData.push([
+                { index, timestamp, frameNumber, x: xDisp, y: yDisp, x_native, y_native, identity, fragment },
+              ]);
             }
-          } else {
-            const index = 0;
-            newData.push([{ index, timestamp, frameNumber, x, y, identity, fragment }]);
-          }
-
-          return newData;
-        });
-      }
-    });
-  }
-
-  const forgetLastClick = () => {
-    setClickPairs(prevData => {
-      const newData = [...prevData];
-      if (newData.length % 2 === 1) {
-        // If the last item is a pair, remove the second click
-        newData[newData.length - 1].pop();
-      } else if (newData.length != 0) {
-        // If the last item is a single click, remove it
-        newData.pop();
-      }
-      return newData;
-    });
-  };
-
-
-  const forgetClickFactory = (index) => {
-
-    const forgetClick = () => {
-      const clicks = [];
-
-      for (let i=0; i<clickPairs.length; i++) {
-        console.log(clickPairs[i][0].index);
-        console.log(index);
-        if (clickPairs[i][0].index != index) {
-          clicks.push(clickPairs[i]);
+            return newData;
+          });
         }
+      });
+    };
+
+    const forgetLastClick = () => {
+      setClickPairs((prevData) => {
+        const newData = [...prevData];
+        if (newData.length % 2 === 1) {
+          newData[newData.length - 1].pop();
+        } else if (newData.length !== 0) {
+          newData.pop();
+        }
+        return newData;
+      });
+    };
+
+    const forgetClickFactory = (index) => () => {
+      const clicks = [];
+      for (let i = 0; i < clickPairs.length; i++) {
+        if (clickPairs[i][0].index !== index) clicks.push(clickPairs[i]);
       }
-      console.log(clicks.length);
       setClickPairs(clicks);
-    }
-    return forgetClick;
-  }
+    };
 
-  useEffect(() => {
+    useEffect(() => {
+      if (!canvasRef.current) return;
 
-    if (canvasRef.current) {
       const context = canvasRef.current.getContext('2d');
       const img = imgRef.current;
       img.src = imageURL;
 
       const colors = generateColorPalette(number_of_animals);
-      
-      img.onload = function() {
 
-        canvasRef.current.width = img.width
-        canvasRef.current.height = img.height
-        context.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
-        context.drawImage(img, 0, 0, canvasRef.current.width, canvasRef.current.height);
+      img.onload = function () {
+        canvasRef.current.width = displayWidth;
+        canvasRef.current.height = displayHeight;
 
-        trackingData.forEach(function(animal, index) {
-          const drawSquare = (context, animal, color) => {
-            context.beginPath();
-            context.rect(animal.x-SQUARE_WIDTH/2, animal.y-SQUARE_HEIGHT/2, SQUARE_WIDTH, SQUARE_HEIGHT);
-            context.lineWidth = 2;
-            context.strokeStyle = color;
-            context.stroke();
-            context.closePath();
-          };    
+        context.clearRect(0, 0, displayWidth, displayHeight);
+        context.drawImage(img, 0, 0, displayWidth, displayHeight);
 
-          const writeIdentity = (context, animal, color) => {
+        // Tracking labels — scale native coords to display space at draw time.
+        trackingData.forEach(function (animal) {
+          const writeIdentity = (ctx, a, color) => {
+            ctx.font = TEXT_SIZE.toString().concat('px ', TEXT_FAMILY.toString());
+            ctx.fillStyle = color;
+            const v = a?.[LABEL_FIELD] ?? a?.identity ?? '';
+            ctx.fillText(String(v), a.x * sx, a.y * sy);
+          };
 
-              context.font = TEXT_SIZE.toString().concat("px ", TEXT_FAMILY.toString());
-              // Draw the index number on the top left corner of the square
-              context.fillStyle=color;
-              
-              const v = animal?.[LABEL_FIELD] ?? animal?.identity ?? "";
-              context.fillText(String(v), animal.x, animal.y);
-            }
-          
-          var color = "#000000";
-          if (animal.identity != null & animal.identity != 0) {
-            color = colors[parseInt(animal.identity) % number_of_animals ]
+          let color = '#000000';
+          if (animal.identity != null && animal.identity !== 0) {
+            color = colors[parseInt(animal.identity) % number_of_animals];
           }
-
-          // drawSquare(context, animal, color); // TODO Uncomment if you want the square around the animal rendered
           writeIdentity(context, animal, color);
         });
 
-
+        // Pose
         for (let identity in poseData) {
-          var color = "#000000";
+          let color = '#000000';
           for (const [partA, partB] of SKELETON) {
-            if (poseData[identity].length == null) {
-              continue;
-            }
+            if (poseData[identity].length == null) continue;
             const [x1, y1] = poseData[identity][partA];
             const [x2, y2] = poseData[identity][partB];
             if ([x1, y1, x2, y2].includes(null)) continue;
-            
-            color=colors[parseInt(identity) % number_of_animals];
-            
+
+            color = colors[parseInt(identity) % number_of_animals];
+
             context.beginPath();
-            context.moveTo(x1, y1);
-            context.lineTo(x2, y2);
+            context.moveTo(x1 * sx, y1 * sy);
+            context.lineTo(x2 * sx, y2 * sy);
             context.lineWidth = 1;
-            context.globalAlpha = 0.5; // Set 50% transparency
+            context.globalAlpha = 0.5;
             context.strokeStyle = color;
             context.stroke();
             context.closePath();
           }
         }
+        context.globalAlpha = 1.0;
 
-        let contour_color = "hsla(120, 100%, 50%, 0.2)";
-        if  (PRINT_CONTOUR) {
-
-          contoursData.forEach(function(contour) {
-            // Start a new path
+        // Contours
+        if (PRINT_CONTOUR) {
+          const contour_color = 'hsla(120, 100%, 50%, 0.2)';
+          contoursData.forEach(function (contour) {
             context.beginPath();
-        
-            // Draw the contour
-            contour.forEach(function(point, index) {
-                let x = point[0][0];
-                let y = point[0][1];
-        
-                // If it's the first point, we move to it. Otherwise, we draw a line from the last point
-                if (index === 0) {
-                    context.moveTo(x, y);
-                } else {
-                    context.lineTo(x, y);
-                }
+            contour.forEach(function (point, idx) {
+              const rawX = Array.isArray(point[0]) ? point[0][0] : point[0];
+              const rawY = Array.isArray(point[0]) ? point[0][1] : point[1];
+              const x = rawX * sx;
+              const y = rawY * sy;
+              if (idx === 0) context.moveTo(x, y);
+              else context.lineTo(x, y);
             });
-            // Close the path if needed
             context.closePath();
             context.fillStyle = contour_color;
             context.fill();
           });
         }
-
       };
+    }, [
+      imageURL,
+      trackingData,
+      contoursData,
+      poseData,
+      number_of_animals,
+      displayWidth,
+      displayHeight,
+      sx,
+      sy,
+      frameNumber,
+      ref,
+    ]);
+
+    function downloadCSV() {
+      let csvContent =
+        'Pair,Frame1,Fragment1,Identity1,X1_native,Y1_native,Frame2,Fragment2,Identity2,X2_native,Y2_native\n';
+
+      clickPairs.forEach((pair) => {
+        const a = pair[0];
+        const b = pair[1];
+        csvContent +=
+          `${a.index},${a.frameNumber},${a.fragment},${a.identity},${a.x_native ?? ''},${a.y_native ?? ''},` +
+          `${b ? b.frameNumber : ''},${b ? b.fragment : ''},${b ? b.identity : ''},${b ? (b.x_native ?? '') : ''},${b ? (b.y_native ?? '') : ''}\n`;
+      });
+
+      const blob = new Blob([csvContent], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'click-pairs.csv';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
     }
-  }, [imageURL, trackingData, frameNumber, ref]);
 
-
-
-  function downloadCSV() {
-    let csvContent = 'Pair,Frame1,Fragment1,Identity1,Frame2,Fragment2,Identity2\n';
-    
-    clickPairs.forEach((pair, index) => {
-      csvContent += `${pair[0].index},${pair[0].frameNumber},${pair[0].fragment},${pair[0].identity},${pair[1] ? pair[1].frameNumber : ''},${pair[1] ? pair[1].fragment : ''},${pair[1] ? pair[1].identity : ''}\n`;
-    });
-  
-    const blob = new Blob([csvContent], {type: 'text/csv'});
-    const url = URL.createObjectURL(blob);
-    
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = 'click-pairs.csv';
-    
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  }
-  
-
-
-  return (
-    <div onClick={handleClick}>
-      <canvas ref={canvasRef} />
-      <img ref={imgRef} style={{ display: 'none', width: 1000 }} alt="" />
-      <button onClick={forgetLastClick}>Cancel</button>
-      <ScrollNumberInput value={frameNumber} setValue={setFrameNumber} videoFrameRate={videoFrameRate} id="frame_number" labelText="" focusElementRef={canvasRef}/>
-      <table>
-        <thead>
-          <tr>
-            <th>Pair</th>
-            <th>Frame1</th>
-            <th>Fragment1</th>
-            <th>Identity1</th>
-            <th>Frame2</th>
-            <th>Fragment2</th>
-            <th>Identity2</th>
-            <th>Delete</th>
-          </tr>
-        </thead>
-        <tbody>
-          {clickPairs.map((pair, index) => (
-            <tr key={index}>
-              <td>{pair[0] ? pair[0].index : ''}</td>
-              <td>{pair[0] ? pair[0].frameNumber : ''}</td>
-              <td>{pair[0] ? pair[0].fragment : ''}</td>
-              <td>{pair[0] ? pair[0].identity: ''}</td>
-              <td>{pair[1] ? pair[1].frameNumber : ''}</td>
-              <td>{pair[1] ? pair[1].fragment : ''}</td>
-              <td>{pair[1] ? pair[1].identity : ''}</td>
-              <td><button onClick={forgetClickFactory(pair[0] ? pair[0].index : -1)}>Delete</button></td>
+    return (
+      <div onClick={handleClick}>
+        <canvas
+          ref={canvasRef}
+          style={{ width: displayWidth, height: displayHeight, display: 'block' }}
+        />
+        <img ref={imgRef} style={{ display: 'none' }} alt="" />
+        <button onClick={forgetLastClick}>Cancel</button>
+        <ScrollNumberInput
+          value={frameNumber}
+          setValue={setFrameNumber}
+          videoFrameRate={videoFrameRate}
+          id="frame_number"
+          labelText=""
+          focusElementRef={canvasRef}
+        />
+        <table>
+          <thead>
+            <tr>
+              <th>Pair</th>
+              <th>Frame1</th>
+              <th>Fragment1</th>
+              <th>Identity1</th>
+              <th>Frame2</th>
+              <th>Fragment2</th>
+              <th>Identity2</th>
+              <th>Delete</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
-      <button onClick={downloadCSV}>Download CSV</button>
-
-    </div>
-  );
-});
+          </thead>
+          <tbody>
+            {clickPairs.map((pair, index) => (
+              <tr key={index}>
+                <td>{pair[0] ? pair[0].index : ''}</td>
+                <td>{pair[0] ? pair[0].frameNumber : ''}</td>
+                <td>{pair[0] ? pair[0].fragment : ''}</td>
+                <td>{pair[0] ? pair[0].identity : ''}</td>
+                <td>{pair[1] ? pair[1].frameNumber : ''}</td>
+                <td>{pair[1] ? pair[1].fragment : ''}</td>
+                <td>{pair[1] ? pair[1].identity : ''}</td>
+                <td>
+                  <button onClick={forgetClickFactory(pair[0] ? pair[0].index : -1)}>Delete</button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <button onClick={downloadCSV}>Download CSV</button>
+      </div>
+    );
+  },
+);
 
 export default FrameWithSquare;
