@@ -190,7 +190,7 @@ function App() {
             <p>Remember to make sure the BACKEND_SERVER constant reflects the current ip address of the server</p>
 
             <div className="dashboard-container">
-              <div style={{ width: DISPLAY_SIZE, margin: '0 auto' }}>
+              <div style={{ width: DISPLAY_SIZE }}>
 
                 {/* Table above the frame, matched to frame width */}
                 <div
@@ -235,19 +235,32 @@ function App() {
                   setFrameNumber={setFrameNumber}
                   sliderWidth={sliderWidth}
                 />
-              </div>
 
-              <div className="button-group">
-                <Buttons
-                  frameNumber={frameNumber}
-                  setFrameNumber={setFrameNumber}
-                  isPlaying={isPlaying}
-                  setIsPlaying={setIsPlaying}
-                  requestQueue={requestQueue}
-                  recordingFramerate={recordingFramerate}
-                />
+                {/* Buttons now sit inside the same width-locked column */}
+                <div
+                  className="button-group"
+                  style={{
+                    width: '100%',
+                    marginTop: 8,
+                    display: 'flex',
+                    flexWrap: 'wrap',
+                    justifyContent: 'center',
+                    gap: 6,
+                  }}
+                >
+                  <Buttons
+                    frameNumber={frameNumber}
+                    setFrameNumber={setFrameNumber}
+                    isPlaying={isPlaying}
+                    setIsPlaying={setIsPlaying}
+                    requestQueue={requestQueue}
+                    recordingFramerate={recordingFramerate}
+                  />
+                </div>
+
               </div>
             </div>
+
 
           </div>
         )}

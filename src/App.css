@@ -38,10 +38,10 @@
 }
 
 
-
 .dashboard-container {
   display: flex;
-  justify-content: space-between;
+  flex-direction: column;
+  align-items: center;
   margin-bottom: 20px;
 }
 
