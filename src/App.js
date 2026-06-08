@@ -8,7 +8,7 @@ import InteractiveText from './interactiveText';
 import { RequestQueue } from './queue';
 import { BlobsTable, VerticalBlobsTable } from './blobs_table';
 import SelectComponent from './selectComponent';
-import { FIRST_FRAME, BACKEND_SERVER, PLACEHOLDER_IMAGE, BACKEND_PORT, DISPLAY_SIZE } from './constants';
+import { FIRST_FRAME, BACKEND_SERVER, PLACEHOLDER_IMAGE, BACKEND_PORT } from './constants';
 import { BrowserRouter as Router, Route, Routes } from 'react-router-dom';
 
 const MAX_SIMULTANEOUS_REQUESTS = 1;
@@ -27,13 +27,18 @@ function queuedAxiosGet(url) {
   return requestQueue.add(request);
 }
 
+// Frame size: leaves ~120px for header/tabs, capped to 58% of viewport width.
+const FRAME_SIZE = Math.min(
+  Math.floor(window.innerHeight * 0.82),
+  Math.floor(window.innerWidth * 0.58),
+);
+
 function App() {
   const [frame, setFrame] = useState(PLACEHOLDER_IMAGE);
   const [frameNumber, setFrameNumber] = useState(FIRST_FRAME);
   const [trackingData, setTrackingData] = useState([]);
   const [trackingPoseData, setTrackingPoseData] = useState([]);
   const [contoursData, setContoursData] = useState([]);
-  const [sliderWidth, setSliderWidth] = useState(DISPLAY_SIZE);
   const [isPlaying, setIsPlaying] = useState(false);
   const [videoFrameRate, setVideoFrameRate] = useState(1);
   const [recordingFramerate, setRecordingFramerate] = useState(null);
@@ -78,7 +83,6 @@ function App() {
   const updateFrame = (blobData) => {
     const url = URL.createObjectURL(blobData);
     setFrame(url);
-    setSliderWidth(DISPLAY_SIZE);
     if (!nativeSize) {
       probeImageSize(url)
         .then((dims) => setNativeSize(dims))
@@ -143,19 +147,46 @@ function App() {
   }, [isPlaying, videoFrameRate]);
 
   return (
-    <div className="App">
-      <h1>FlyHostel Viewer</h1>
-      <h3>Developed at Liu Lab @ VIB-KU Leuven Center for Brain & Disease Research</h3>
+    <div style={{ fontFamily: 'Arial, sans-serif' }}>
+      {/* ── Header ── */}
+      <div style={{ padding: '4px 12px 0' }}>
+        <h1 style={{ margin: 0, fontSize: '1.3em' }}>FlyHostel Viewer</h1>
+        <h3 style={{ margin: 0, fontSize: '0.8em', fontWeight: 'normal', color: '#555' }}>
+          Developed at Liu Lab @ VIB-KU Leuven Center for Brain &amp; Disease Research
+        </h3>
+      </div>
 
-      <div className="tabs">
+      {/* ── Tabs ── */}
+      <div style={{ padding: '2px 12px 4px' }}>
         <Tab id="idtrackerai_viewer" activeTab={activeTab} setActiveTab={setActiveTab}>
           Idtrackerai viewer
         </Tab>
       </div>
 
-      <div className="tab-content">
-        {activeTab === 'idtrackerai_viewer' && (
-          <div>
+      {/* ── Two-column body ── */}
+      {activeTab === 'idtrackerai_viewer' && (
+        <div style={{ display: 'flex', flexDirection: 'row', gap: 12, padding: '0 12px 8px', alignItems: 'flex-start' }}>
+
+          {/* Left: frame canvas */}
+          <div style={{ flexShrink: 0 }}>
+            <FrameWithSquare
+              imageURL={frame}
+              videoFrameRate={videoFrameRate}
+              trackingData={trackingData}
+              contoursData={contoursData}
+              frameNumber={frameNumber}
+              setFrameNumber={setFrameNumber}
+              number_of_animals={number_of_animals}
+              poseData={trackingPoseData}
+              ref={FrameWithSquareRef}
+              displayWidth={FRAME_SIZE}
+              displayHeight={FRAME_SIZE}
+              nativeSize={nativeSize}
+            />
+          </div>
+
+          {/* Right: controls */}
+          <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
 
             <SelectComponent
               onExperimentChange={(firstFrame) => {
@@ -166,82 +197,38 @@ function App() {
               }}
             />
 
-            <div className="dashboard-container">
-              <div style={{ width: DISPLAY_SIZE }}>
-
-                {/* Table above the frame, matched to frame width */}
-                <div
-                  style={{
-                    width: '100%',
-                    maxHeight: 220,
-                    overflowY: 'auto',
-                    marginBottom: 8,
-                    border: '1px solid #ccc',
-                    boxSizing: 'border-box',
-                  }}
-                >
-                  <BlobsTable Data={trackingData} />
-                </div>
-
-                {/* Frame + its controls */}
-                <FrameWithSquare
-                  imageURL={frame}
-                  videoFrameRate={videoFrameRate}
-                  trackingData={trackingData}
-                  contoursData={contoursData}
-                  frameNumber={frameNumber}
-                  setFrameNumber={setFrameNumber}
-                  number_of_animals={number_of_animals}
-                  poseData={trackingPoseData}
-                  ref={FrameWithSquareRef}
-                  displayWidth={DISPLAY_SIZE}
-                  displayHeight={DISPLAY_SIZE}
-                  nativeSize={nativeSize}
-                />
-
-                <InteractiveText
-                  value={videoFrameRate}
-                  setValue={setVideoFrameRate}
-                  id="playback_framerate"
-                  labelText="Playback Framerate  "
-                />
-                <Slider
-                  isPlaying={isPlaying}
-                  recordingFramerate={recordingFramerate}
-                  frameNumber={frameNumber}
-                  setFrameNumber={setFrameNumber}
-                  sliderWidth={sliderWidth}
-                />
-
-                {/* Buttons now sit inside the same width-locked column */}
-                <div
-                  className="button-group"
-                  style={{
-                    width: '100%',
-                    marginTop: 8,
-                    display: 'flex',
-                    flexWrap: 'wrap',
-                    justifyContent: 'center',
-                    gap: 6,
-                  }}
-                >
-                  <Buttons
-                    frameNumber={frameNumber}
-                    setFrameNumber={setFrameNumber}
-                    isPlaying={isPlaying}
-                    setIsPlaying={setIsPlaying}
-                    requestQueue={requestQueue}
-                    recordingFramerate={recordingFramerate}
-                  />
-                </div>
-
-              </div>
+            <div style={{ maxHeight: 220, overflowY: 'auto', border: '1px solid #ccc', boxSizing: 'border-box' }}>
+              <BlobsTable Data={trackingData} />
             </div>
 
+            <InteractiveText
+              value={videoFrameRate}
+              setValue={setVideoFrameRate}
+              id="playback_framerate"
+              labelText="Playback Framerate"
+            />
+
+            <Slider
+              isPlaying={isPlaying}
+              recordingFramerate={recordingFramerate}
+              frameNumber={frameNumber}
+              setFrameNumber={setFrameNumber}
+            />
+
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, justifyContent: 'center' }}>
+              <Buttons
+                frameNumber={frameNumber}
+                setFrameNumber={setFrameNumber}
+                isPlaying={isPlaying}
+                setIsPlaying={setIsPlaying}
+                requestQueue={requestQueue}
+                recordingFramerate={recordingFramerate}
+              />
+            </div>
 
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -1,67 +1,78 @@
+/* ── Root: full-viewport column ── */
 .App {
-  text-align: center;
-}
-
-.App-logo {
-  height: 40vmin;
-  pointer-events: none;
-}
-
-@media (prefers-reduced-motion: no-preference) {
-  .App-logo {
-    animation: App-logo-spin infinite 20s linear;
-  }
-}
-
-.App-header {
-  background-color: #282c34;
-  min-height: 100vh;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  font-size: calc(10px + 2vmin);
-  color: white;
+  height: 100dvh;
+  overflow: hidden;
+  font-family: Arial, sans-serif;
 }
 
-.App-link {
-  color: #61dafb;
+.app-header {
+  flex-shrink: 0;
+  padding: 4px 12px 2px;
+}
+.app-header h1 { margin: 0; font-size: 1.3em; }
+.app-header h3 { margin: 0; font-size: 0.8em; font-weight: normal; color: #555; }
+
+.tabs {
+  flex-shrink: 0;
+  padding: 2px 12px 0;
 }
 
-@keyframes App-logo-spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
+.tab-content {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
 }
 
+/* ── Two-column main layout ── */
+.main-layout {
+  display: flex;
+  flex-direction: row;
+  height: 100%;
+  gap: 12px;
+  padding: 8px 12px;
+  box-sizing: border-box;
+  align-items: flex-start;
+}
 
-.dashboard-container {
+.left-panel {
+  flex-shrink: 0;
+}
+
+.right-panel {
+  flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  margin-bottom: 20px;
+  gap: 8px;
+  overflow-y: auto;
+  height: 100%;
 }
 
-.frame-container {
-  width: 50%;
+/* ── Table inside right panel ── */
+.table-wrapper {
+  max-height: 220px;
+  overflow-y: auto;
+  border: 1px solid #ccc;
+  box-sizing: border-box;
+  flex-shrink: 0;
 }
 
-.table-container {
-  width: 50%;
-}
-
-.button-group {
-  display: flex;
-  justify-content: space-around;
-}
-
+/* ── Buttons ── */
 .button-group {
   display: flex;
   flex-direction: row;
-  align-items: center; /* optional: vertically center the buttons */
-  justify-content: center; /* or space-around, space-between, etc. */
-  gap: 10px; /* optional: adds spacing between buttons */
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+/* ── Slider fills its container ── */
+.slider-row {
+  width: 100%;
+}
+.slider-row input[type="range"] {
+  width: 100%;
 }

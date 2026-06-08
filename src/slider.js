@@ -3,7 +3,7 @@ import _ from 'lodash';
 import { CHUNK_SECONDS } from './constants.js'
 
 
-const Slider = ({ isPlaying, recordingFramerate, frameNumber, setFrameNumber, sliderWidth }) => {
+const Slider = ({ isPlaying, recordingFramerate, frameNumber, setFrameNumber }) => {
     const isDragging = useRef(false);
 
     const debouncedSetFrameNumber = useCallback(
@@ -21,7 +21,7 @@ const Slider = ({ isPlaying, recordingFramerate, frameNumber, setFrameNumber, sl
 
     return (
         <input
-            style={{ width: sliderWidth }}
+            style={{ width: '100%' }}
             type="range"
             min={min_fn.toString()}
             max={max_fn.toString()}
