@@ -27,10 +27,11 @@ function queuedAxiosGet(url) {
   return requestQueue.add(request);
 }
 
-// Frame size: leaves ~120px for header/tabs, capped to 58% of viewport width.
+// 120px budget for header + tabs + padding; cap width to 46% so the right
+// panel always has at least half the viewport for controls.
 const FRAME_SIZE = Math.min(
-  Math.floor(window.innerHeight * 0.82),
-  Math.floor(window.innerWidth * 0.58),
+  window.innerHeight - 120,
+  Math.floor(window.innerWidth * 0.46),
 );
 
 function App() {
