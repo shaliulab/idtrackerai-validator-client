@@ -7,6 +7,7 @@ import Tab from './Tab';
 import InteractiveText from './interactiveText';
 import { RequestQueue } from './queue';
 import { BlobsTable, VerticalBlobsTable } from './blobs_table';
+import SelectComponent from './selectComponent';
 import { FIRST_FRAME, BACKEND_SERVER, PLACEHOLDER_IMAGE, BACKEND_PORT, DISPLAY_SIZE } from './constants';
 import { BrowserRouter as Router, Route, Routes } from 'react-router-dom';
 
@@ -188,6 +189,13 @@ function App() {
             <p>So far, only the first goal is achieved</p>
 
             <p>Remember to make sure the BACKEND_SERVER constant reflects the current ip address of the server</p>
+
+            <SelectComponent
+              onExperimentChange={(firstFrame) => {
+                requestQueue.cancelAll();
+                setFrameNumber(firstFrame);
+              }}
+            />
 
             <div className="dashboard-container">
               <div style={{ width: DISPLAY_SIZE }}>

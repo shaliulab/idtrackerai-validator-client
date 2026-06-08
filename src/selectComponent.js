@@ -1,65 +1,99 @@
 import React, { useEffect, useState } from "react";
 import Select from 'react-select';
 import axios from 'axios';
-import { BACKEND_SERVER } from './constants'
-import { BACKEND_PORT } from './constants'
+import { BACKEND_SERVER, BACKEND_PORT, FIRST_FRAME } from './constants';
 
 
-const SelectComponent = () => {
-  const defaultOption = { value: "FlyHostel3/8X/2024-01-17_13-00-00", label: "Select or type an experiment..." };
+async function postLoad(experiment) {
+  const response = await axios.post(
+    `http://${BACKEND_SERVER}:${BACKEND_PORT}/api/load`,
+    { experiment }
+  );
+  return response.data;
+}
+
+
+const SelectComponent = ({ onExperimentChange }) => {
+  const defaultOption = { value: "", label: "Browse available experiments..." };
   const [options, setOptions] = useState([defaultOption]);
   const [isLoading, setIsLoading] = useState(true);
-
-  const fetchData = async () => {
-    setIsLoading(true);
-    const response = await axios.get(`http://${BACKEND_SERVER}:${BACKEND_PORT}/api/list`);
-    const data = response.data["experiments"];
-
-    if (data != null) {
-      // Map data to match react-select's expected shape
-      const formattedData = data.map((item) => ({ value: item, label: item }));
-      setOptions([defaultOption, ...formattedData]);
-    }
-    setIsLoading(false);
-  };
+  const [isSwitching, setIsSwitching] = useState(false);
+  const [error, setError] = useState(null);
+  const [inputValue, setInputValue] = useState("");
 
   useEffect(() => {
-    fetchData();
+    axios.get(`http://${BACKEND_SERVER}:${BACKEND_PORT}/api/list`)
+      .then(response => {
+        const data = response.data["experiments"];
+        if (Array.isArray(data)) {
+          setOptions([defaultOption, ...data.map(item => ({ value: item, label: item }))]);
+        }
+      })
+      .catch(err => console.error("Error fetching experiments:", err))
+      .finally(() => setIsLoading(false));
   }, []);
-//   fetchData()
 
-  const handleSelectChange = async (selectedOption) => {
-    console.log(`Option selected:`, selectedOption["value"]);
-    let config={}
+  const handleLoad = async (experiment) => {
+    const trimmed = experiment.trim();
+    if (!trimmed) return;
+    setIsSwitching(true);
+    setError(null);
+    try {
+      const data = await postLoad(trimmed);
+      const firstFrame = data.first_frame ?? FIRST_FRAME;
+      if (onExperimentChange) onExperimentChange(firstFrame);
+    } catch (err) {
+      const msg = err.response?.data?.error ?? err.message;
+      setError(`Failed to switch: ${msg}`);
+    } finally {
+      setIsSwitching(false);
+    }
+  };
 
-    await axios.post(`http://${BACKEND_SERVER}:${BACKEND_PORT}/api/load`, {"experiment": selectedOption["value"]}, config)
-    .then(response => {
-    if (response.status === 0) {
-    } else if (response.status === 200) {
-    } else {
-    // Handle non-OK status codes
-    console.log("Error:", response.status);
-    }})
-    .catch(error => {
-        // Handle request error
-        console.error("Request error:", error);
-    });
+  const handleDropdownChange = (selectedOption) => {
+    if (!selectedOption?.value) return;
+    setInputValue(selectedOption.value);
+    handleLoad(selectedOption.value);
+  };
+
+  const handleKeyDown = (e) => {
+    if (e.key === "Enter") handleLoad(inputValue);
   };
 
   return (
-    <div>
+    <div style={{ marginBottom: 16 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+        <input
+          type="text"
+          value={inputValue}
+          onChange={e => setInputValue(e.target.value)}
+          onKeyDown={handleKeyDown}
+          placeholder="e.g. FlyHostel4/6X/2023-08-31_13-00-00"
+          disabled={isSwitching}
+          style={{ flex: 1, padding: "6px 10px", fontSize: 14, borderRadius: 4, border: "1px solid #ccc" }}
+        />
+        <button
+          onClick={() => handleLoad(inputValue)}
+          disabled={isSwitching || !inputValue.trim()}
+          style={{ padding: "6px 16px", fontSize: 14, borderRadius: 4, cursor: "pointer" }}
+        >
+          {isSwitching ? "Loading…" : "Select"}
+        </button>
+      </div>
+
       {isLoading ? (
-        <p>Loading options...</p>
+        <p style={{ margin: 0, color: "#888", fontSize: 13 }}>Loading experiment list…</p>
       ) : (
-        <>
-          <Select 
-            options={options}
-            onChange={handleSelectChange}
-            defaultValue={options[0]}
-          />
-          <p>Experiment selection does not take effect until you select a new frame. Please move the slider or change the frame in the text box</p>
-        </>
+        <Select
+          options={options}
+          onChange={handleDropdownChange}
+          defaultValue={defaultOption}
+          isDisabled={isSwitching}
+          placeholder="Browse available experiments..."
+        />
       )}
+
+      {error && <p style={{ color: "red", marginTop: 4, fontSize: 13 }}>{error}</p>}
     </div>
   );
 };
