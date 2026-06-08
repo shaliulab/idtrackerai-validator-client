@@ -161,6 +161,7 @@ function App() {
               onExperimentChange={(firstFrame) => {
                 requestQueue.cancelAll();
                 fetchFramerate();
+                setNativeSize(null);
                 setFrameNumber(firstFrame);
               }}
             />
