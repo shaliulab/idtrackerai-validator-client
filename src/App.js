@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import FrameWithSquare from './FrameWithSquare';
 import Buttons from './buttons';
@@ -46,33 +46,25 @@ function App() {
   const [number_of_animals, setNumberOfAnimals] = useState(6);
   const [activeTab, setActiveTab] = useState('idtrackerai_viewer');
 
-  // Fetch recording framerate from backend.
-  useEffect(() => {
-    let isMounted = true;
-
-    const fetchFramerate = async () => {
-      try {
-        const url = `http://${BACKEND_SERVER}:${BACKEND_PORT}/api/framerate`;
-        const response = await axios.get(url);
-        const raw =
-          response.data?.framerate ??
-          response.data?.RECORDING_FRAMERATE ??
-          response.data;
-        const numeric = Number(raw);
-        if (isMounted && Number.isFinite(numeric) && numeric > 0) {
-          setRecordingFramerate(numeric);
-          setVideoFrameRate(numeric);
-        } else {
-          console.warn('Invalid framerate from backend:', response.data);
-        }
-      } catch (error) {
-        console.error('Error fetching recording framerate:', error);
+  const fetchFramerate = useCallback(async () => {
+    try {
+      const url = `http://${BACKEND_SERVER}:${BACKEND_PORT}/api/framerate`;
+      const response = await axios.get(url);
+      const raw =
+        response.data?.framerate ??
+        response.data?.RECORDING_FRAMERATE ??
+        response.data;
+      const numeric = Number(raw);
+      if (Number.isFinite(numeric) && numeric > 0) {
+        setRecordingFramerate(numeric);
+        setVideoFrameRate(numeric);
       }
-    };
-
-    fetchFramerate();
-    return () => { isMounted = false; };
+    } catch (error) {
+      console.error('Error fetching recording framerate:', error);
+    }
   }, []);
+
+  useEffect(() => { fetchFramerate(); }, []);
 
   // Probe the first decoded frame to learn the native image size.
   const probeImageSize = (blobUrl) =>
@@ -193,6 +185,7 @@ function App() {
             <SelectComponent
               onExperimentChange={(firstFrame) => {
                 requestQueue.cancelAll();
+                fetchFramerate();
                 setFrameNumber(firstFrame);
               }}
             />

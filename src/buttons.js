@@ -1,5 +1,5 @@
 // Buttons.jsx
-import React, { useEffect, useState } from 'react';
+import React, { useEffect } from 'react';
 import {
   get_prev_chunk,
   get_next_chunk,
@@ -28,26 +28,8 @@ import {
   TogglePlayButton 
 } from './icons';
 
-const Buttons = ({ frameNumber, setFrameNumber, isPlaying, setIsPlaying, requestQueue }) => {
-  const [frameRate, setFrameRate] = useState(null);
-
-  // Fetch framerate for the currently selected dataset
-  useEffect(() => {
-    axios
-      .get(`http://${BACKEND_SERVER}:${BACKEND_PORT}/api/framerate`)
-      .then((response) => {
-        // Adjust the property name depending on what your backend returns:
-        // e.g. { "framerate": 150 } or { "RECORDING_FRAMERATE": 150 }
-        const value =
-          response.data.framerate ??
-          response.data.RECORDING_FRAMERATE ??
-          response.data;
-        setFrameRate(Number(value));
-      })
-      .catch((err) => {
-        console.error('Error fetching framerate:', err);
-      });
-  }, []);
+const Buttons = ({ frameNumber, setFrameNumber, isPlaying, setIsPlaying, requestQueue, recordingFramerate }) => {
+  const frameRate = recordingFramerate;
 
   const play = () => {
     setFrameNumber(frameNumber);
