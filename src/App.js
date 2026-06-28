@@ -153,7 +153,7 @@ function App() {
       <div style={{ padding: '4px 12px 0' }}>
         <h1 style={{ margin: 0, fontSize: '1.3em' }}>FlyHostel Viewer</h1>
         <h3 style={{ margin: 0, fontSize: '0.8em', fontWeight: 'normal', color: '#555' }}>
-          Developed at Liu Lab @ VIB-KU Leuven Center for Brain &amp; Disease Research
+          Developed at Liu Lab @ VIB-KU Leuven Center for Neuroscience
         </h3>
       </div>
 
