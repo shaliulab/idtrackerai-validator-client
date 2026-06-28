@@ -199,7 +199,8 @@ function App() {
             />
 
             <div style={{ maxHeight: 220, overflowY: 'auto', border: '1px solid #ccc', boxSizing: 'border-box' }}>
-              <BlobsTable Data={trackingData} />
+              <BlobsTable Data={trackingData} setFrameNumber={setFrameNumber} />
+
             </div>
 
             <InteractiveText
