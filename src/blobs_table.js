@@ -2,18 +2,38 @@ import { useState } from 'react';
 import './TableStyles.css';
 
 const BlobsTable = ({ Data, setFrameNumber }) => {
-  // Local edit buffer so typing isn't clobbered by trackingData updates
-  // (which arrive on every frame fetch). `editingRow` is the row index
-  // currently being edited; null when nothing is focused.
+  // ↓ All hooks and helpers go INSIDE this function
   const [draft, setDraft] = useState('');
   const [editingRow, setEditingRow] = useState(null);
 
+  const [chunkDraft, setChunkDraft] = useState('');
+  const [editingChunkRow, setEditingChunkRow] = useState(null);
+
   const commit = (val) => {
     const n = parseInt(val, 10);
-    if (Number.isFinite(n) && n >= 0 && setFrameNumber) {
-      setFrameNumber(n);
-    }
+    if (Number.isFinite(n) && n >= 0 && setFrameNumber) setFrameNumber(n);
     setEditingRow(null);
+  };
+
+  const commitChunk = (val, chunksize) => {
+    const chunk = parseInt(val, 10);
+    const cs = Number(chunksize);  // coerce string -> number
+    if (Number.isFinite(chunk) && chunk >= 0 && Number.isFinite(cs) && cs > 0 && setFrameNumber) {
+      setFrameNumber(chunk * cs);
+    }
+    setEditingChunkRow(null);
+  };
+
+  const cellInputStyle = {
+    width: '100%',
+    background: 'transparent',
+    border: 'none',
+    textAlign: 'center',
+    font: 'inherit',
+    color: 'inherit',
+    outline: 'none',
+    padding: 0,
+    MozAppearance: 'textfield',
   };
 
   return (
@@ -48,28 +68,35 @@ const BlobsTable = ({ Data, setFrameNumber }) => {
                 onChange={(e) => setDraft(e.target.value)}
                 onBlur={() => commit(draft)}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    e.target.blur(); // triggers onBlur -> commit
-                  } else if (e.key === 'Escape') {
-                    setEditingRow(null);
-                  }
+                  if (e.key === 'Enter') e.target.blur();
+                  else if (e.key === 'Escape') setEditingRow(null);
                 }}
-                style={{
-                  width: '100%',
-                  background: 'transparent',
-                  border: 'none',
-                  textAlign: 'center',
-                  font: 'inherit',
-                  color: 'inherit',
-                  outline: 'none',
-                  padding: 0,
-                  // hide the spinner arrows for cleaner look — remove if you want them
-                  MozAppearance: 'textfield',
-                }}
-                onWheel={(e) => e.target.blur()} // prevent accidental scroll-to-change
+                style={cellInputStyle}
+                onWheel={(e) => e.target.blur()}
               />
             </td>
-            <td>{Math.floor(row.frame_number / row.chunksize)}</td>
+            <td>
+              <input
+                type="number"
+                value={
+                  editingChunkRow === index
+                    ? chunkDraft
+                    : Math.floor(row.frame_number / row.chunksize)
+                }
+                onFocus={() => {
+                  setEditingChunkRow(index);
+                  setChunkDraft(String(Math.floor(row.frame_number / row.chunksize)));
+                }}
+                onChange={(e) => setChunkDraft(e.target.value)}
+                onBlur={() => commitChunk(chunkDraft, row.chunksize)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') e.target.blur();
+                  else if (e.key === 'Escape') setEditingChunkRow(null);
+                }}
+                style={cellInputStyle}
+                onWheel={(e) => e.target.blur()}
+              />
+            </td>
             <td>{row.frame_number % row.chunksize}</td>
             <td>{row.x}</td>
             <td>{row.y}</td>
@@ -88,7 +115,6 @@ const BlobsTable = ({ Data, setFrameNumber }) => {
 };
 
 const VerticalBlobsTable = ({ Data }) => {
-  // unchanged
   const headers = [
     "Frame Number", "Chunk", "Frame idx", "X", "Y", "Identity",
     "Local Identity", "In frame index", "Fragment", "Area", "YOLOv7", "ZT"
