@@ -128,10 +128,10 @@ function App() {
 
       updateFrame(frameResponse.data);
 
-      setTrackingData(validateData(trackingResponse.data['tracking_data']));
-      setTrackingPoseData(validatePoseData(trackingResponse.data['pose']));
-      setNumberOfAnimals(trackingResponse.data['number_of_animals']);
-      setContoursData(preprocessResponse.data['contours']);
+      setTrackingData(validateData(trackingResponse.data.tracking_data || []));
+      setTrackingPoseData(validatePoseData(trackingResponse.data.pose || {}));
+      setNumberOfAnimals(trackingResponse.data.number_of_animals || 0);
+      setContoursData(preprocessResponse.data.contours || []);
     } catch (error) {
       console.error('Error fetching data: ', error);
     }

@@ -21,6 +21,7 @@ const SKELETON = [
   ["thorax", "rRL"],
   ["thorax", "lW"],
   ["thorax", "rW"],
+  ["head", "proboscis"],
 ];
 
 // --- MAGNIFIER CONFIG ---
