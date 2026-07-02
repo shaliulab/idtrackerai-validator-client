@@ -15,4 +15,4 @@ export const LABEL_FIELD = "identity";
 export const PRINT_CONTOUR = false;
 
 // Target display size on the client.
-export const DISPLAY_SIZE = 1000;
+export const DISPLAY_SIZE = 2000;
