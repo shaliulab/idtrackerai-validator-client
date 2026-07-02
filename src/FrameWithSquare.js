@@ -21,15 +21,12 @@ const SKELETON = [
   ["thorax", "rRL"],
   ["thorax", "lW"],
   ["thorax", "rW"],
-  ["head", "proboscis"],
 ];
 
-// --- MAGNIFIER CONFIG ---
-const INSET_NATIVE_SIZE = 200;    // size of region sampled from native image, in native px
-const INSET_DISPLAY_SIZE = 250;   // size of the inset rendered on the canvas, in display px
+const INSET_NATIVE_SIZE = 200;
+const INSET_DISPLAY_SIZE = 250;
 const INSET_BORDER_COLOR = '#ffffff';
 const INSET_BORDER_WIDTH = 2;
-// -------------------------
 
 function generateColorPalette(numColors) {
   const colors = [];
@@ -60,13 +57,34 @@ const FrameWithSquare = React.forwardRef(
     const canvasRef = useRef();
     const imgRef = useRef();
     const [clickPairs, setClickPairs] = useState([]);
-
-    // Magnifier state: cursor position on the canvas, in display coords.
-    // null when the cursor is outside the canvas.
     const [hoverPos, setHoverPos] = useState(null);
 
     const sx = nativeSize ? displayWidth / nativeSize.width : 1;
     const sy = nativeSize ? displayHeight / nativeSize.height : 1;
+
+    // DEBUG: Log when poseData changes
+    useEffect(() => {
+      console.log('=== FrameWithSquare poseData updated ===');
+      console.log('poseData:', poseData);
+      console.log('poseData keys:', Object.keys(poseData || {}));
+      console.log('poseData is empty?', Object.keys(poseData || {}).length === 0);
+      
+      if (Object.keys(poseData || {}).length > 0) {
+        const firstId = Object.keys(poseData)[0];
+        console.log('First identity:', firstId);
+        console.log('Bodyparts for identity 0:', Object.keys(poseData[firstId] || {}));
+        console.log('Sample bodypart (head):', poseData[firstId]?.head);
+      }
+    }, [poseData]);
+
+    // DEBUG: Log when trackingData changes
+    useEffect(() => {
+      console.log('=== FrameWithSquare trackingData updated ===');
+      console.log('trackingData length:', trackingData?.length);
+      if (trackingData && trackingData.length > 0) {
+        console.log('First animal:', trackingData[0]);
+      }
+    }, [trackingData]);
 
     const handleClick = (event) => {
       const rect = event.target.getBoundingClientRect();
@@ -133,7 +151,6 @@ const FrameWithSquare = React.forwardRef(
       setClickPairs(clicks);
     };
 
-    // NEW: mouse handlers for the magnifier
     const handleMouseMove = (event) => {
       const rect = event.currentTarget.getBoundingClientRect();
       setHoverPos({
@@ -143,16 +160,12 @@ const FrameWithSquare = React.forwardRef(
     };
     const handleMouseLeave = () => setHoverPos(null);
 
-    // Wheel-to-scrub: scrolling on the canvas advances/rewinds by videoFrameRate frames.
-    // Must attach as a non-passive native listener so we can preventDefault and
-    // stop the page from scrolling.
     useEffect(() => {
       const canvas = canvasRef.current;
       if (!canvas) return;
 
       const handleWheel = (e) => {
         e.preventDefault();
-        // deltaY > 0 means scroll down / wheel away -> advance frames
         const step = videoFrameRate || 1;
         const direction = e.deltaY > 0 ? 1 : -1;
         setFrameNumber((prev) => Math.max(0, prev + direction * step));
@@ -161,7 +174,6 @@ const FrameWithSquare = React.forwardRef(
       canvas.addEventListener('wheel', handleWheel, { passive: false });
       return () => canvas.removeEventListener('wheel', handleWheel);
     }, [videoFrameRate, setFrameNumber]);
-
 
     useEffect(() => {
       if (!canvasRef.current) return;
@@ -193,26 +205,70 @@ const FrameWithSquare = React.forwardRef(
           writeIdentity(context, animal, color);
         });
 
-        // Pose
-        for (let identity in poseData) {
-          let color = '#000000';
-          for (const [partA, partB] of SKELETON) {
-            if (poseData[identity].length == null) continue;
-            const [x1, y1] = poseData[identity][partA];
-            const [x2, y2] = poseData[identity][partB];
-            if ([x1, y1, x2, y2].includes(null)) continue;
+        // ===== POSE RENDERING =====
+        console.log('=== Drawing pose ===');
+        console.log('poseData is empty?', Object.keys(poseData || {}).length === 0);
+        console.log('poseData keys:', Object.keys(poseData || {}));
+        
+        let skeletonsDrawn = 0;
+        let keypointsDrawn = 0;
 
-            color = colors[parseInt(identity) % number_of_animals];
+        for (let identityKey in poseData) {
+          const animalPose = poseData[identityKey];
+          console.log(`Processing identity ${identityKey}, pose:`, animalPose);
+
+          // Draw skeleton connections
+          for (const [partA, partB] of SKELETON) {
+            if (!(partA in animalPose) || !(partB in animalPose)) {
+              // console.warn(`Bodyparts ${partA} or ${partB} not found for identity ${identityKey}`);
+              continue;
+            }
+
+            const bpA = animalPose[partA];
+            const bpB = animalPose[partB];
+
+            if (!bpA || !bpB || bpA[0] === null || bpA[1] === null || bpB[0] === null || bpB[1] === null) {
+              continue;
+            }
+
+            const [x1, y1] = bpA;
+            const [x2, y2] = bpB;
+
+            console.log(`Drawing skeleton line: ${partA}(${x1},${y1}) -> ${partB}(${x2},${y2})`);
+
+            const color = colors[parseInt(identityKey) % number_of_animals];
             context.beginPath();
             context.moveTo(x1 * sx, y1 * sy);
             context.lineTo(x2 * sx, y2 * sy);
-            context.lineWidth = 1;
-            context.globalAlpha = 0.5;
+            context.lineWidth = 2;
+            context.globalAlpha = 0.7;
             context.strokeStyle = color;
             context.stroke();
             context.closePath();
+            skeletonsDrawn++;
+          }
+
+          // Draw keypoints
+          for (const [bpName, coords] of Object.entries(animalPose)) {
+            if (!coords || coords[0] === null || coords[1] === null) continue;
+
+            const [x, y] = coords;
+            const radius = 4;
+            const color = colors[parseInt(identityKey) % number_of_animals];
+
+            context.beginPath();
+            context.arc(x * sx, y * sy, radius, 0, 2 * Math.PI);
+            context.fillStyle = color;
+            context.globalAlpha = 0.8;
+            context.fill();
+            context.strokeStyle = 'white';
+            context.lineWidth = 1;
+            context.stroke();
+            keypointsDrawn++;
           }
         }
+
+        console.log(`Drew ${skeletonsDrawn} skeleton lines and ${keypointsDrawn} keypoints`);
         context.globalAlpha = 1.0;
 
         // Contours
@@ -235,27 +291,22 @@ const FrameWithSquare = React.forwardRef(
         }
 
         // --- MAGNIFIER OVERLAY ---
-        // Draw last so it sits on top of everything else.
         if (hoverPos && nativeSize && img.naturalWidth > 0) {
-          // Convert cursor position from display -> native coords.
           const nx = hoverPos.x / sx;
           const ny = hoverPos.y / sy;
 
-          // Source rect: 200x200 native px centered on cursor, clamped to image bounds.
           const half = INSET_NATIVE_SIZE / 2;
           let srcX = nx - half;
           let srcY = ny - half;
           srcX = Math.max(0, Math.min(srcX, nativeSize.width - INSET_NATIVE_SIZE));
           srcY = Math.max(0, Math.min(srcY, nativeSize.height - INSET_NATIVE_SIZE));
 
-          // Destination rect: INSET_DISPLAY_SIZE centered on cursor, clamped to canvas bounds.
           const halfDisp = INSET_DISPLAY_SIZE / 2;
           let dstX = hoverPos.x - halfDisp;
           let dstY = hoverPos.y - halfDisp;
           dstX = Math.max(0, Math.min(dstX, displayWidth - INSET_DISPLAY_SIZE));
           dstY = Math.max(0, Math.min(dstY, displayHeight - INSET_DISPLAY_SIZE));
 
-          // Use nearest-neighbor for sharper pixels — comment out for smooth.
           context.imageSmoothingEnabled = false;
           context.drawImage(
             img,
@@ -264,13 +315,10 @@ const FrameWithSquare = React.forwardRef(
           );
           context.imageSmoothingEnabled = true;
 
-          // Border around the inset
           context.strokeStyle = INSET_BORDER_COLOR;
           context.lineWidth = INSET_BORDER_WIDTH;
           context.strokeRect(dstX, dstY, INSET_DISPLAY_SIZE, INSET_DISPLAY_SIZE);
 
-          // Small crosshair at the actual cursor position (useful when inset
-          // is offset due to clamping near edges).
           context.strokeStyle = INSET_BORDER_COLOR;
           context.lineWidth = 1;
           context.beginPath();
@@ -280,7 +328,6 @@ const FrameWithSquare = React.forwardRef(
           context.lineTo(hoverPos.x, hoverPos.y + 6);
           context.stroke();
         }
-        // -------------------------
       };
 
       if (img.src === imageURL && img.complete && img.naturalWidth > 0) {
@@ -300,7 +347,7 @@ const FrameWithSquare = React.forwardRef(
       sx,
       sy,
       frameNumber,
-      hoverPos,        // <-- redraw when cursor moves
+      hoverPos,
       nativeSize,
       ref,
     ]);
