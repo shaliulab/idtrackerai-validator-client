@@ -59,6 +59,7 @@ const FrameWithSquare = React.forwardRef(
     const imgRef = useRef();
     const [clickPairs, setClickPairs] = useState([]);
     const [hoverPos, setHoverPos] = useState(null);
+    const [showPose, setShowPose] = useState(true);
 
     const sx = nativeSize ? displayWidth / nativeSize.width : 1;
     const sy = nativeSize ? displayHeight / nativeSize.height : 1;
@@ -214,74 +215,76 @@ const FrameWithSquare = React.forwardRef(
         });
 
         // ===== POSE RENDERING =====
-        console.log('=== Drawing pose ===');
-        console.log('poseData is empty?', Object.keys(poseData || {}).length === 0);
-        console.log('poseData keys:', Object.keys(poseData || {}));
-        
-        let skeletonsDrawn = 0;
-        let keypointsDrawn = 0;
+        if (showPose) {
+          console.log('=== Drawing pose ===');
+          console.log('poseData is empty?', Object.keys(poseData || {}).length === 0);
+          console.log('poseData keys:', Object.keys(poseData || {}));
+          
+          let skeletonsDrawn = 0;
+          let keypointsDrawn = 0;
 
-        for (let identityKey in poseData) {
-          const animalPose = poseData[identityKey];
-          console.log(`Processing identity ${identityKey}, pose:`, animalPose);
+          for (let identityKey in poseData) {
+            const animalPose = poseData[identityKey];
+            console.log(`Processing identity ${identityKey}, pose:`, animalPose);
 
-          // Draw skeleton connections
-          for (const [partA, partB] of SKELETON) {
-            if (!(partA in animalPose) || !(partB in animalPose)) {
-              console.warn(`Bodyparts ${partA} or ${partB} not found for identity ${identityKey}`);
-              continue;
+            // Draw skeleton connections
+            for (const [partA, partB] of SKELETON) {
+              if (!(partA in animalPose) || !(partB in animalPose)) {
+                console.warn(`Bodyparts ${partA} or ${partB} not found for identity ${identityKey}`);
+                continue;
+              }
+
+              const bpA = animalPose[partA];
+              const bpB = animalPose[partB];
+
+              if (!bpA || !bpB || bpA[0] === null || bpA[1] === null || bpB[0] === null || bpB[1] === null) {
+                continue;
+              }
+
+              const [x1, y1] = bpA;
+              const [x2, y2] = bpB;
+
+              console.log(`Drawing skeleton line: ${partA}(${x1},${y1}) -> ${partB}(${x2},${y2})`);
+
+              const color = colors[parseInt(identityKey) % number_of_animals];
+              context.beginPath();
+              context.moveTo(x1 * sx, y1 * sy);
+              context.lineTo(x2 * sx, y2 * sy);
+              context.lineWidth = 2;
+              context.globalAlpha = 0.7;
+              context.strokeStyle = color;
+              context.stroke();
+              context.closePath();
+              skeletonsDrawn++;
             }
 
-            const bpA = animalPose[partA];
-            const bpB = animalPose[partB];
+            // Draw keypoints
+            for (const [bpName, coords] of Object.entries(animalPose)) {
+              if (!coords || coords[0] === null || coords[1] === null) continue;
 
-            if (!bpA || !bpB || bpA[0] === null || bpA[1] === null || bpB[0] === null || bpB[1] === null) {
-              continue;
+              const [x, y] = coords;
+              const displayX = x * sx;
+              const displayY = y * sy;
+              const radius = 4;
+              const color = colors[parseInt(identityKey) % number_of_animals];
+
+              console.log(`  Keypoint ${bpName}: native(${x}, ${y}) -> display(${displayX}, ${displayY})`);
+
+              context.beginPath();
+              context.arc(displayX, displayY, radius, 0, 2 * Math.PI);
+              context.fillStyle = color;
+              context.globalAlpha = 0.8;
+              context.fill();
+              context.strokeStyle = 'white';
+              context.lineWidth = 1;
+              context.stroke();
+              keypointsDrawn++;
             }
-
-            const [x1, y1] = bpA;
-            const [x2, y2] = bpB;
-
-            console.log(`Drawing skeleton line: ${partA}(${x1},${y1}) -> ${partB}(${x2},${y2})`);
-
-            const color = colors[parseInt(identityKey) % number_of_animals];
-            context.beginPath();
-            context.moveTo(x1 * sx, y1 * sy);
-            context.lineTo(x2 * sx, y2 * sy);
-            context.lineWidth = 2;
-            context.globalAlpha = 0.7;
-            context.strokeStyle = color;
-            context.stroke();
-            context.closePath();
-            skeletonsDrawn++;
           }
 
-          // Draw keypoints
-          for (const [bpName, coords] of Object.entries(animalPose)) {
-            if (!coords || coords[0] === null || coords[1] === null) continue;
-
-            const [x, y] = coords;
-            const displayX = x * sx;
-            const displayY = y * sy;
-            const radius = 4;
-            const color = colors[parseInt(identityKey) % number_of_animals];
-
-            console.log(`  Keypoint ${bpName}: native(${x}, ${y}) -> display(${displayX}, ${displayY})`);
-
-            context.beginPath();
-            context.arc(displayX, displayY, radius, 0, 2 * Math.PI);
-            context.fillStyle = color;
-            context.globalAlpha = 0.8;
-            context.fill();
-            context.strokeStyle = 'white';
-            context.lineWidth = 1;
-            context.stroke();
-            keypointsDrawn++;
-          }
+          console.log(`Drew ${skeletonsDrawn} skeleton lines and ${keypointsDrawn} keypoints`);
+          context.globalAlpha = 1.0;
         }
-
-        console.log(`Drew ${skeletonsDrawn} skeleton lines and ${keypointsDrawn} keypoints`);
-        context.globalAlpha = 1.0;
 
         // Contours
         if (PRINT_CONTOUR) {
@@ -328,77 +331,79 @@ const FrameWithSquare = React.forwardRef(
           context.imageSmoothingEnabled = true;
 
           // ===== DRAW POSE IN MAGNIFIER =====
-          const zoomFactor = INSET_DISPLAY_SIZE / INSET_NATIVE_SIZE;
+          if (showPose) {
+            const zoomFactor = INSET_DISPLAY_SIZE / INSET_NATIVE_SIZE;
 
-          // Draw pose skeleton and keypoints within magnifier bounds
-          for (let identityKey in poseData) {
-            const animalPose = poseData[identityKey];
+            // Draw pose skeleton and keypoints within magnifier bounds
+            for (let identityKey in poseData) {
+              const animalPose = poseData[identityKey];
 
-            // Draw skeleton connections
-            for (const [partA, partB] of SKELETON) {
-              if (!(partA in animalPose) || !(partB in animalPose)) continue;
+              // Draw skeleton connections
+              for (const [partA, partB] of SKELETON) {
+                if (!(partA in animalPose) || !(partB in animalPose)) continue;
 
-              const bpA = animalPose[partA];
-              const bpB = animalPose[partB];
+                const bpA = animalPose[partA];
+                const bpB = animalPose[partB];
 
-              if (!bpA || !bpB || bpA[0] === null || bpA[1] === null || bpB[0] === null || bpB[1] === null) {
-                continue;
+                if (!bpA || !bpB || bpA[0] === null || bpA[1] === null || bpB[0] === null || bpB[1] === null) {
+                  continue;
+                }
+
+                const [x1, y1] = bpA;
+                const [x2, y2] = bpB;
+
+                // Check if keypoints are within magnifier region (native coords)
+                const inMagnifier1 = x1 >= srcX && x1 < srcX + INSET_NATIVE_SIZE && y1 >= srcY && y1 < srcY + INSET_NATIVE_SIZE;
+                const inMagnifier2 = x2 >= srcX && x2 < srcX + INSET_NATIVE_SIZE && y2 >= srcY && y2 < srcY + INSET_NATIVE_SIZE;
+
+                if (!inMagnifier1 || !inMagnifier2) continue;
+
+                // Transform to magnifier display coordinates
+                const dispX1 = dstX + (x1 - srcX) * zoomFactor;
+                const dispY1 = dstY + (y1 - srcY) * zoomFactor;
+                const dispX2 = dstX + (x2 - srcX) * zoomFactor;
+                const dispY2 = dstY + (y2 - srcY) * zoomFactor;
+
+                const color = colors[parseInt(identityKey) % number_of_animals];
+                context.beginPath();
+                context.moveTo(dispX1, dispY1);
+                context.lineTo(dispX2, dispY2);
+                context.lineWidth = 2;
+                context.globalAlpha = 0.7;
+                context.strokeStyle = color;
+                context.stroke();
+                context.closePath();
               }
 
-              const [x1, y1] = bpA;
-              const [x2, y2] = bpB;
+              // Draw keypoints
+              for (const [bpName, coords] of Object.entries(animalPose)) {
+                if (!coords || coords[0] === null || coords[1] === null) continue;
 
-              // Check if keypoints are within magnifier region (native coords)
-              const inMagnifier1 = x1 >= srcX && x1 < srcX + INSET_NATIVE_SIZE && y1 >= srcY && y1 < srcY + INSET_NATIVE_SIZE;
-              const inMagnifier2 = x2 >= srcX && x2 < srcX + INSET_NATIVE_SIZE && y2 >= srcY && y2 < srcY + INSET_NATIVE_SIZE;
+                const [x, y] = coords;
 
-              if (!inMagnifier1 || !inMagnifier2) continue;
+                // Check if keypoint is within magnifier region
+                if (x < srcX || x >= srcX + INSET_NATIVE_SIZE || y < srcY || y >= srcY + INSET_NATIVE_SIZE) {
+                  continue;
+                }
 
-              // Transform to magnifier display coordinates
-              const dispX1 = dstX + (x1 - srcX) * zoomFactor;
-              const dispY1 = dstY + (y1 - srcY) * zoomFactor;
-              const dispX2 = dstX + (x2 - srcX) * zoomFactor;
-              const dispY2 = dstY + (y2 - srcY) * zoomFactor;
+                // Transform to magnifier display coordinates
+                const dispX = dstX + (x - srcX) * zoomFactor;
+                const dispY = dstY + (y - srcY) * zoomFactor;
+                const radius = 3;
+                const color = colors[parseInt(identityKey) % number_of_animals];
 
-              const color = colors[parseInt(identityKey) % number_of_animals];
-              context.beginPath();
-              context.moveTo(dispX1, dispY1);
-              context.lineTo(dispX2, dispY2);
-              context.lineWidth = 2;
-              context.globalAlpha = 0.7;
-              context.strokeStyle = color;
-              context.stroke();
-              context.closePath();
-            }
-
-            // Draw keypoints
-            for (const [bpName, coords] of Object.entries(animalPose)) {
-              if (!coords || coords[0] === null || coords[1] === null) continue;
-
-              const [x, y] = coords;
-
-              // Check if keypoint is within magnifier region
-              if (x < srcX || x >= srcX + INSET_NATIVE_SIZE || y < srcY || y >= srcY + INSET_NATIVE_SIZE) {
-                continue;
+                context.beginPath();
+                context.arc(dispX, dispY, radius, 0, 2 * Math.PI);
+                context.fillStyle = color;
+                context.globalAlpha = 0.8;
+                context.fill();
+                context.strokeStyle = 'white';
+                context.lineWidth = 1;
+                context.stroke();
               }
-
-              // Transform to magnifier display coordinates
-              const dispX = dstX + (x - srcX) * zoomFactor;
-              const dispY = dstY + (y - srcY) * zoomFactor;
-              const radius = 3;
-              const color = colors[parseInt(identityKey) % number_of_animals];
-
-              context.beginPath();
-              context.arc(dispX, dispY, radius, 0, 2 * Math.PI);
-              context.fillStyle = color;
-              context.globalAlpha = 0.8;
-              context.fill();
-              context.strokeStyle = 'white';
-              context.lineWidth = 1;
-              context.stroke();
             }
+            context.globalAlpha = 1.0;
           }
-          context.globalAlpha = 1.0;
 
           // Border and crosshair
           context.strokeStyle = INSET_BORDER_COLOR;
@@ -435,11 +440,31 @@ const FrameWithSquare = React.forwardRef(
       frameNumber,
       hoverPos,
       nativeSize,
+      showPose,
       ref,
     ]);
 
     return (
       <div>
+        <div style={{ 
+          display: 'flex', 
+          gap: '10px', 
+          alignItems: 'center', 
+          marginBottom: '10px',
+          padding: '5px 10px',
+          backgroundColor: '#f0f0f0',
+          borderRadius: '4px'
+        }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer' }}>
+            <input
+              type="checkbox"
+              checked={showPose}
+              onChange={(e) => setShowPose(e.target.checked)}
+              style={{ cursor: 'pointer' }}
+            />
+            <span style={{ fontWeight: 'bold' }}>Show Pose</span>
+          </label>
+        </div>
         <div style={{ width: displayWidth }}>
           <div
             onClick={handleClick}
