@@ -21,7 +21,7 @@ const SKELETON = [
   ["thorax", "rRL"],
   ["thorax", "lW"],
   ["thorax", "rW"],
-  ["proboscis", "head"]
+  // Note: proboscis is drawn as a special triangle, not connected by line
 ];
 
 const INSET_NATIVE_SIZE = 200;
@@ -63,30 +63,6 @@ const FrameWithSquare = React.forwardRef(
 
     const sx = nativeSize ? displayWidth / nativeSize.width : 1;
     const sy = nativeSize ? displayHeight / nativeSize.height : 1;
-
-    // DEBUG: Log when poseData changes
-    useEffect(() => {
-      console.log('=== FrameWithSquare poseData updated ===');
-      console.log('poseData:', poseData);
-      console.log('poseData keys:', Object.keys(poseData || {}));
-      console.log('poseData is empty?', Object.keys(poseData || {}).length === 0);
-      
-      if (Object.keys(poseData || {}).length > 0) {
-        const firstId = Object.keys(poseData)[0];
-        console.log('First identity:', firstId);
-        console.log('Bodyparts for identity 0:', Object.keys(poseData[firstId] || {}));
-        console.log('Sample bodypart (head):', poseData[firstId]?.head);
-      }
-    }, [poseData]);
-
-    // DEBUG: Log when trackingData changes
-    useEffect(() => {
-      console.log('=== FrameWithSquare trackingData updated ===');
-      console.log('trackingData length:', trackingData?.length);
-      if (trackingData && trackingData.length > 0) {
-        console.log('First animal:', trackingData[0]);
-      }
-    }, [trackingData]);
 
     const handleClick = (event) => {
       const rect = event.target.getBoundingClientRect();
@@ -191,12 +167,6 @@ const FrameWithSquare = React.forwardRef(
         context.clearRect(0, 0, displayWidth, displayHeight);
         context.drawImage(img, 0, 0, displayWidth, displayHeight);
 
-        // DEBUG: Log scale factors
-        console.log('=== Canvas Draw Info ===');
-        console.log('displayWidth:', displayWidth, 'displayHeight:', displayHeight);
-        console.log('nativeSize:', nativeSize);
-        console.log('sx:', sx, 'sy:', sy);
-
         // Tracking labels
         trackingData.forEach(function (animal) {
           const writeIdentity = (ctx, a, color) => {
@@ -210,29 +180,18 @@ const FrameWithSquare = React.forwardRef(
           if (animal.identity != null && animal.identity !== 0) {
             color = colors[parseInt(animal.identity) % number_of_animals];
           }
-          console.log(`Animal ${animal.identity} centroid:`, {x: animal.x, y: animal.y, displayX: animal.x * sx, displayY: animal.y * sy});
           writeIdentity(context, animal, color);
         });
 
         // ===== POSE RENDERING =====
         if (showPose) {
-          console.log('=== Drawing pose ===');
-          console.log('poseData is empty?', Object.keys(poseData || {}).length === 0);
-          console.log('poseData keys:', Object.keys(poseData || {}));
-          
-          let skeletonsDrawn = 0;
-          let keypointsDrawn = 0;
-
           for (let identityKey in poseData) {
             const animalPose = poseData[identityKey];
-            console.log(`Processing identity ${identityKey}, pose:`, animalPose);
 
             // Draw skeleton connections
             for (const [partA, partB] of SKELETON) {
-              if (!(partA in animalPose) || !(partB in animalPose)) {
-                console.warn(`Bodyparts ${partA} or ${partB} not found for identity ${identityKey}`);
-                continue;
-              }
+              if (!(partA in animalPose)) continue;
+              if (!(partB in animalPose)) continue;
 
               const bpA = animalPose[partA];
               const bpB = animalPose[partB];
@@ -244,8 +203,6 @@ const FrameWithSquare = React.forwardRef(
               const [x1, y1] = bpA;
               const [x2, y2] = bpB;
 
-              console.log(`Drawing skeleton line: ${partA}(${x1},${y1}) -> ${partB}(${x2},${y2})`);
-
               const color = colors[parseInt(identityKey) % number_of_animals];
               context.beginPath();
               context.moveTo(x1 * sx, y1 * sy);
@@ -255,7 +212,6 @@ const FrameWithSquare = React.forwardRef(
               context.strokeStyle = color;
               context.stroke();
               context.closePath();
-              skeletonsDrawn++;
             }
 
             // Draw keypoints
@@ -265,24 +221,33 @@ const FrameWithSquare = React.forwardRef(
               const [x, y] = coords;
               const displayX = x * sx;
               const displayY = y * sy;
-              const radius = 4;
               const color = colors[parseInt(identityKey) % number_of_animals];
 
-              console.log(`  Keypoint ${bpName}: native(${x}, ${y}) -> display(${displayX}, ${displayY})`);
-
-              context.beginPath();
-              context.arc(displayX, displayY, radius, 0, 2 * Math.PI);
               context.fillStyle = color;
               context.globalAlpha = 0.8;
-              context.fill();
               context.strokeStyle = 'white';
               context.lineWidth = 1;
-              context.stroke();
-              keypointsDrawn++;
+
+              // Special triangle shape for proboscis
+              if (bpName === 'proboscis') {
+                const size = 6;
+                context.beginPath();
+                context.moveTo(displayX, displayY - size); // Top point
+                context.lineTo(displayX - size, displayY + size); // Bottom left
+                context.lineTo(displayX + size, displayY + size); // Bottom right
+                context.closePath();
+                context.fill();
+                context.stroke();
+              } else {
+                // Regular circular keypoints
+                const radius = 4;
+                context.beginPath();
+                context.arc(displayX, displayY, radius, 0, 2 * Math.PI);
+                context.fill();
+                context.stroke();
+              }
             }
           }
-
-          console.log(`Drew ${skeletonsDrawn} skeleton lines and ${keypointsDrawn} keypoints`);
           context.globalAlpha = 1.0;
         }
 
@@ -334,7 +299,6 @@ const FrameWithSquare = React.forwardRef(
           if (showPose) {
             const zoomFactor = INSET_DISPLAY_SIZE / INSET_NATIVE_SIZE;
 
-            // Draw pose skeleton and keypoints within magnifier bounds
             for (let identityKey in poseData) {
               const animalPose = poseData[identityKey];
 
@@ -352,13 +316,11 @@ const FrameWithSquare = React.forwardRef(
                 const [x1, y1] = bpA;
                 const [x2, y2] = bpB;
 
-                // Check if keypoints are within magnifier region (native coords)
                 const inMagnifier1 = x1 >= srcX && x1 < srcX + INSET_NATIVE_SIZE && y1 >= srcY && y1 < srcY + INSET_NATIVE_SIZE;
                 const inMagnifier2 = x2 >= srcX && x2 < srcX + INSET_NATIVE_SIZE && y2 >= srcY && y2 < srcY + INSET_NATIVE_SIZE;
 
                 if (!inMagnifier1 || !inMagnifier2) continue;
 
-                // Transform to magnifier display coordinates
                 const dispX1 = dstX + (x1 - srcX) * zoomFactor;
                 const dispY1 = dstY + (y1 - srcY) * zoomFactor;
                 const dispX2 = dstX + (x2 - srcX) * zoomFactor;
@@ -381,25 +343,36 @@ const FrameWithSquare = React.forwardRef(
 
                 const [x, y] = coords;
 
-                // Check if keypoint is within magnifier region
                 if (x < srcX || x >= srcX + INSET_NATIVE_SIZE || y < srcY || y >= srcY + INSET_NATIVE_SIZE) {
                   continue;
                 }
 
-                // Transform to magnifier display coordinates
                 const dispX = dstX + (x - srcX) * zoomFactor;
                 const dispY = dstY + (y - srcY) * zoomFactor;
-                const radius = 3;
                 const color = colors[parseInt(identityKey) % number_of_animals];
 
-                context.beginPath();
-                context.arc(dispX, dispY, radius, 0, 2 * Math.PI);
                 context.fillStyle = color;
                 context.globalAlpha = 0.8;
-                context.fill();
                 context.strokeStyle = 'white';
                 context.lineWidth = 1;
-                context.stroke();
+
+                // Special triangle for proboscis in magnifier
+                if (bpName === 'proboscis') {
+                  const size = 4;
+                  context.beginPath();
+                  context.moveTo(dispX, dispY - size);
+                  context.lineTo(dispX - size, dispY + size);
+                  context.lineTo(dispX + size, dispY + size);
+                  context.closePath();
+                  context.fill();
+                  context.stroke();
+                } else {
+                  const radius = 2.5;
+                  context.beginPath();
+                  context.arc(dispX, dispY, radius, 0, 2 * Math.PI);
+                  context.fill();
+                  context.stroke();
+                }
               }
             }
             context.globalAlpha = 1.0;
