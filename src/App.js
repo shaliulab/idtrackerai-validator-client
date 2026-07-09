@@ -10,6 +10,7 @@ import { BlobsTable, VerticalBlobsTable } from './blobs_table';
 import SelectComponent from './selectComponent';
 import { FIRST_FRAME, BACKEND_SERVER, PLACEHOLDER_IMAGE, BACKEND_PORT } from './constants';
 import { BrowserRouter as Router, Route, Routes } from 'react-router-dom';
+import PEValidator from './PEValidator';
 
 const MAX_SIMULTANEOUS_REQUESTS = 1;
 const requestQueue = new RequestQueue(MAX_SIMULTANEOUS_REQUESTS);
@@ -159,9 +160,8 @@ function App() {
 
       {/* ── Tabs ── */}
       <div style={{ padding: '2px 12px 4px' }}>
-        <Tab id="idtrackerai_viewer" activeTab={activeTab} setActiveTab={setActiveTab}>
-          Idtrackerai viewer
-        </Tab>
+        <Tab id="idtrackerai_viewer" activeTab={activeTab} setActiveTab={setActiveTab}>Idtrackerai viewer</Tab>
+        <Tab id="pe_validator"      activeTab={activeTab} setActiveTab={setActiveTab}>PE validation</Tab>
       </div>
 
       {/* ── Two-column body ── */}
@@ -231,6 +231,7 @@ function App() {
           </div>
         </div>
       )}
+      {activeTab === 'pe_validator' && <PEValidator identity={1} />}
     </div>
   );
 }
