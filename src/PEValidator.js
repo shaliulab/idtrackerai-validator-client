@@ -10,20 +10,34 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { BACKEND_SERVER, BACKEND_PORT } from './constants';
+import { useRef } from 'react';
+import BurstTrace from './BurstTrace';
 
 const API = `http://${BACKEND_SERVER}:${BACKEND_PORT}/api/pe`;
 
-export default function PEValidator({ identity = 1 }) {
+export default function PEValidator({ fly, active }) {
+  
+
   const [bouts, setBouts] = useState([]);
   const [verdicts, setVerdicts] = useState({});   // "start-end" -> verdict
   const [burstIdx, setBurstIdx] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
+  const [trace, setTrace] = useState(null);
+  const [playT, setPlayT] = useState(null);      // current playhead time (s) in trace coords
+  const videoRef = useRef(null);
+
+
   const load = useCallback(async () => {
     setLoading(true); setError(null);
     try {
-      const { data } = await axios.get(`${API}/bouts`, { params: { identity } });
+      if (!fly) return;
+
+      const { data } = await 
+        axios.get(`${API}/bouts`, {
+          params: { fly }
+        });
       setBouts(data);
       const v = {};
       data.forEach(b => { if (b.verdict) v[`${b.start_fn}-${b.end_fn}`] = b.verdict; });
@@ -35,21 +49,38 @@ export default function PEValidator({ identity = 1 }) {
     } finally {
       setLoading(false);
     }
-  }, [identity]);
+  }, [fly]);
+
 
   useEffect(() => { load(); }, [load]);
 
   // distinct bursts, in the order the (score-sorted) bouts arrived
   const burstIds = [...new Set(bouts.map(b => b.burst_id))];
   const burstId = burstIds[burstIdx];
-  const burstBouts = bouts.filter(b => b.burst_id === burstId);
+  const burstBouts = bouts
+    .filter(b => b.burst_id === burstId)
+    .sort((a, b) => a.bout_uid - b.bout_uid);
+  
   const keyOf = b => `${b.start_fn}-${b.end_fn}`;
+  const scrubbingRef = useRef(false);
+
+  // trace -> video: convert a scrubbed trace-time (s) to video.currentTime and seek
+  const seekToTraceTime = useCallback((tSec) => {
+    const vid = videoRef.current;
+    if (!vid || !trace) return;
+    const clipStart = burstBouts[0]?.clip_start ?? trace.start_frame;
+    // trace t=0 is at trace.start_frame; video t=0 is at clipStart
+    const videoTime = tSec + (trace.start_frame - clipStart) / trace.fps;
+    vid.currentTime = Math.max(0, videoTime);
+    setPlayT(tSec);                 // move the line immediately (video seek is async)
+  }, [trace, burstBouts]);
+
 
   const setVerdict = useCallback(async (b, verdict) => {
     setVerdicts(v => ({ ...v, [keyOf(b)]: verdict }));   // optimistic
     try {
       await axios.post(`${API}/annotate`, {
-        identity,
+        fly,
         start_frame: b.start_fn, end_frame: b.end_fn,
         burst_id: b.burst_id, bout_uid: b.bout_uid,
         pe_score: b.pe_score, verdict,
@@ -58,11 +89,12 @@ export default function PEValidator({ identity = 1 }) {
       setError(`save failed: ${e.message}`);
       load();   // resync on failure
     }
-  }, [identity, load]);
+  }, [fly, load]);
 
   // keyboard: 1/2/3 verdict the FIRST unreviewed bout in the burst; arrows navigate
   useEffect(() => {
     const onKey = (e) => {
+      if (!active) return;                 // ignore keys when tab hidden
       if (['ArrowRight', 'ArrowLeft'].includes(e.key)) {
         setBurstIdx(i => Math.min(Math.max(i + (e.key === 'ArrowRight' ? 1 : -1), 0),
                                   burstIds.length - 1));
@@ -78,44 +110,133 @@ export default function PEValidator({ identity = 1 }) {
     return () => window.removeEventListener('keydown', onKey);
   }, [burstBouts, burstIds.length, verdicts, setVerdict]);
 
+
+  // fetch trace when the burst changes
+  useEffect(() => {
+    if (burstId == null) return;
+    axios.get(`${API}/trace`, { params: { fly, burst_id: burstId } })
+      .then(r => setTrace(r.data)).catch(() => setTrace(null));
+    setPlayT(null);
+  }, [fly, burstId]);
+
+  // drive the playhead from the video's presented frames
+  useEffect(() => {
+    const vid = videoRef.current;
+    if (!vid || !trace || !vid.requestVideoFrameCallback) return;
+    let handle;
+    const tick = (now, meta) => {
+      // clip frame index = mediaTime * fps ; global frame = clipStart + idx
+      // trace t_s is measured from trace.start_frame, so:
+      //   t_playhead = (clipStart + mediaTime*fps - trace.start_frame) / fps
+      const clipStart = burstBouts[0]?.clip_start ?? trace.start_frame; // see note
+      const globalFrame = clipStart + Math.round(meta.mediaTime * trace.fps);
+      setPlayT((globalFrame - trace.start_frame) / trace.fps);
+      handle = vid.requestVideoFrameCallback(tick);
+    };
+    handle = vid.requestVideoFrameCallback(tick);
+    return () => vid.cancelVideoFrameCallback?.(handle);
+  }, [trace, burstBouts]);
+
+
+
+
   if (loading) return <div style={{ padding: 12 }}>Loading bouts…</div>;
   if (error)   return <div style={{ padding: 12, color: '#d62728' }}>{error}</div>;
-  if (!bouts.length) return <div style={{ padding: 12 }}>No PE bouts for this fly.</div>;
+  if (!bouts.length) {
+  return (
+      <div style={{ padding: 12 }}>
+        {`No PE bouts for this fly (${fly}).`}
+      </div>
+    );
+  }
 
   const nReviewed = Object.keys(verdicts).length;
-  const stem = burstBouts[0]?.media_stem;   // same for every bout in the burst
-  const tracePng = stem && `${API}/media/plots/${stem}.png`;
-  const clipMp4  = stem && `${API}/media/videos/${stem}.mp4`;
+  const stem = burstBouts[0]?.media_stem;   // changes with the bout
+  const traceStem = burstBouts[0]?.trace_stem; // same for all bouts in the burst
+  const tracePng = traceStem && `${API}/media/plots/${traceStem}.png`;
   const poseJson = stem && `${API}/media/videos/${stem}.pose.json`;
-  
+  const burstClip = traceStem && `${API}/media/videos/${traceStem}.mp4`;
+
   const VERDICT_STYLE = {
     pe:      { on: '#2ca02c' }, not_pe: { on: '#d62728' }, unsure: { on: '#888' },
   };
 
+  if (!fly)    return <div style={{ padding: 12 }}>Select a fly…</div>;
+  if (loading) return <div style={{ padding: 12 }}>Loading bouts…</div>;
+  if (error)   return <div style={{ padding: 12, color: '#d62728' }}>{error}</div>;
+  if (!bouts.length) return (
+    <div style={{ padding: 12 }}>{`No PE bouts for this fly (${fly}).`}</div>
+  );
+
   return (
     <div style={{ maxWidth: 900, padding: '0 12px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+    
+
         <button disabled={burstIdx === 0} onClick={() => setBurstIdx(i => i - 1)}>← prev</button>
         <span>burst {burstId} · {burstIdx + 1}/{burstIds.length} · reviewed {nReviewed}/{bouts.length}</span>
         <button disabled={burstIdx >= burstIds.length - 1} onClick={() => setBurstIdx(i => i + 1)}>next →</button>
       </div>
 
-      <img src={tracePng} alt={`trace ${burstId}`} style={{ width: '100%', marginTop: 8 }}
-           onError={e => { e.target.style.display = 'none'; }} />
-      <video src={clipMp4} controls loop muted style={{ width: '100%', marginTop: 4 }}
-             onError={e => { e.target.style.display = 'none'; }} />
+
+      <div style={{ display: 'flex', gap: 12, marginTop: 8 }}>
+        {/* left: whole-burst video */}
+        <video ref={videoRef} src={burstClip} controls loop muted autoPlay playsInline
+              style={{ width: 320, flexShrink: 0 }}
+              onError={e => { e.target.style.display = 'none'; }} />
+
+        {/* right: interactive trace with playhead */}
+        <div style={{ flex: 1, minWidth: 0, height: 260 }}>
+          {
+          trace && <BurstTrace trace={trace} playT={playT}
+                      onScrub={seekToTraceTime}
+                      scrubbingRef={scrubbingRef} />
+          }
+        </div>
+      </div>
+
+
 
       <table style={{ width: '100%', marginTop: 12, borderCollapse: 'collapse' }}>
-        <thead><tr style={{ textAlign: 'left', borderBottom: '1px solid #ccc' }}>
-          <th>bout</th><th>frames</th><th>dur</th><th>score</th><th>verdict</th>
-        </tr></thead>
+      <thead>
+      <tr style={{ textAlign: 'left', borderBottom: '1px solid #ccc' }}>
+        <th>video</th>
+        <th>bout</th>
+        <th>frames</th>
+        <th>frame_idx</th>
+        <th>dur</th>
+        <th>score</th>
+        <th>verdict</th>
+      </tr>
+      </thead>
+
         <tbody>
           {burstBouts.map(b => {
             const v = verdicts[keyOf(b)];
+            const clipMp4 = `${API}/media/videos/${b.media_stem}.mp4`;
             return (
               <tr key={keyOf(b)} style={{ borderBottom: '1px solid #eee' }}>
+                <td>
+                  <video
+                    src={clipMp4}
+                    controls
+                    loop
+                    muted
+                    autoPlay
+                    playsInline
+                    preload="metadata"
+                    style={{
+                      width: 100,
+                      height: 100,
+                      objectFit: 'contain'
+                    }}
+                    onError={e => { e.target.style.display = 'none'; }}
+                  />
+              </td>
+
                 <td>{b.bout_uid}{b.is_solitary ? ' (solo)' : ''}</td>
                 <td>{b.start_fn}–{b.end_fn}</td>
+                <td>{b.start_fidx}–{b.end_fidx}</td>
                 <td>{b.dur_s?.toFixed(2)}s</td>
                 <td>{b.pe_score?.toFixed(2)}</td>
                 <td>

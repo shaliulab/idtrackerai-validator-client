@@ -1,3 +1,5 @@
+// App.js  —  Frontend of the flyhostel viewer
+
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import FrameWithSquare from './FrameWithSquare';
@@ -44,6 +46,8 @@ function App() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [videoFrameRate, setVideoFrameRate] = useState(1);
   const [recordingFramerate, setRecordingFramerate] = useState(null);
+  const [flies, setFlies] = useState([]);
+  const [selectedFly, setSelectedFly] = useState(null);
 
   // Native frame dimensions. Detected from the first decoded image
   // (or from a backend endpoint if you add one).
@@ -52,6 +56,26 @@ function App() {
   const FrameWithSquareRef = useRef(null);
   const [number_of_animals, setNumberOfAnimals] = useState(6);
   const [activeTab, setActiveTab] = useState('idtrackerai_viewer');
+
+  const fetchFlies = useCallback(async () => {
+    try {
+      const { data } = await axios.get(
+        `http://${BACKEND_SERVER}:${BACKEND_PORT}/api/pe/flies`
+      );
+
+      setFlies(data);
+
+      if (data.length) {
+        setSelectedFly(data[0]);
+      } else {
+        setSelectedFly(null);
+      }
+    } catch (err) {
+      console.error("Couldn't fetch flies", err);
+      setFlies([]);
+      setSelectedFly(null);
+    }
+  }, []);
 
   const fetchFramerate = useCallback(async () => {
     try {
@@ -72,6 +96,10 @@ function App() {
   }, []);
 
   useEffect(() => { fetchFramerate(); }, []);
+
+  useEffect(() => {
+    fetchFlies();
+  }, [fetchFlies]);
 
   // Probe the first decoded frame to learn the native image size.
   const probeImageSize = (blobUrl) =>
@@ -165,11 +193,12 @@ function App() {
       </div>
 
       {/* ── Two-column body ── */}
-      {activeTab === 'idtrackerai_viewer' && (
-        <div style={{ display: 'flex', flexDirection: 'row', gap: 12, padding: '0 12px 8px', alignItems: 'flex-start' }}>
-
-          {/* Left: frame canvas */}
-          <div style={{ flexShrink: 0 }}>
+      <div style={{
+        display: activeTab === 'idtrackerai_viewer' ? 'flex' : 'none',
+        flexDirection: 'row', gap: 12, padding: '0 12px 8px', alignItems: 'flex-start',
+      }}>
+        {/* Left: frame canvas */}
+        <div style={{ flexShrink: 0 }}>
             <FrameWithSquare
               imageURL={frame}
               videoFrameRate={videoFrameRate}
@@ -185,6 +214,7 @@ function App() {
               nativeSize={nativeSize}
             />
           </div>
+
 
           {/* Right: controls */}
           <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -230,8 +260,29 @@ function App() {
 
           </div>
         </div>
-      )}
-      {activeTab === 'pe_validator' && <PEValidator identity={1} />}
+
+      <div style={{ display: activeTab === 'pe_validator' ? 'block' : 'none' }}>
+      <div style={{ padding: "12px" }}>
+        <label>
+          Fly:&nbsp;
+          <select
+            value={selectedFly || ""}
+            onChange={e => setSelectedFly(e.target.value)}
+          >
+            {flies.map(fly => (
+              <option key={fly} value={fly}>
+                {fly}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+
+      <PEValidator
+            fly={selectedFly}
+            active={activeTab === 'pe_validator'}
+        />
+      </div>
     </div>
   );
 }
