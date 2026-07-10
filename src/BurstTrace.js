@@ -1,18 +1,39 @@
-import { useRef } from 'react';
-
+import { useRef, useState, useEffect, useLayoutEffect } from 'react';
 
 function BurstTrace({ trace, playT, onScrub, scrubbingRef }) {
+  const wrapRef = useRef(null);
   const svgRef = useRef(null);
+  const [size, setSize] = useState({ W: 560, H: 240 });   // sane defaults pre-measure
+  
+  // measure the container; redraw the viewBox at its true pixel size (no stretch)
+  useLayoutEffect(() => {
+    const el = wrapRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(([entry]) => {
+      const { width, height } = entry.contentRect;
+      if (width > 0 && height > 0) setSize({ W: Math.round(width), H: Math.round(height) });
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
-  if (!trace || !trace.points.length) return null;
+  // hooks must run every render — bail AFTER them
+  if (!trace || !trace.points.length) {
+    return <div ref={wrapRef} style={{ width: '100%', height: '100%' }} />;
+  }
 
-  const W = 560, H = 240, m = { t: 10, r: 12, b: 40, l: 44 };
-  const iw = W - m.l - m.r, ih = H - m.t - m.b;
-
+  
   const ts = trace.points.map(p => p.t_s);
   const xmax = Math.max(10, ...ts);
   const ys = trace.points.map(p => p.dist).filter(v => v != null);
   const ymax = Math.max(0.01, ...ys);
+
+
+  const { W, H } = size;
+  const m = { t: 10, r: 12, b: 40, l: 44 };
+  const iw = W - m.l - m.r, ih = H - m.t - m.b;
+
+  
   const X = t => m.l + (t / xmax) * iw;
   const Y = v => m.t + ih - (v / ymax) * ih;
 
@@ -51,12 +72,12 @@ function BurstTrace({ trace, playT, onScrub, scrubbingRef }) {
   const gapY  = m.t + ih + 24;      // inter-bout gap brackets
 
   return (
-    <svg ref={svgRef} viewBox={`0 0 ${W} ${H}`}
-         preserveAspectRatio="none"
-         style={{ width: '100%', height: '100%', display: 'block',
-                  cursor: 'ew-resize', touchAction: 'none' }}
-         onPointerDown={onDown} onPointerMove={onMove}
-         onPointerUp={onUp} onPointerLeave={onUp}>
+<div ref={wrapRef} style={{ width: '100%', height: '100%' }}>
+      <svg ref={svgRef} viewBox={`0 0 ${W} ${H}`}
+           style={{ width: '100%', height: '100%', display: 'block',
+                    cursor: 'ew-resize', touchAction: 'none' }}
+           onPointerDown={onDown} onPointerMove={onMove}
+           onPointerUp={onUp} onPointerLeave={onUp}>
 
       {/* axes */}
       <line x1={m.l} y1={m.t} x2={m.l} y2={m.t + ih} stroke="#999" />
@@ -111,6 +132,7 @@ function BurstTrace({ trace, playT, onScrub, scrubbingRef }) {
           </>
         )}
       </svg>
+    </div>
   );
 }
 

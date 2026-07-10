@@ -24,7 +24,7 @@ export default function PEValidator({ fly, active }) {
   const [burstIdx, setBurstIdx] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-
+  const [selectedBoutIdx, setSelectedBoutIdx] = useState(0);
   const [trace, setTrace] = useState(null);
   const [playT, setPlayT] = useState(null);      // current playhead time (s) in trace coords
   const videoRef = useRef(null);
@@ -92,25 +92,37 @@ export default function PEValidator({ fly, active }) {
     }
   }, [fly, load]);
 
-  // keyboard: 1/2/3 verdict the FIRST unreviewed bout in the burst; arrows navigate
+
+  useEffect(() => { setSelectedBoutIdx(0); }, [burstId]);
+
+  
+  const stateRef = useRef({});
+  stateRef.current = { active, burstBouts, burstIds, selectedBoutIdx, verdicts, setVerdict };
+
   useEffect(() => {
     const onKey = (e) => {
-      if (!active) return;                 // ignore keys when tab hidden
-      if (['ArrowRight', 'ArrowLeft'].includes(e.key)) {
+      const s = stateRef.current;
+      if (!s.active) return;
+      if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
         setBurstIdx(i => Math.min(Math.max(i + (e.key === 'ArrowRight' ? 1 : -1), 0),
-                                  burstIds.length - 1));
+                                  s.burstIds.length - 1));
+        return;
+      }
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        setSelectedBoutIdx(i => Math.min(Math.max(i + (e.key === 'ArrowDown' ? 1 : -1), 0),
+                                         s.burstBouts.length - 1));
         return;
       }
       const map = { '1': 'pe', '2': 'not_pe', '3': 'unsure' };
-      if (map[e.key] && burstBouts.length) {
-        const target = burstBouts.find(b => !verdicts[keyOf(b)]) || burstBouts[0];
-        setVerdict(target, map[e.key]);
+      if (map[e.key] && s.burstBouts.length) {
+        const target = s.burstBouts[s.selectedBoutIdx];
+        if (target) s.setVerdict(target, map[e.key]);
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [burstBouts, burstIds.length, verdicts, setVerdict]);
-
+  }, []);   // subscribe ONCE; all live values come from stateRef
 
   // fetch trace when the burst changes
   useEffect(() => {
@@ -138,8 +150,20 @@ export default function PEValidator({ fly, active }) {
     return () => vid.cancelVideoFrameCallback?.(handle);
   }, [trace, burstBouts]);
 
+  const lastSeekedKeyRef = useRef(null);
 
+  useEffect(() => {
+    if (!trace) return;
+    const b = burstBouts[selectedBoutIdx];
+    if (!b) return;
 
+    const boutKey = keyOf(b);                 // stable identity: `${start_fn}-${end_fn}`
+    if (lastSeekedKeyRef.current === boutKey) return;   // same bout — don't re-seek
+    lastSeekedKeyRef.current = boutKey;
+
+    const tSec = (b.start_fn - trace.start_frame) / trace.fps;
+    seekToTraceTime(Math.max(0, tSec));
+  }, [selectedBoutIdx, trace, burstBouts, seekToTraceTime]);
 
   if (loading) return <div style={{ padding: 12 }}>Loading bouts…</div>;
   if (error)   return <div style={{ padding: 12, color: '#d62728' }}>{error}</div>;
@@ -207,7 +231,6 @@ export default function PEValidator({ fly, active }) {
       <table style={{ width: '100%', marginTop: 12, borderCollapse: 'collapse' }}>
       <thead>
       <tr style={{ textAlign: 'left', borderBottom: '1px solid #ccc' }}>
-        <th>video</th>
         <th>bout</th>
         <th>frames</th>
         <th>frame_idx</th>
@@ -218,29 +241,19 @@ export default function PEValidator({ fly, active }) {
       </thead>
 
         <tbody>
-          {burstBouts.map(b => {
-            const v = verdicts[keyOf(b)];
-            const clipMp4 = `${API}/media/videos/${b.media_stem}.mp4`;
-            return (
-              <tr key={keyOf(b)} style={{ borderBottom: '1px solid #eee' }}>
-                <td>
-                  <video
-                    src={clipMp4}
-                    controls
-                    loop
-                    muted
-                    autoPlay
-                    playsInline
-                    preload="metadata"
-                    style={{
-                      width: 100,
-                      height: 100,
-                      objectFit: 'contain'
-                    }}
-                    onError={e => { e.target.style.display = 'none'; }}
-                  />
-              </td>
-
+        {burstBouts.map((b, idx) => {
+                    const v = verdicts[keyOf(b)];
+                    const clipMp4 = `${API}/media/videos/${b.media_stem}.mp4`;
+                    const isSel = idx === selectedBoutIdx;
+                    return (
+                      <tr key={keyOf(b)}
+                          onClick={() => setSelectedBoutIdx(idx)}
+                          style={{
+                            borderBottom: '1px solid #eee',
+                            background: isSel ? '#eef4ff' : 'transparent',
+                            outline: isSel ? '2px solid #1f77b4' : 'none',
+                            cursor: 'pointer',
+                          }}>
                 <td>{b.bout_uid}{b.is_solitary ? ' (solo)' : ''}</td>
                 <td>{b.start_fn}–{b.end_fn}</td>
                 <td>{b.start_fidx}–{b.end_fidx}</td>
