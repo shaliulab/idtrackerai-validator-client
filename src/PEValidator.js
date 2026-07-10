@@ -16,6 +16,7 @@ import BurstVideo from './BurstVideo';
 
 const API = `http://${BACKEND_SERVER}:${BACKEND_PORT}/api/pe`;
 
+
 export default function PEValidator({ fly, active }) {
   
 
@@ -30,6 +31,25 @@ export default function PEValidator({ fly, active }) {
   const videoRef = useRef(null);
 
 
+    
+  const OPTIONS = ['pe', 'feed', 'groom', 'other', 'unsure'];
+    const VERDICT_STYLE = {
+      pe:     { on: '#2ca02c' },
+      feed:   { on: '#d62728' },
+      groom:  { on: '#e377c2' },
+      other:  { on: '#7f7f7f' },
+      unsure: { on: '#ff7f0e' },
+    };
+
+    // pipeline label -> default verdict for a non-PE bout
+    const labelToVerdict = (label) =>
+      label === 'feed' ? 'feed' :
+      label === 'groom' ? 'groom' : 'other';
+
+    // human annotation if any; else the pipeline's own guess for non-PE bouts
+    const effectiveVerdict = (b) =>
+      verdicts[keyOf(b)] ?? (b.is_pe ? undefined : labelToVerdict(b.label));
+    
   const load = useCallback(async () => {
     setLoading(true); setError(null);
     try {
@@ -114,10 +134,10 @@ export default function PEValidator({ fly, active }) {
                                          s.burstBouts.length - 1));
         return;
       }
-      const map = { '1': 'pe', '2': 'not_pe', '3': 'unsure' };
+      const map = { '1': 'pe', '2': 'feed', '3': 'groom', '4': 'other', '5': 'unsure' };
       if (map[e.key] && s.burstBouts.length) {
         const target = s.burstBouts[s.selectedBoutIdx];
-        if (target) s.setVerdict(target, map[e.key]);
+        if (target) s.setVerdict(target, map[e.key]);   // only PE
       }
     };
     window.addEventListener('keydown', onKey);
@@ -161,7 +181,7 @@ export default function PEValidator({ fly, active }) {
     if (lastSeekedKeyRef.current === boutKey) return;   // same bout — don't re-seek
     lastSeekedKeyRef.current = boutKey;
 
-    const tSec = (b.start_fn - trace.start_frame) / trace.fps;
+    const tSec = (b.start_fn - trace.start_frame) / trace.fps - 1;
     seekToTraceTime(Math.max(0, tSec));
   }, [selectedBoutIdx, trace, burstBouts, seekToTraceTime]);
 
@@ -182,9 +202,6 @@ export default function PEValidator({ fly, active }) {
   const burstClip = traceStem && `${API}/media/videos/${traceStem}.mp4`;
   const burstPose = traceStem && `${API}/media/videos/${traceStem}.pose.json`;
 
-  const VERDICT_STYLE = {
-    pe:      { on: '#2ca02c' }, not_pe: { on: '#d62728' }, unsure: { on: '#888' },
-  };
 
   if (!fly)    return <div style={{ padding: 12 }}>Select a fly…</div>;
   if (loading) return <div style={{ padding: 12 }}>Loading bouts…</div>;
@@ -260,19 +277,29 @@ export default function PEValidator({ fly, active }) {
                 <td>{b.dur_s?.toFixed(2)}s</td>
                 <td>{b.pe_score?.toFixed(2)}</td>
                 <td>
-                  {['pe', 'not_pe', 'unsure'].map(opt => (
-                    <button key={opt} onClick={() => setVerdict(b, opt)}
-                      style={{
-                        marginRight: 4, padding: '2px 8px', cursor: 'pointer',
-                        border: '1px solid #bbb', borderRadius: 4,
-                        background: v === opt ? VERDICT_STYLE[opt].on : '#f4f4f4',
-                        color: v === opt ? 'white' : '#333',
-                        fontWeight: v === opt ? 'bold' : 'normal',
-                      }}>
-                      {opt}
-                    </button>
-                  ))}
+                  {OPTIONS.map(opt => {
+                    const chosen = effectiveVerdict(b) === opt;
+                    const isDefault = !verdicts[keyOf(b)] && !b.is_pe
+                                      && opt === labelToVerdict(b.label);
+                    return (
+                      <button key={opt} onClick={() => setVerdict(b, opt)}
+                        title={isDefault ? `pipeline: ${b.label_reason || b.label}` : undefined}
+                        style={{
+                          marginRight: 4, padding: '2px 6px', cursor: 'pointer',
+                          border: chosen ? '2px solid #333' : '1px solid #bbb',
+                          borderRadius: 4,
+                          background: chosen ? VERDICT_STYLE[opt].on : '#f4f4f4',
+                          color: chosen ? 'white' : '#333',
+                          fontWeight: chosen ? 'bold' : 'normal',
+                          opacity: isDefault ? 0.7 : 1,
+                          fontStyle: isDefault ? 'italic' : 'normal',
+                        }}>
+                        {opt}
+                      </button>
+                    );
+                  })}
                 </td>
+
               </tr>
             );
           })}
