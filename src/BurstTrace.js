@@ -52,7 +52,9 @@ function BurstTrace({ trace, playT, onScrub, scrubbingRef }) {
 
   return (
     <svg ref={svgRef} viewBox={`0 0 ${W} ${H}`}
-         style={{ width: '100%', height: 'auto', cursor: 'ew-resize', touchAction: 'none' }}
+         preserveAspectRatio="none"
+         style={{ width: '100%', height: '100%', display: 'block',
+                  cursor: 'ew-resize', touchAction: 'none' }}
          onPointerDown={onDown} onPointerMove={onMove}
          onPointerUp={onUp} onPointerLeave={onUp}>
 

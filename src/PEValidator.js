@@ -12,6 +12,7 @@ import axios from 'axios';
 import { BACKEND_SERVER, BACKEND_PORT } from './constants';
 import { useRef } from 'react';
 import BurstTrace from './BurstTrace';
+import BurstVideo from './BurstVideo';
 
 const API = `http://${BACKEND_SERVER}:${BACKEND_PORT}/api/pe`;
 
@@ -154,8 +155,8 @@ export default function PEValidator({ fly, active }) {
   const stem = burstBouts[0]?.media_stem;   // changes with the bout
   const traceStem = burstBouts[0]?.trace_stem; // same for all bouts in the burst
   const tracePng = traceStem && `${API}/media/plots/${traceStem}.png`;
-  const poseJson = stem && `${API}/media/videos/${stem}.pose.json`;
   const burstClip = traceStem && `${API}/media/videos/${traceStem}.mp4`;
+  const burstPose = traceStem && `${API}/media/videos/${traceStem}.pose.json`;
 
   const VERDICT_STYLE = {
     pe:      { on: '#2ca02c' }, not_pe: { on: '#d62728' }, unsure: { on: '#888' },
@@ -178,22 +179,28 @@ export default function PEValidator({ fly, active }) {
         <button disabled={burstIdx >= burstIds.length - 1} onClick={() => setBurstIdx(i => i + 1)}>next →</button>
       </div>
 
-
-      <div style={{ display: 'flex', gap: 12, marginTop: 8 }}>
-        {/* left: whole-burst video */}
-        <video ref={videoRef} src={burstClip} controls loop muted autoPlay playsInline
-              style={{ width: 320, flexShrink: 0 }}
-              onError={e => { e.target.style.display = 'none'; }} />
-
-        {/* right: interactive trace with playhead */}
-        <div style={{ flex: 1, minWidth: 0, height: 260 }}>
-          {
-          trace && <BurstTrace trace={trace} playT={playT}
-                      onScrub={seekToTraceTime}
-                      scrubbingRef={scrubbingRef} />
-          }
-        </div>
-      </div>
+      {(() => {
+        const PANEL_H = 280;         // one height for all three
+        const PANEL_W = 280;         // square video panels
+        return (
+          <div style={{ display: 'flex', gap: 12, marginTop: 8, alignItems: 'stretch',
+                        height: PANEL_H }}>
+            <BurstVideo
+              src={burstClip}
+              poseUrl={burstPose}
+              videoRef={videoRef}
+              width={PANEL_W}
+              height={PANEL_H}
+              onError={e => { e.target.style.display = 'none'; }}
+            />
+            <div style={{ flex: 1, minWidth: 0, height: '100%' }}>
+              {trace && <BurstTrace trace={trace} playT={playT}
+                                    onScrub={seekToTraceTime} scrubbingRef={scrubbingRef} />}
+            </div>
+          </div>
+        );
+      })()}
+            
 
 
 
