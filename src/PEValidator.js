@@ -17,6 +17,12 @@ import BurstVideo from './BurstVideo';
 const API = `http://${BACKEND_SERVER}:${BACKEND_PORT}/api/pe`;
 
 
+// API points needed
+// /pe/bouts            GET
+// /pe/annotate         POST
+// /pe/trace            GET
+// /pe/media/videos     GET
+
 export default function PEValidator({ fly, active }) {
   
 
@@ -43,12 +49,13 @@ export default function PEValidator({ fly, active }) {
 
     // pipeline label -> default verdict for a non-PE bout
     const labelToVerdict = (label) =>
+      label === 'pe' ? 'pe' :
       label === 'feed' ? 'feed' :
-      label === 'groom' ? 'groom' : 'other';
-
+      label === 'groom' ? 'groom' :
+      'other';
     // human annotation if any; else the pipeline's own guess for non-PE bouts
     const effectiveVerdict = (b) =>
-      verdicts[keyOf(b)] ?? (b.is_pe ? undefined : labelToVerdict(b.label));
+      verdicts[keyOf(b)] ?? labelToVerdict(b.label);
     
   const load = useCallback(async () => {
     setLoading(true); setError(null);
@@ -81,21 +88,52 @@ export default function PEValidator({ fly, active }) {
   const burstBouts = bouts
     .filter(b => b.burst_id === burstId)
     .sort((a, b) => a.bout_uid - b.bout_uid);
-  
+
+    
+
+  const [jumpValue, setJumpValue] = useState('');
+
+  const jumpToBurst = useCallback((oneBased) => {
+    const idx = oneBased - 1;                          // display is 1-based (70/80)
+    if (idx >= 0 && idx < burstIds.length) {
+      setBurstIdx(idx);
+      setError(null);
+    } else {
+      setError(`burst ${oneBased} out of range (1–${burstIds.length})`);
+    }
+  }, [burstIds.length]);
+
+
+
+
   const keyOf = b => `${b.start_fn}-${b.end_fn}`;
   const scrubbingRef = useRef(false);
 
-  // trace -> video: convert a scrubbed trace-time (s) to video.currentTime and seek
   const seekToTraceTime = useCallback((tSec) => {
     const vid = videoRef.current;
     if (!vid || !trace) return;
     const clipStart = burstBouts[0]?.clip_start ?? trace.start_frame;
-    // trace t=0 is at trace.start_frame; video t=0 is at clipStart
     const videoTime = tSec + (trace.start_frame - clipStart) / trace.fps;
-    vid.currentTime = Math.max(0, videoTime);
-    setPlayT(tSec);                 // move the line immediately (video seek is async)
-  }, [trace, burstBouts]);
+    const target = Math.max(0, videoTime);
 
+    const doSeek = () => {
+          console.log('seek', { target, dur: vid.duration,
+                            traceStart: trace.start_frame,
+                            clipStart: burstBouts[0]?.clip_start,
+                            tSec });
+
+      const dur = Number.isFinite(vid.duration) ? vid.duration : Infinity;
+      vid.currentTime = Math.min(target, Math.max(0, dur - 1e-3));
+      if (vid.paused) vid.play().catch(() => {});   // resume if a seek paused it
+    };
+    console.log(vid.readyState);
+    console.log(vid.duration);
+
+    if (vid.readyState >= 1) doSeek();
+    else vid.addEventListener('loadedmetadata', doSeek, { once: true });
+
+    setPlayT(tSec);
+  }, [trace, burstBouts]);
 
   const setVerdict = useCallback(async (b, verdict) => {
     setVerdicts(v => ({ ...v, [keyOf(b)]: verdict }));   // optimistic
@@ -158,12 +196,11 @@ export default function PEValidator({ fly, active }) {
     if (!vid || !trace || !vid.requestVideoFrameCallback) return;
     let handle;
     const tick = (now, meta) => {
-      // clip frame index = mediaTime * fps ; global frame = clipStart + idx
-      // trace t_s is measured from trace.start_frame, so:
-      //   t_playhead = (clipStart + mediaTime*fps - trace.start_frame) / fps
-      const clipStart = burstBouts[0]?.clip_start ?? trace.start_frame; // see note
-      const globalFrame = clipStart + Math.round(meta.mediaTime * trace.fps);
-      setPlayT((globalFrame - trace.start_frame) / trace.fps);
+      if (trace && burstBouts[0] && trace.burst_id === burstBouts[0].burst_id) {
+        const clipStart = burstBouts[0]?.clip_start ?? trace.start_frame;
+        const globalFrame = clipStart + Math.round(meta.mediaTime * trace.fps);
+        setPlayT((globalFrame - trace.start_frame) / trace.fps);
+      }
       handle = vid.requestVideoFrameCallback(tick);
     };
     handle = vid.requestVideoFrameCallback(tick);
@@ -171,19 +208,73 @@ export default function PEValidator({ fly, active }) {
   }, [trace, burstBouts]);
 
   const lastSeekedKeyRef = useRef(null);
+  const seekToGlobalFrame = useCallback((globalFrame) => {
+    const vid = videoRef.current;
+    if (!vid || !trace) return;
+
+    const clipStart = burstBouts[0]?.clip_start ?? trace.start_frame;
+
+    const videoTime = (globalFrame - clipStart) / trace.fps;
+
+    const doSeek = () => {
+      const dur = Number.isFinite(vid.duration) ? vid.duration : 0;
+      vid.currentTime = Math.min(
+        Math.max(0, videoTime),
+        Math.max(0, dur - 1e-3)
+      );
+      if (vid.paused) vid.play().catch(() => {});
+    };
+
+    if (vid.readyState >= 1) doSeek();
+    else vid.addEventListener('loadedmetadata', doSeek, { once: true });
+
+    setPlayT((globalFrame - trace.start_frame) / trace.fps);
+  }, [burstBouts, trace]);
+
+
+  const setAllInBurst = useCallback((verdict) => {
+    // optimistic: one state update for the whole burst
+    setVerdicts(v => {
+      const next = { ...v };
+      burstBouts.forEach(b => { next[keyOf(b)] = verdict; });
+      return next;
+    });
+    // persist each bout (PK is per-bout); fire together, resync if any fail
+    Promise.allSettled(
+      burstBouts.map(b =>
+        axios.post(`${API}/annotate`, {
+          fly,
+          start_frame: b.start_fn, end_frame: b.end_fn,
+          burst_id: b.burst_id, bout_uid: b.bout_uid,
+          pe_score: b.pe_score, verdict,
+        })
+      )
+    ).then(results => {
+      if (results.some(r => r.status === 'rejected')) {
+        setError('some bulk saves failed');
+        load();   // resync truth from the server
+      }
+    });
+  }, [burstBouts, fly, load]);
+
 
   useEffect(() => {
-    if (!trace) return;
-    const b = burstBouts[selectedBoutIdx];
-    if (!b) return;
+      if (!trace) return;
+      const b = burstBouts[selectedBoutIdx];
+      if (!b) return;
 
-    const boutKey = keyOf(b);                 // stable identity: `${start_fn}-${end_fn}`
-    if (lastSeekedKeyRef.current === boutKey) return;   // same bout — don't re-seek
-    lastSeekedKeyRef.current = boutKey;
+      // GUARD: the trace in state must belong to THIS bout's burst. On burst switch,
+      // burstBouts updates immediately but the trace fetch resolves ~0.5s later; seeking
+      // in that window differences a new bout against the old trace's origin -> garbage.
+      if (trace.burst_id !== b.burst_id) return;
 
-    const tSec = (b.start_fn - trace.start_frame) / trace.fps - 1;
-    seekToTraceTime(Math.max(0, tSec));
-  }, [selectedBoutIdx, trace, burstBouts, seekToTraceTime]);
+      const boutKey = keyOf(b);
+      if (lastSeekedKeyRef.current === boutKey) return;
+      lastSeekedKeyRef.current = boutKey;
+
+      const oneSec = Math.round(trace.fps);
+      seekToGlobalFrame(b.start_fn - oneSec);
+    }, [selectedBoutIdx, trace, burstBouts, seekToGlobalFrame]);
 
   if (loading) return <div style={{ padding: 12 }}>Loading bouts…</div>;
   if (error)   return <div style={{ padding: 12, color: '#d62728' }}>{error}</div>;
@@ -196,12 +287,14 @@ export default function PEValidator({ fly, active }) {
   }
 
   const nReviewed = Object.keys(verdicts).length;
-  const stem = burstBouts[0]?.media_stem;   // changes with the bout
+  const selectedBout = burstBouts[selectedBoutIdx];
+  // const stem = burstBouts[0]?.media_stem;   // changes with the bout
   const traceStem = burstBouts[0]?.trace_stem; // same for all bouts in the burst
   const tracePng = traceStem && `${API}/media/plots/${traceStem}.png`;
   const burstClip = traceStem && `${API}/media/videos/${traceStem}.mp4`;
-  const burstPose = traceStem && `${API}/media/videos/${traceStem}.pose.json`;
-
+  const boutPose = selectedBout?.media_stem &&
+    `${API}/media/videos/${selectedBout.media_stem}.pose.json`;
+  
 
   if (!fly)    return <div style={{ padding: 12 }}>Select a fly…</div>;
   if (loading) return <div style={{ padding: 12 }}>Loading bouts…</div>;
@@ -212,11 +305,27 @@ export default function PEValidator({ fly, active }) {
 
   return (
     <div style={{ maxWidth: 900, padding: '0 12px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-    
-
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <button disabled={burstIdx === 0} onClick={() => setBurstIdx(i => i - 1)}>← prev</button>
-        <span>burst {burstId} · {burstIdx + 1}/{burstIds.length} · reviewed {nReviewed}/{bouts.length}</span>
+        <span style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          burst {burstId} · {burstIdx + 1}/{burstIds.length} · reviewed bouts {nReviewed}/{bouts.length}
+          <input
+            type="number"
+            min={1}
+            max={burstIds.length}
+            value={jumpValue}
+            onChange={e => setJumpValue(e.target.value)}
+            onKeyDown={e => {
+              if (e.key === 'Enter') {
+                const n = parseInt(jumpValue, 10);
+                if (Number.isInteger(n)) jumpToBurst(n);
+              }
+              e.stopPropagation();          // keep typing out of the global 1-5 / arrow handler
+            }}
+            placeholder="go to #"
+            style={{ width: 70, padding: '2px 6px' }}
+          />
+        </span>
         <button disabled={burstIdx >= burstIds.length - 1} onClick={() => setBurstIdx(i => i + 1)}>next →</button>
       </div>
 
@@ -228,7 +337,7 @@ export default function PEValidator({ fly, active }) {
                         height: PANEL_H }}>
             <BurstVideo
               src={burstClip}
-              poseUrl={burstPose}
+              poseUrl={boutPose}
               videoRef={videoRef}
               width={PANEL_W}
               height={PANEL_H}
@@ -241,23 +350,57 @@ export default function PEValidator({ fly, active }) {
           </div>
         );
       })()}
-            
-
-
-
-      <table style={{ width: '100%', marginTop: 12, borderCollapse: 'collapse' }}>
+      <div
+        style={{
+          marginTop: 12,
+          maxHeight: 350,      // choose whatever fits your layout
+          overflowY: 'auto',
+          border: '1px solid #ddd',
+        }}
+      >
+        <table
+          style={{
+            width: '100%',
+            borderCollapse: 'collapse',
+          }}
+        >
       <thead>
       <tr style={{ textAlign: 'left', borderBottom: '1px solid #ccc' }}>
-        <th>bout</th>
-        <th>frames</th>
-        <th>frame_idx</th>
-        <th>dur</th>
-        <th>score</th>
-        <th>verdict</th>
+        <th style={{ position: 'sticky', top: 0, background: 'white' }}>bout</th>
+        <th style={{ position: 'sticky', top: 0, background: 'white' }}>frames</th>
+        <th style={{ position: 'sticky', top: 0, background: 'white' }}>frame_idx</th>
+        <th style={{ position: 'sticky', top: 0, background: 'white' }}>dur</th>
+        <th style={{ position: 'sticky', top: 0, background: 'white' }}>score</th>
+        <th style={{ position: 'sticky', top: 0, background: 'white' }}>verdict</th>
       </tr>
       </thead>
 
         <tbody>
+                  <tr style={{ borderBottom: '2px solid #ccc', background: '#fafafa' }}>
+            <td colSpan={5} style={{ textAlign: 'right', paddingRight: 8,
+                                     fontSize: '0.85em', color: '#555' }}>
+              mark all {burstBouts.length} bouts →
+            </td>
+            <td>
+              {OPTIONS.map(opt => (
+                <button key={opt}
+                  onClick={() => {
+                    if (burstBouts.length > 5 &&
+                        !window.confirm(`Mark all ${burstBouts.length} bouts as "${opt}"?`)) return;
+                    setAllInBurst(opt);
+                  }}
+                  style={{
+                    marginRight: 4, padding: '2px 6px', cursor: 'pointer',
+                    border: '1px dashed #888', borderRadius: 4,   // dashed = bulk, distinct from per-bout
+                    background: VERDICT_STYLE[opt].on, color: 'white',
+                    fontWeight: 'bold', opacity: 0.85,
+                  }}>
+                  {opt}
+                </button>
+              ))}
+            </td>
+          </tr>
+          
         {burstBouts.map((b, idx) => {
                     const v = verdicts[keyOf(b)];
                     const clipMp4 = `${API}/media/videos/${b.media_stem}.mp4`;
@@ -278,9 +421,12 @@ export default function PEValidator({ fly, active }) {
                 <td>{b.pe_score?.toFixed(2)}</td>
                 <td>
                   {OPTIONS.map(opt => {
+                    const userAnnotated = verdicts[keyOf(b)] != null;
+
                     const chosen = effectiveVerdict(b) === opt;
-                    const isDefault = !verdicts[keyOf(b)] && !b.is_pe
-                                      && opt === labelToVerdict(b.label);
+                    const isDefault =
+                      !userAnnotated &&
+                      opt === labelToVerdict(b.label);
                     return (
                       <button key={opt} onClick={() => setVerdict(b, opt)}
                         title={isDefault ? `pipeline: ${b.label_reason || b.label}` : undefined}
@@ -288,10 +434,14 @@ export default function PEValidator({ fly, active }) {
                           marginRight: 4, padding: '2px 6px', cursor: 'pointer',
                           border: chosen ? '2px solid #333' : '1px solid #bbb',
                           borderRadius: 4,
-                          background: chosen ? VERDICT_STYLE[opt].on : '#f4f4f4',
-                          color: chosen ? 'white' : '#333',
+                          background: chosen
+                            ? (isDefault ? '#ffd54f' : VERDICT_STYLE[opt].on)
+                            : '#f4f4f4',
+
+                          color: chosen && !isDefault ? 'white' : '#333',
+
                           fontWeight: chosen ? 'bold' : 'normal',
-                          opacity: isDefault ? 0.7 : 1,
+
                           fontStyle: isDefault ? 'italic' : 'normal',
                         }}>
                         {opt}
@@ -305,9 +455,10 @@ export default function PEValidator({ fly, active }) {
           })}
         </tbody>
       </table>
+      </div>
 
       <div style={{ marginTop: 8, fontSize: '0.8em', color: '#777' }}>
-        keys: <b>1</b>=pe <b>2</b>=not_pe <b>3</b>=unsure · <b>←/→</b> bursts
+        keys: <b>1</b>=pe <b>2</b>=feed <b>3</b>=groom <b>4</b>=other <b>5</b>=unsure · <b>←/→</b> bursts  <b>↑/↓</b> bouts
       </div>
     </div>
   );
