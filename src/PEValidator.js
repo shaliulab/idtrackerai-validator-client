@@ -38,21 +38,23 @@ export default function PEValidator({ fly, active }) {
 
 
     
-  const OPTIONS = ['pe', 'feed', 'groom', 'other', 'unsure'];
+  const OPTIONS = ['pe', 'feed', 'groom', 'other', 'merge', 'unsure'];
     const VERDICT_STYLE = {
       pe:     { on: '#2ca02c' },
       feed:   { on: '#d62728' },
       groom:  { on: '#e377c2' },
       other:  { on: '#7f7f7f' },
+      merge:  { on: '#1f77b4' },
       unsure: { on: '#ff7f0e' },
     };
 
     // pipeline label -> default verdict for a non-PE bout
     const labelToVerdict = (label) =>
-      label === 'pe' ? 'pe' :
-      label === 'feed' ? 'feed' :
+      label === 'pe'    ? 'pe' :
+      label === 'feed'  ? 'feed' :
       label === 'groom' ? 'groom' :
       'other';
+  
     // human annotation if any; else the pipeline's own guess for non-PE bouts
     const effectiveVerdict = (b) =>
       verdicts[keyOf(b)] ?? labelToVerdict(b.label);
@@ -172,7 +174,7 @@ export default function PEValidator({ fly, active }) {
                                          s.burstBouts.length - 1));
         return;
       }
-      const map = { '1': 'pe', '2': 'feed', '3': 'groom', '4': 'other', '5': 'unsure' };
+      const map = { '1': 'pe', '2': 'feed', '3': 'groom', '4': 'other', '5': 'merge', '6': 'unsure'};
       if (map[e.key] && s.burstBouts.length) {
         const target = s.burstBouts[s.selectedBoutIdx];
         if (target) s.setVerdict(target, map[e.key]);   // only PE
@@ -458,7 +460,7 @@ export default function PEValidator({ fly, active }) {
       </div>
 
       <div style={{ marginTop: 8, fontSize: '0.8em', color: '#777' }}>
-        keys: <b>1</b>=pe <b>2</b>=feed <b>3</b>=groom <b>4</b>=other <b>5</b>=unsure · <b>←/→</b> bursts  <b>↑/↓</b> bouts
+        keys: <b>1</b>=pe <b>2</b>=feed <b>3</b>=groom <b>4</b>=other <b>5</b>=merge <b>6</b>=unsure · <b>←/→</b> bursts  <b>↑/↓</b> bouts
       </div>
     </div>
   );
