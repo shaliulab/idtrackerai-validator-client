@@ -101,6 +101,34 @@ function App() {
     fetchFlies();
   }, [fetchFlies]);
 
+  // Ctrl+1 / Ctrl+2 switch tabs
+  useEffect(() => {
+    const onKey = (e) => {
+      if (!e.ctrlKey || e.metaKey || e.altKey) return;   // Ctrl only, not Cmd/Alt combos
+      if (e.key === '1') { e.preventDefault(); setActiveTab('idtrackerai_viewer'); }
+      else if (e.key === '2') { e.preventDefault(); setActiveTab('pe_validator'); }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
+  // Ctrl+Shift+1..9 select the Nth fly (only meaningful on the PE tab)
+  useEffect(() => {
+    const onKey = (e) => {
+      if (!e.ctrlKey || !e.shiftKey || e.metaKey || e.altKey) return;
+      if (activeTab !== 'pe_validator') return;
+      const m = /^Digit([1-9])$/.exec(e.code);        // physical digit, Shift-proof
+      if (!m) return;
+      const n = parseInt(m[1], 10);
+      if (n >= 1 && n <= flies.length) {
+        e.preventDefault();
+        setSelectedFly(flies[n - 1]);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [flies, activeTab]);
+
   // Probe the first decoded frame to learn the native image size.
   const probeImageSize = (blobUrl) =>
     new Promise((resolve, reject) => {
