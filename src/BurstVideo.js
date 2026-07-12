@@ -28,15 +28,16 @@ function drawPose(ctx, pose, fr, w, h, { alpha = 1, bg = null } = {}) {
   ctx.restore();
 }
 
-export default function BurstVideo({ src, poseUrl, videoRef, width = 320, height, onError }) {
-  const overlayRef = useRef(null);   // canvas over the video
-  const plainRef = useRef(null);     // canvas on white
+export default function BurstVideo({ src, poseUrl, videoRef, width = 320, height, onError, clipStart, traceFps }) {
+  const overlayRef = useRef(null);
+  const plainRef = useRef(null);
   const [pose, setPose] = useState(null);
+  const [videoReady, setVideoReady] = useState(false);
   const [showOverlay, setShowOverlay] = useState(false);
-  // keep the toggle readable inside the rVFC closure without re-subscribing
   const showRef = useRef(showOverlay);
   useEffect(() => { showRef.current = showOverlay; }, [showOverlay]);
 
+  // fetch the burst-level pose whenever the burst changes
   useEffect(() => {
     if (!poseUrl) { setPose(null); return; }
     let cancelled = false;
@@ -46,13 +47,39 @@ export default function BurstVideo({ src, poseUrl, videoRef, width = 320, height
     return () => { cancelled = true; };
   }, [poseUrl]);
 
+  // when the video src changes, hold playback until metadata is loaded
+  useEffect(() => {
+    const vid = videoRef.current;
+    if (!vid) return;
+    setVideoReady(false);
+    const onReady = () => {
+      vid.pause();
+      vid.currentTime = 0;
+      setVideoReady(true);
+    };
+    vid.addEventListener('loadedmetadata', onReady, { once: true });
+    return () => vid.removeEventListener('loadedmetadata', onReady);
+  }, [src, videoRef]);
+
+  // only start playback once BOTH the video is ready AND the pose is loaded, so the
+  // frame callback is subscribed before any frames are presented
+  useEffect(() => {
+    const vid = videoRef.current;
+    if (videoReady && pose && vid) {
+      vid.play().catch(() => {});
+    }
+  }, [videoReady, pose]);
+
+  // drive the pose overlay from the video's presented frames
   useEffect(() => {
     const vid = videoRef.current;
     if (!vid || !pose || !vid.requestVideoFrameCallback) return;
     let handle;
     const tick = (now, meta) => {
       const vw = vid.videoWidth, vh = vid.videoHeight;
-      const k = Math.round(meta.mediaTime * pose.fps);
+      // global frame = clipStart + mediaTime * fps; pose is 0-indexed from its start_frame
+      const globalFrame = clipStart + meta.mediaTime * traceFps;
+      const k = Math.round(globalFrame - pose.start_frame);
       const fr = pose.frames[k];
 
       const oc = overlayRef.current;
@@ -71,13 +98,13 @@ export default function BurstVideo({ src, poseUrl, videoRef, width = 320, height
     };
     handle = vid.requestVideoFrameCallback(tick);
     return () => vid.cancelVideoFrameCallback?.(handle);
-  }, [pose, videoRef]);
+  }, [pose, videoRef, clipStart, traceFps]);
 
   return (
-        <>
-      {/* panel 1 */}
+    <>
+      {/* panel 1: video + pose overlay */}
       <div style={{ position: 'relative', width, height, flexShrink: 0 }}>
-        <video ref={videoRef} src={src} controls loop muted autoPlay playsInline
+        <video ref={videoRef} src={src} controls loop muted playsInline
                style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block' }}
                onError={onError} />
         <canvas ref={overlayRef}
@@ -90,13 +117,12 @@ export default function BurstVideo({ src, poseUrl, videoRef, width = 320, height
         </label>
       </div>
 
-      {/* panel 2 */}
+      {/* panel 2: pose on white */}
       <div style={{ width, height, flexShrink: 0 }}>
         <canvas ref={plainRef}
                 style={{ width: '100%', height: '100%', display: 'block',
                          border: '1px solid #ddd', objectFit: 'contain' }} />
       </div>
     </>
-    
   );
 }

@@ -1,13 +1,13 @@
 // PEValidator.js  —  drop next to App.js
 //
 // A second tab for the FlyHostel viewer: shows each burst's trace PNG + pose-overlay
-// clip, and a pe / not_pe / unsure control per bout. Matches App.js conventions:
+// clip, and a pe / feed / groom / walk / merge / unsure control per bout. Matches App.js conventions:
 // axios, BACKEND_SERVER/BACKEND_PORT from constants, experiment held server-side.
 //
 // Wire-up (see chat): import it in App.js, add a <Tab id="pe_validator">, and render
 // <PEValidator identity={...} /> when activeTab === 'pe_validator'.
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import axios from 'axios';
 import { BACKEND_SERVER, BACKEND_PORT } from './constants';
 import { useRef } from 'react';
@@ -38,11 +38,12 @@ export default function PEValidator({ fly, active }) {
 
 
     
-  const OPTIONS = ['pe', 'feed', 'groom', 'other', 'merge', 'unsure'];
+  const OPTIONS = ['pe', 'feed', 'groom', 'walk', 'other', 'merge', 'unsure'];
     const VERDICT_STYLE = {
       pe:     { on: '#2ca02c' },
       feed:   { on: '#d62728' },
       groom:  { on: '#e377c2' },
+      walk:  { on: '#ff0000' },
       other:  { on: '#7f7f7f' },
       merge:  { on: '#1f77b4' },
       unsure: { on: '#ff7f0e' },
@@ -53,6 +54,7 @@ export default function PEValidator({ fly, active }) {
       label === 'pe'    ? 'pe' :
       label === 'feed'  ? 'feed' :
       label === 'groom' ? 'groom' :
+      label === 'walk' ? 'walk' :
       'other';
   
     // human annotation if any; else the pipeline's own guess for non-PE bouts
@@ -119,17 +121,10 @@ export default function PEValidator({ fly, active }) {
     const target = Math.max(0, videoTime);
 
     const doSeek = () => {
-          console.log('seek', { target, dur: vid.duration,
-                            traceStart: trace.start_frame,
-                            clipStart: burstBouts[0]?.clip_start,
-                            tSec });
-
       const dur = Number.isFinite(vid.duration) ? vid.duration : Infinity;
       vid.currentTime = Math.min(target, Math.max(0, dur - 1e-3));
       if (vid.paused) vid.play().catch(() => {});   // resume if a seek paused it
     };
-    console.log(vid.readyState);
-    console.log(vid.duration);
 
     if (vid.readyState >= 1) doSeek();
     else vid.addEventListener('loadedmetadata', doSeek, { once: true });
@@ -155,9 +150,33 @@ export default function PEValidator({ fly, active }) {
 
   useEffect(() => { setSelectedBoutIdx(0); }, [burstId]);
 
-  
+  // index of the next burst (after `fromIdx`) that still has at least one bout with no
+  // saved verdict; -1 if none remain. Pipeline defaults don't count as labelled — only
+  // an entry in `verdicts` does.
+  const findNextUnlabeledBurst = useCallback((fromIdx) => {
+    for (let i = fromIdx + 1; i < burstIds.length; i++) {
+      const bid = burstIds[i];
+      const hasUnlabeled = bouts.some(
+        b => b.burst_id === bid && verdicts[`${b.start_fn}-${b.end_fn}`] == null
+      );
+      if (hasUnlabeled) return i;
+    }
+    return -1;
+  }, [burstIds, bouts, verdicts]);
+
+  const gotoNextUnlabeled = useCallback(() => {
+    const next = findNextUnlabeledBurst(burstIdx);
+    if (next === -1) {
+      setError('no later burst has an unlabeled bout');
+    } else {
+      setBurstIdx(next);
+      setError(null);
+    }
+  }, [findNextUnlabeledBurst, burstIdx]);
+
   const stateRef = useRef({});
-  stateRef.current = { active, burstBouts, burstIds, selectedBoutIdx, verdicts, setVerdict };
+  stateRef.current = { active, burstBouts, burstIds, selectedBoutIdx, verdicts,
+                       setVerdict, gotoNextUnlabeled };
 
   useEffect(() => {
     const onKey = (e) => {
@@ -174,7 +193,11 @@ export default function PEValidator({ fly, active }) {
                                          s.burstBouts.length - 1));
         return;
       }
-      const map = { '1': 'pe', '2': 'feed', '3': 'groom', '4': 'other', '5': 'merge', '6': 'unsure'};
+      if (e.key === 'n' || e.key === 'N') {
+        s.gotoNextUnlabeled?.();
+        return;
+      }
+      const map = { '1': 'pe', '2': 'feed', '3': 'groom', '4': 'walk', '5': 'other', '6': 'merge', '7': 'unsure'};
       if (map[e.key] && s.burstBouts.length) {
         const target = s.burstBouts[s.selectedBoutIdx];
         if (target) s.setVerdict(target, map[e.key]);   // only PE
@@ -278,6 +301,13 @@ export default function PEValidator({ fly, active }) {
       seekToGlobalFrame(b.start_fn - oneSec);
     }, [selectedBoutIdx, trace, burstBouts, seekToGlobalFrame]);
 
+  // clip_start for the current burst; recomputed whenever the burst or trace changes so
+  // BurstVideo always aligns pose frames against the CURRENT burst, not a stale one.
+  const clipStart = useMemo(
+    () => burstBouts[0]?.clip_start ?? trace?.start_frame,
+    [burstBouts, trace]
+  );
+
   if (loading) return <div style={{ padding: 12 }}>Loading bouts…</div>;
   if (error)   return <div style={{ padding: 12, color: '#d62728' }}>{error}</div>;
   if (!bouts.length) {
@@ -290,12 +320,11 @@ export default function PEValidator({ fly, active }) {
 
   const nReviewed = Object.keys(verdicts).length;
   const selectedBout = burstBouts[selectedBoutIdx];
-  // const stem = burstBouts[0]?.media_stem;   // changes with the bout
   const traceStem = burstBouts[0]?.trace_stem; // same for all bouts in the burst
   const tracePng = traceStem && `${API}/media/plots/${traceStem}.png`;
   const burstClip = traceStem && `${API}/media/videos/${traceStem}.mp4`;
-  const boutPose = selectedBout?.media_stem &&
-    `${API}/media/videos/${selectedBout.media_stem}.pose.json`;
+  // burst-level pose: one file per burst, aligned to the burst clip. Covers every bout.
+  const burstPose = traceStem && `${API}/media/videos/${traceStem}.pose.json`;
   
 
   if (!fly)    return <div style={{ padding: 12 }}>Select a fly…</div>;
@@ -306,7 +335,8 @@ export default function PEValidator({ fly, active }) {
   );
 
   return (
-    <div style={{ maxWidth: 900, padding: '0 12px' }}>
+    <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start', padding: '0 12px' }}>
+    <div style={{ flex: 1, minWidth: 0, maxWidth: 1200 }}>
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <button disabled={burstIdx === 0} onClick={() => setBurstIdx(i => i - 1)}>← prev</button>
         <span style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
@@ -328,30 +358,63 @@ export default function PEValidator({ fly, active }) {
             style={{ width: 70, padding: '2px 6px' }}
           />
         </span>
-        <button disabled={burstIdx >= burstIds.length - 1} onClick={() => setBurstIdx(i => i + 1)}>next →</button>
+        <span style={{ display: 'flex', gap: 6 }}>
+          <button disabled={burstIdx >= burstIds.length - 1} onClick={() => setBurstIdx(i => i + 1)}>next →</button>
+          <button onClick={gotoNextUnlabeled}
+                  title="jump to the next burst that still has an unlabeled bout (n)">
+            next unlabeled ⏭
+          </button>
+        </span>
       </div>
 
       {(() => {
-        const PANEL_H = 280;         // one height for all three
-        const PANEL_W = 280;         // square video panels
+        const PANEL_H = 280;
+        const PANEL_W = 280;
+
         return (
-          <div style={{ display: 'flex', gap: 12, marginTop: 8, alignItems: 'stretch',
-                        height: PANEL_H }}>
-            <BurstVideo
-              src={burstClip}
-              poseUrl={boutPose}
-              videoRef={videoRef}
-              width={PANEL_W}
-              height={PANEL_H}
-              onError={e => { e.target.style.display = 'none'; }}
-            />
-            <div style={{ flex: 1, minWidth: 0, height: '100%' }}>
-              {trace && <BurstTrace trace={trace} playT={playT}
-                                    onScrub={seekToTraceTime} scrubbingRef={scrubbingRef} />}
+            <div
+              style={{
+                display: 'flex',
+                gap: 12,
+                marginTop: 8,
+                alignItems: 'stretch',
+                height: PANEL_H,
+              }}
+            >
+              <BurstVideo
+                src={burstClip}
+                poseUrl={burstPose}
+                videoRef={videoRef}
+                clipStart={clipStart}
+                traceFps={trace?.fps}
+                width={PANEL_W}
+                height={PANEL_H}
+                onError={e => {
+                  e.target.style.display = 'none';
+                }}
+              />
+
+              <div
+                style={{
+                  flex: 1,
+                  minWidth: 0,
+                  height: '100%',
+                }}
+              >
+                {trace && (
+                  <BurstTrace
+                    trace={trace}
+                    playT={playT}
+                    onScrub={seekToTraceTime}
+                    scrubbingRef={scrubbingRef}
+                  />
+                )}
+              </div>
             </div>
-          </div>
         );
       })()}
+
+
       <div
         style={{
           marginTop: 12,
@@ -366,6 +429,10 @@ export default function PEValidator({ fly, active }) {
             borderCollapse: 'collapse',
           }}
         >
+      <caption style={{ captionSide: 'top', textAlign: 'left', padding: '4px 6px',
+                        fontSize: '0.85em', color: '#555' }}>
+        fly: <b>{fly}</b>
+      </caption>
       <thead>
       <tr style={{ textAlign: 'left', borderBottom: '1px solid #ccc' }}>
         <th style={{ position: 'sticky', top: 0, background: 'white' }}>bout</th>
@@ -460,7 +527,38 @@ export default function PEValidator({ fly, active }) {
       </div>
 
       <div style={{ marginTop: 8, fontSize: '0.8em', color: '#777' }}>
-        keys: <b>1</b>=pe <b>2</b>=feed <b>3</b>=groom <b>4</b>=other <b>5</b>=merge <b>6</b>=unsure · <b>←/→</b> bursts  <b>↑/↓</b> bouts
+        keys: <b>1</b>=pe <b>2</b>=feed <b>3</b>=groom <b>4</b>=walk <b>5</b>=other <b>6</b>=merge <b>7</b>=unsure · <b>←/→</b> bursts  <b>↑/↓</b> bouts  <b>n</b>=next unlabeled
+      </div>
+    </div>
+
+      {/* RIGHT: debug console, alongside all the info */}
+      <div
+        style={{
+          width: 320,
+          flexShrink: 0,
+          marginTop: 8,
+          background: '#111',
+          color: '#0f0',
+          fontFamily: 'monospace',
+          fontSize: 12,
+          padding: 8,
+          border: '1px solid #555',
+          whiteSpace: 'pre-wrap',
+          wordBreak: 'break-all',
+        }}
+      >
+        <div><b>Current media</b></div>
+
+        <div>Video: {burstClip || "(none)"}</div>
+        <div>Pose: {burstPose || "(none)"}</div>
+        <div>Trace PNG: {tracePng || "(none)"}</div>
+
+        <br />
+
+        <div>burst_id: {burstId}</div>
+        <div>bout_uid: {selectedBout?.bout_uid}</div>
+        <div>media_stem: {selectedBout?.media_stem}</div>
+        <div>trace_stem: {traceStem}</div>
       </div>
     </div>
   );
