@@ -36,17 +36,15 @@ function drawPose(ctx, pose, fr, w, h, { alpha = 1, bg = null } = {}) {
   for (let i = 0; i < fr.pts.length; i++) {
     const p = fr.pts[i];
     if (!p) continue;
-
     if (i === pose.prob_idx) {
-      // proboscis: red, opacity = confidence, radius 1.5x while in a bout
       const c = fr.conf ? fr.conf[i] : null;
       const r = fr.in_bout ? NODE_R * IN_BOUT_SCALE : NODE_R;
-      ctx.globalAlpha = alpha * confToAlpha(c);   // combine panel alpha with conf opacity
+      ctx.globalAlpha = alpha * confToAlpha(c);
       ctx.fillStyle = PROB_RED;
       ctx.beginPath();
       ctx.arc(p[0], p[1], r, 0, 2 * Math.PI);
       ctx.fill();
-      ctx.globalAlpha = alpha;                    // restore panel alpha for the rest
+      ctx.globalAlpha = alpha;
     } else {
       ctx.fillStyle = '#00e5e5';
       ctx.beginPath();
@@ -58,15 +56,41 @@ function drawPose(ctx, pose, fr, w, h, { alpha = 1, bg = null } = {}) {
   ctx.restore();
 }
 
+// small centered message shown in place of a panel when the video can't be displayed
+function PanelMessage({ width, height, title, path }) {
+  return (
+    <div style={{
+      width, height, flexShrink: 0,
+      display: 'flex', flexDirection: 'column', justifyContent: 'center',
+      alignItems: 'center', textAlign: 'center', padding: 8, boxSizing: 'border-box',
+      border: '1px dashed #ccc', color: '#999', fontSize: 12, background: '#fafafa',
+    }}>
+      <div style={{ fontWeight: 'bold', marginBottom: 4 }}>{title}</div>
+      <div style={{ wordBreak: 'break-all', fontSize: 10, color: '#bbb' }}>{path}</div>
+    </div>
+  );
+}
+
 export default function BurstVideo({ src, poseUrl, videoRef, width = 320, height, onError, clipStart, traceFps }) {
   const overlayRef = useRef(null);
   const plainRef = useRef(null);
   const [pose, setPose] = useState(null);
   const [videoReady, setVideoReady] = useState(false);
   const [showOverlay, setShowOverlay] = useState(false);
+  const [videoError, setVideoError] = useState(null);   // null | 'notfound' | 'unreadable'
   const showRef = useRef(showOverlay);
   useEffect(() => { showRef.current = showOverlay; }, [showOverlay]);
 
+  // reset error/ready state whenever the clip source changes
+  useEffect(() => { setVideoError(null); setVideoReady(false); }, [src]);
+
+  // classify a video error: HEAD the URL to tell "missing" from "present-but-corrupt"
+  const classifyError = () => {
+    if (!src) { setVideoError('notfound'); return; }
+    fetch(src, { method: 'HEAD' })
+      .then(r => setVideoError(r.ok ? 'unreadable' : 'notfound'))
+      .catch(() => setVideoError('notfound'));   // can't reach -> treat as missing
+  };
 
   // fetch the burst-level pose whenever the burst changes
   useEffect(() => {
@@ -77,7 +101,6 @@ export default function BurstVideo({ src, poseUrl, videoRef, width = 320, height
       .catch(() => { if (!cancelled) setPose(null); });
     return () => { cancelled = true; };
   }, [poseUrl]);
-
 
   // when the video src changes, hold playback until metadata is loaded
   useEffect(() => {
@@ -93,14 +116,13 @@ export default function BurstVideo({ src, poseUrl, videoRef, width = 320, height
     return () => vid.removeEventListener('loadedmetadata', onReady);
   }, [src, videoRef]);
 
-  // only start playback once BOTH the video is ready AND the pose is loaded, so the
-  // frame callback is subscribed before any frames are presented
+  // only start playback once BOTH the video is ready AND the pose is loaded
   useEffect(() => {
     const vid = videoRef.current;
-    if (videoReady && pose && vid) {
+    if (videoReady && pose && vid && !videoError) {
       vid.play().catch(() => {});
     }
-  }, [videoReady, pose]);
+  }, [videoReady, pose, videoError]);
 
   // drive the pose overlay from the video's presented frames
   useEffect(() => {
@@ -109,7 +131,6 @@ export default function BurstVideo({ src, poseUrl, videoRef, width = 320, height
     let handle;
     const tick = (now, meta) => {
       const vw = vid.videoWidth, vh = vid.videoHeight;
-      // global frame = clipStart + mediaTime * fps; pose is 0-indexed from its start_frame
       const globalFrame = clipStart + meta.mediaTime * traceFps;
       const k = Math.round(globalFrame - pose.start_frame);
       const fr = pose.frames[k];
@@ -132,29 +153,45 @@ export default function BurstVideo({ src, poseUrl, videoRef, width = 320, height
     return () => vid.cancelVideoFrameCallback?.(handle);
   }, [pose, videoRef, clipStart, traceFps]);
 
+  const msg = videoError === 'notfound'
+    ? { title: 'video not found', path: src }
+    : videoError === 'unreadable'
+      ? { title: 'video is unreadable', path: src }
+      : null;
+
   return (
     <>
-      {/* panel 1: video + pose overlay */}
-      <div style={{ position: 'relative', width, height, flexShrink: 0 }}>
-        <video ref={videoRef} src={src} controls loop muted playsInline
-               style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block' }}
-               onError={onError} />
-        <canvas ref={overlayRef}
-                style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%',
-                         pointerEvents: 'none' }} />
-        <label style={{ position: 'absolute', top: 4, left: 4, fontSize: 11,
-                        background: 'rgba(255,255,255,0.8)', padding: '1px 4px', borderRadius: 3 }}>
-          <input type="checkbox" checked={showOverlay}
-                 onChange={e => setShowOverlay(e.target.checked)} /> pose
-        </label>
-      </div>
+      {/* panel 1: video + pose overlay, OR a message if the clip can't be shown */}
+      {msg ? (
+        <PanelMessage width={width} height={height} title={msg.title} path={msg.path} />
+      ) : (
+        <div style={{ position: 'relative', width, height, flexShrink: 0 }}>
+          <video ref={videoRef} src={src} controls loop muted playsInline
+                 style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block' }}
+                 onError={(e) => { classifyError(); onError?.(e); }} />
+          <canvas ref={overlayRef}
+                  style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%',
+                           pointerEvents: 'none' }} />
+          <label style={{ position: 'absolute', top: 4, left: 4, fontSize: 11,
+                          background: 'rgba(255,255,255,0.8)', padding: '1px 4px', borderRadius: 3 }}>
+            <input type="checkbox" checked={showOverlay}
+                   onChange={e => setShowOverlay(e.target.checked)} /> pose
+          </label>
+        </div>
+      )}
 
-      {/* panel 2: pose on white */}
-      <div style={{ width, height, flexShrink: 0 }}>
-        <canvas ref={plainRef}
-                style={{ width: '100%', height: '100%', display: 'block',
-                         border: '1px solid #ddd', objectFit: 'contain' }} />
-      </div>
+      {/* panel 2: pose on white — needs presented video frames, so it also shows the
+          message when the video failed (no frames -> nothing would be drawn). */}
+      {msg ? (
+        <PanelMessage width={width} height={height}
+                      title="pose needs the video" path={msg.path} />
+      ) : (
+        <div style={{ width, height, flexShrink: 0 }}>
+          <canvas ref={plainRef}
+                  style={{ width: '100%', height: '100%', display: 'block',
+                           border: '1px solid #ddd', objectFit: 'contain' }} />
+        </div>
+      )}
     </>
   );
 }
