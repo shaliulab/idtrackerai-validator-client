@@ -48,7 +48,7 @@ function App() {
   const [recordingFramerate, setRecordingFramerate] = useState(null);
   const [flies, setFlies] = useState([]);
   const [selectedFly, setSelectedFly] = useState(null);
-  const [showPose, setShowPose] = useState(true);   // controls BOTH request + draw
+  const [showPose, setShowPose] = useState(false);   // controls BOTH request + draw
 
   // Native frame dimensions. Detected from the first decoded image
   // (or from a backend endpoint if you add one).
