@@ -1,7 +1,7 @@
 // PEValidator.js  —  drop next to App.js
 //
 // A second tab for the FlyHostel viewer: shows each burst's trace PNG + pose-overlay
-// clip, and a pe / feed / groom / walk / merge / unsure control per bout. Matches App.js conventions:
+// clip, and a pe / not_pe / unsure control per bout. Matches App.js conventions:
 // axios, BACKEND_SERVER/BACKEND_PORT from constants, experiment held server-side.
 //
 // Wire-up (see chat): import it in App.js, add a <Tab id="pe_validator">, and render
@@ -43,7 +43,7 @@ export default function PEValidator({ fly, active }) {
       pe:     { on: '#2ca02c' },
       feed:   { on: '#d62728' },
       groom:  { on: '#e377c2' },
-      walk:  { on: '#ff0000' },
+      walk:   { on: '#9467bd' },
       other:  { on: '#7f7f7f' },
       merge:  { on: '#1f77b4' },
       unsure: { on: '#ff7f0e' },
@@ -54,7 +54,7 @@ export default function PEValidator({ fly, active }) {
       label === 'pe'    ? 'pe' :
       label === 'feed'  ? 'feed' :
       label === 'groom' ? 'groom' :
-      label === 'walk' ? 'walk' :
+      label === 'walk'  ? 'walk' :
       'other';
   
     // human annotation if any; else the pipeline's own guess for non-PE bouts
@@ -86,8 +86,39 @@ export default function PEValidator({ fly, active }) {
 
   useEffect(() => { load(); }, [load]);
 
-  // distinct bursts, in the order the (score-sorted) bouts arrived
-  const burstIds = [...new Set(bouts.map(b => b.burst_id))];
+  // per-burst score for ordering: prefer a burst-level score if the backend supplies
+  // one (burst_pe_score); otherwise fall back to the mean of the bouts' pe_score.
+  const burstScore = useMemo(() => {
+    const agg = {};
+    for (const b of bouts) {
+      const g = (agg[b.burst_id] ??= { burst: null, sum: 0, n: 0 });
+      if (b.burst_pe_score != null) g.burst = b.burst_pe_score;
+      if (b.pe_score != null) { g.sum += b.pe_score; g.n += 1; }
+    }
+    const out = {};
+    for (const [bid, g] of Object.entries(agg)) {
+      out[bid] = g.burst != null ? g.burst : (g.n ? g.sum / g.n : Infinity);
+    }
+    return out;
+  }, [bouts]);
+
+  // best (max) single-bout pe_score in each burst
+  const burstBest = useMemo(() => {
+    const out = {};
+    for (const b of bouts) {
+      if (b.pe_score == null) continue;
+      if (out[b.burst_id] == null || b.pe_score > out[b.burst_id]) out[b.burst_id] = b.pe_score;
+    }
+    return out;
+  }, [bouts]);
+
+  // bursts sorted by that score, high first. missing scores sink to the bottom.
+  // swap a/b in the comparator for low-first.
+  const burstIds = useMemo(() => {
+    const ids = [...new Set(bouts.map(b => b.burst_id))];
+    return ids.sort((a, b) => (burstScore[b] ?? -Infinity) - (burstScore[a] ?? -Infinity));
+  }, [bouts, burstScore]);
+
   const burstId = burstIds[burstIdx];
   const burstBouts = bouts
     .filter(b => b.burst_id === burstId)
@@ -340,7 +371,7 @@ export default function PEValidator({ fly, active }) {
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <button disabled={burstIdx === 0} onClick={() => setBurstIdx(i => i - 1)}>← prev</button>
         <span style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-          burst {burstId} · {burstIdx + 1}/{burstIds.length} · reviewed bouts {nReviewed}/{bouts.length}
+          burst {burstId} · score {burstScore[burstId]?.toFixed(2) ?? '—'} · best {burstBest[burstId]?.toFixed(2) ?? '—'} · {burstIdx + 1}/{burstIds.length} · reviewed bouts {nReviewed}/{bouts.length}
           <input
             type="number"
             min={1}
