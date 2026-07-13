@@ -27,6 +27,7 @@ function BurstTrace({ trace, playT, onScrub, scrubbingRef }) {
   const xmax = Math.max(10, ...ts);
   const ys = trace.points.map(p => p.dist).filter(v => v != null);
   const ymax = Math.max(0.01, ...ys);
+  const ymin = Math.min(0, ...ys);        // usually 0 since dist is min-subtracted
 
 
   const { W, H } = size;
@@ -82,6 +83,12 @@ function BurstTrace({ trace, playT, onScrub, scrubbingRef }) {
       {/* axes */}
       <line x1={m.l} y1={m.t} x2={m.l} y2={m.t + ih} stroke="#999" />
       <line x1={m.l} y1={m.t + ih} x2={m.l + iw} y2={m.t + ih} stroke="#999" />
+      {/* y-axis min/max labels */}
+          <text x={m.l - 4} y={Y(ymin)} textAnchor="end" dominantBaseline="middle"
+                fontSize="9" fill="#666">{ymin.toFixed(2)}</text>
+          <text x={m.l - 4} y={Y(ymax)} textAnchor="end" dominantBaseline="middle"
+                fontSize="9" fill="#666">{ymax.toFixed(2)}</text>
+                
       <text x={m.l + iw / 2} y={H - 4} textAnchor="middle" fontSize="11">time within burst (s)</text>
       <text x={12} y={m.t + ih / 2} textAnchor="middle" fontSize="11"
             transform={`rotate(-90 12 ${m.t + ih / 2})`}>Δ head–proboscis (mm)</text>

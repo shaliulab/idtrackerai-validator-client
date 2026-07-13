@@ -13,6 +13,7 @@ import { BACKEND_SERVER, BACKEND_PORT } from './constants';
 import { useRef } from 'react';
 import BurstTrace from './BurstTrace';
 import BurstVideo from './BurstVideo';
+import ConfidenceTrace from './ConfidenceTrace';
 
 const API = `http://${BACKEND_SERVER}:${BACKEND_PORT}/api/pe`;
 
@@ -401,47 +402,32 @@ export default function PEValidator({ fly, active }) {
       {(() => {
         const PANEL_H = 280;
         const PANEL_W = 280;
-
         return (
-            <div
-              style={{
-                display: 'flex',
-                gap: 12,
-                marginTop: 8,
-                alignItems: 'stretch',
-                height: PANEL_H,
-              }}
-            >
-              <BurstVideo
-                src={burstClip}
-                poseUrl={burstPose}
-                videoRef={videoRef}
-                clipStart={clipStart}
-                traceFps={trace?.fps}
-                width={PANEL_W}
-                height={PANEL_H}
-                onError={e => {
-                  e.target.style.display = 'none';
-                }}
-              />
-
-              <div
-                style={{
-                  flex: 1,
-                  minWidth: 0,
-                  height: '100%',
-                }}
-              >
-                {trace && (
-                  <BurstTrace
-                    trace={trace}
-                    playT={playT}
-                    onScrub={seekToTraceTime}
-                    scrubbingRef={scrubbingRef}
-                  />
-                )}
+          <div style={{ display: 'flex', gap: 12, marginTop: 8, alignItems: 'stretch',
+                        height: PANEL_H }}>
+            <BurstVideo
+              src={burstClip}
+              poseUrl={burstPose}
+              videoRef={videoRef}
+              width={PANEL_W}
+              height={PANEL_H}
+              clipStart={clipStart}
+              traceFps={trace?.fps}
+              onError={e => { e.target.style.display = 'none'; }}
+            />
+            {/* right side: distance trace (top) + confidence trace (bottom) */}
+            <div style={{ flex: 1, minWidth: 0, height: '100%',
+                          display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <div style={{ flex: 1, minHeight: 0 }}>
+                {trace && <BurstTrace trace={trace} playT={playT}
+                                      onScrub={seekToTraceTime} scrubbingRef={scrubbingRef} />}
+              </div>
+              <div style={{ flex: 1, minHeight: 0 }}>
+                {trace && <ConfidenceTrace trace={trace} playT={playT}
+                                           onScrub={seekToTraceTime} scrubbingRef={scrubbingRef} />}
               </div>
             </div>
+          </div>
         );
       })()}
 
