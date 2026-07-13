@@ -4,6 +4,16 @@ import React, { useRef, useEffect, useState } from 'react';
 const POSE_ALPHA = 0.55;
 const NODE_R = 1.8;
 
+// fetch the burst-level pose whenever the burst changes
+useEffect(() => {
+  if (!poseUrl) { setPose(null); return; }
+  let cancelled = false;
+  fetch(poseUrl).then(r => (r.ok ? r.json() : null))
+    .then(p => { if (!cancelled) setPose(p); })
+    .catch(() => { if (!cancelled) setPose(null); });
+  return () => { cancelled = true; };
+}, [poseUrl]);
+
 // draw one pose frame onto a 2d context. `bg` = optional white fill (plain panel).
 function drawPose(ctx, pose, fr, w, h, { alpha = 1, bg = null } = {}) {
   ctx.clearRect(0, 0, w, h);
