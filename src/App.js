@@ -48,6 +48,7 @@ function App() {
   const [recordingFramerate, setRecordingFramerate] = useState(null);
   const [flies, setFlies] = useState([]);
   const [selectedFly, setSelectedFly] = useState(null);
+  const [showPose, setShowPose] = useState(true);   // controls BOTH request + draw
 
   // Native frame dimensions. Detected from the first decoded image
   // (or from a backend endpoint if you add one).
@@ -174,7 +175,7 @@ function App() {
     try {
       const n = parseInt(fn, 10);
       const frameUrl = `http://${BACKEND_SERVER}:${BACKEND_PORT}/api/frame/${n}`;
-      const trackingUrl = `http://${BACKEND_SERVER}:${BACKEND_PORT}/api/tracking/${n}`;
+      const trackingUrl = `http://${BACKEND_SERVER}:${BACKEND_PORT}/api/tracking/${n}?pose=${showPose ? 1 : 0}`;
       const preprocessUrl = `http://${BACKEND_SERVER}:${BACKEND_PORT}/api/preprocess/${n}`;
 
       const [frameResponse, trackingResponse, preprocessResponse] = await Promise.all([
@@ -194,7 +195,7 @@ function App() {
     }
   };
 
-  useEffect(() => { fetchFrame(frameNumber); }, [frameNumber]);
+  useEffect(() => { fetchFrame(frameNumber); }, [frameNumber, showPose]);
 
   useEffect(() => {
     if (!isPlaying || !videoFrameRate) return;
@@ -240,6 +241,9 @@ function App() {
               displayWidth={FRAME_SIZE}
               displayHeight={FRAME_SIZE}
               nativeSize={nativeSize}
+              showPose={showPose}          // ← controlled
+              setShowPose={setShowPose}     // ← controlled
+
             />
           </div>
 

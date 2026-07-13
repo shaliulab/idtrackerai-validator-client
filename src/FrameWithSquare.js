@@ -52,6 +52,8 @@ const FrameWithSquare = React.forwardRef(
       displayWidth = 1000,
       displayHeight = 1000,
       nativeSize,
+      showPose, setShowPose
+
     },
     ref,
   ) => {
@@ -59,7 +61,6 @@ const FrameWithSquare = React.forwardRef(
     const imgRef = useRef();
     const [clickPairs, setClickPairs] = useState([]);
     const [hoverPos, setHoverPos] = useState(null);
-    const [showPose, setShowPose] = useState(true);
 
     const sx = nativeSize ? displayWidth / nativeSize.width : 1;
     const sy = nativeSize ? displayHeight / nativeSize.height : 1;
