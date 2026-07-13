@@ -3,16 +3,18 @@ import React, { useRef, useEffect, useState } from 'react';
 
 const POSE_ALPHA = 0.55;
 const NODE_R = 1.8;
+const IN_BOUT_SCALE = 1.5;   // proboscis node radius multiplier while the frame is in a bout
 
-// fetch the burst-level pose whenever the burst changes
-useEffect(() => {
-  if (!poseUrl) { setPose(null); return; }
-  let cancelled = false;
-  fetch(poseUrl).then(r => (r.ok ? r.json() : null))
-    .then(p => { if (!cancelled) setPose(p); })
-    .catch(() => { if (!cancelled) setPose(null); });
-  return () => { cancelled = true; };
-}, [poseUrl]);
+// Confidence -> opacity of a fully-saturated red proboscis dot.
+//   c >= 1.0  -> fully opaque (as red as possible)
+//   0 < c < 1 -> that fraction of red (linear); c -> 0 fades to invisible
+//   c == 0    -> invisible
+//   c == null (unknown) -> a faint fallback so the node isn't lost entirely
+const PROB_RED = '#ff0000';
+const confToAlpha = (c) => {
+  if (c == null) return 0.35;                 // unknown confidence -> faint
+  return Math.max(0, Math.min(1, c));         // clamp: >=1 opaque, <=0 invisible
+};
 
 // draw one pose frame onto a 2d context. `bg` = optional white fill (plain panel).
 function drawPose(ctx, pose, fr, w, h, { alpha = 1, bg = null } = {}) {
@@ -21,20 +23,38 @@ function drawPose(ctx, pose, fr, w, h, { alpha = 1, bg = null } = {}) {
   if (!fr || !fr.pts) return;
   ctx.save();
   ctx.globalAlpha = alpha;
+
+  // edges
   ctx.strokeStyle = '#00c8c8';
   ctx.lineWidth = 1;
   for (const [a, b] of pose.edges) {
     const pa = fr.pts[a], pb = fr.pts[b];
     if (pa && pb) { ctx.beginPath(); ctx.moveTo(pa[0], pa[1]); ctx.lineTo(pb[0], pb[1]); ctx.stroke(); }
   }
+
+  // nodes
   for (let i = 0; i < fr.pts.length; i++) {
     const p = fr.pts[i];
     if (!p) continue;
-    ctx.beginPath();
-    ctx.arc(p[0], p[1], NODE_R, 0, 2 * Math.PI);
-    ctx.fillStyle = (i === pose.prob_idx) ? (fr.in_bout ? '#ff2d2d' : '#ff9d9d') : '#00e5e5';
-    ctx.fill();
+
+    if (i === pose.prob_idx) {
+      // proboscis: red, opacity = confidence, radius 1.5x while in a bout
+      const c = fr.conf ? fr.conf[i] : null;
+      const r = fr.in_bout ? NODE_R * IN_BOUT_SCALE : NODE_R;
+      ctx.globalAlpha = alpha * confToAlpha(c);   // combine panel alpha with conf opacity
+      ctx.fillStyle = PROB_RED;
+      ctx.beginPath();
+      ctx.arc(p[0], p[1], r, 0, 2 * Math.PI);
+      ctx.fill();
+      ctx.globalAlpha = alpha;                    // restore panel alpha for the rest
+    } else {
+      ctx.fillStyle = '#00e5e5';
+      ctx.beginPath();
+      ctx.arc(p[0], p[1], NODE_R, 0, 2 * Math.PI);
+      ctx.fill();
+    }
   }
+
   ctx.restore();
 }
 
@@ -47,6 +67,7 @@ export default function BurstVideo({ src, poseUrl, videoRef, width = 320, height
   const showRef = useRef(showOverlay);
   useEffect(() => { showRef.current = showOverlay; }, [showOverlay]);
 
+
   // fetch the burst-level pose whenever the burst changes
   useEffect(() => {
     if (!poseUrl) { setPose(null); return; }
@@ -56,6 +77,7 @@ export default function BurstVideo({ src, poseUrl, videoRef, width = 320, height
       .catch(() => { if (!cancelled) setPose(null); });
     return () => { cancelled = true; };
   }, [poseUrl]);
+
 
   // when the video src changes, hold playback until metadata is loaded
   useEffect(() => {
