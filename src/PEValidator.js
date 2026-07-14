@@ -36,7 +36,8 @@ export default function PEValidator({ fly, active }) {
   const [trace, setTrace] = useState(null);
   const [playT, setPlayT] = useState(null);      // current playhead time (s) in trace coords
   const videoRef = useRef(null);
-
+  const [jumpValue, setJumpValue] = useState('');
+  const [jumpBidValue, setJumpBidValue] = useState('');
 
     
   const OPTIONS = ['pe', 'feed', 'groom', 'walk', 'other', 'merge', 'unsure'];
@@ -127,8 +128,6 @@ export default function PEValidator({ fly, active }) {
 
     
 
-  const [jumpValue, setJumpValue] = useState('');
-
   const jumpToBurst = useCallback((oneBased) => {
     const idx = oneBased - 1;                          // display is 1-based (70/80)
     if (idx >= 0 && idx < burstIds.length) {
@@ -139,7 +138,12 @@ export default function PEValidator({ fly, active }) {
     }
   }, [burstIds.length]);
 
-
+    const jumpToBurstId = useCallback((bid) => {
+      const idx = burstIds.indexOf(bid);
+      if (idx === -1) { setError(`burst_id ${bid} not found`); return; }
+      setBurstIdx(idx);
+      setError(null);
+    }, [burstIds]);
 
 
   const keyOf = b => `${b.start_fn}-${b.end_fn}`;
@@ -186,6 +190,7 @@ export default function PEValidator({ fly, active }) {
   // saved verdict; -1 if none remain. Pipeline defaults don't count as labelled — only
   // an entry in `verdicts` does.
   const findNextUnlabeledBurst = useCallback((fromIdx) => {
+    console.log(burstIds);
     for (let i = fromIdx + 1; i < burstIds.length; i++) {
       const bid = burstIds[i];
       const hasUnlabeled = bouts.some(
@@ -373,6 +378,21 @@ export default function PEValidator({ fly, active }) {
         <button disabled={burstIdx === 0} onClick={() => setBurstIdx(i => i - 1)}>← prev</button>
         <span style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
           burst {burstId} · score {burstScore[burstId]?.toFixed(2) ?? '—'} · best {burstBest[burstId]?.toFixed(2) ?? '—'} · {burstIdx + 1}/{burstIds.length} · reviewed bouts {nReviewed}/{bouts.length}
+          <input
+            type="number"
+            value={jumpBidValue}
+            onChange={e => setJumpBidValue(e.target.value)}
+            onKeyDown={e => {
+              if (e.key === 'Enter') {
+                const bid = parseInt(jumpBidValue, 10);
+                if (Number.isInteger(bid)) jumpToBurstId(bid);
+              }
+              e.stopPropagation();          // keep digits out of the global 1-7 / arrow handler
+            }}
+            placeholder="burst_id"
+            style={{ width: 90, padding: '2px 6px' }}
+          />
+
           <input
             type="number"
             min={1}
