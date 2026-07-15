@@ -208,6 +208,25 @@ export default function PEValidator({ fly, active }) {
     }
   }, [fly, load]);
 
+  const clearVerdict = useCallback(async (b) => {
+    setVerdicts(v => {                       // optimistic remove
+      const next = { ...v };
+      delete next[keyOf(b)];
+      return next;
+    });
+    try {
+      await axios.post(`${API}/annotate`, {
+        fly,
+        start_frame: b.start_fn, end_frame: b.end_fn,
+        burst_id: b.burst_id, bout_uid: b.bout_uid,
+        pe_score: b.pe_score, verdict: null,   // null = delete the annotation
+      });
+    } catch (e) {
+      setError(`clear failed: ${e.message}`);
+      load();   // resync on failure
+    }
+  }, [fly, load]);
+
 
   useEffect(() => { setSelectedBoutIdx(0); }, [burstId]);
 
@@ -599,8 +618,12 @@ export default function PEValidator({ fly, active }) {
                           const isPipeline = opt === pipelineVerdict;          // pipeline's prediction (always marked)
                           const isUnconfirmedDefault = !userAnnotated && isPipeline;
                           return (
-                            <button key={opt} onClick={() => setVerdict(b, opt)}
-                              title={isPipeline
+                            <button key={opt} onClick={
+                              () => {
+                                const saved = verdicts[keyOf(b)];
+                                if (saved === opt) clearVerdict(b);   // click the pressed one -> unpress
+                                else setVerdict(b, opt);
+                            }} title={isPipeline
                                 ? `pipeline predicted: ${b.label}${b.label_reason ? ` (${b.label_reason})` : ''}`
                                 : undefined}
                               style={{
