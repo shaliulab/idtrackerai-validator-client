@@ -71,7 +71,11 @@ function PanelMessage({ width, height, title, path }) {
   );
 }
 
-export default function BurstVideo({ src, poseUrl, videoRef, width = 320, height, onError, clipStart, traceFps }) {
+
+export default function BurstVideo({ src, poseUrl, videoRef, width = 320, height,
+                                     onError, clipStart, traceFps,
+                                     overlayExportRef, plainExportRef }) {
+                                      
   const overlayRef = useRef(null);
   const plainRef = useRef(null);
   const [pose, setPose] = useState(null);
@@ -166,10 +170,10 @@ export default function BurstVideo({ src, poseUrl, videoRef, width = 320, height
         <PanelMessage width={width} height={height} title={msg.title} path={msg.path} />
       ) : (
         <div style={{ position: 'relative', width, height, flexShrink: 0 }}>
-          <video ref={videoRef} src={src} controls loop muted playsInline
+          <video ref={videoRef} src={src} controls loop muted playsInline crossOrigin="anonymous"
                  style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block' }}
                  onError={(e) => { classifyError(); onError?.(e); }} />
-          <canvas ref={overlayRef}
+          <canvas ref={(el) => { overlayRef.current = el; if (overlayExportRef) overlayExportRef.current = el; }}
                   style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%',
                            pointerEvents: 'none' }} />
           <label style={{ position: 'absolute', top: 4, left: 4, fontSize: 11,
@@ -187,7 +191,7 @@ export default function BurstVideo({ src, poseUrl, videoRef, width = 320, height
                       title="pose needs the video" path={msg.path} />
       ) : (
         <div style={{ width, height, flexShrink: 0 }}>
-          <canvas ref={plainRef}
+          <canvas ref={(el) => { plainRef.current = el; if (plainExportRef) plainExportRef.current = el; }}
                   style={{ width: '100%', height: '100%', display: 'block',
                            border: '1px solid #ddd', objectFit: 'contain' }} />
         </div>

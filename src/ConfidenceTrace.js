@@ -12,7 +12,7 @@ import { useRef, useState, useLayoutEffect } from 'react';
 
 const CONF_THRESH = 0.5;   // draw a reference line here (your pipeline's PROD_THRESH)
 
-function ConfidenceTrace({ trace, playT, onScrub, scrubbingRef }) {
+function ConfidenceTrace({ trace, playT, onScrub, scrubbingRef, svgExportRef }) {
   const wrapRef = useRef(null);
   const svgRef = useRef(null);
   const [size, setSize] = useState({ W: 560, H: 240 });
@@ -77,8 +77,8 @@ function ConfidenceTrace({ trace, playT, onScrub, scrubbingRef }) {
 
   return (
     <div ref={wrapRef} style={{ width: '100%', height: '100%' }}>
-      <svg ref={svgRef} viewBox={`0 0 ${W} ${H}`}
-           style={{ width: '100%', height: '100%', display: 'block',
+      <svg ref={(el) => { svgRef.current = el; if (svgExportRef) svgExportRef.current = el; }}
+       viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: '100%', display: 'block',
                     cursor: 'ew-resize', touchAction: 'none' }}
            onPointerDown={onDown} onPointerMove={onMove}
            onPointerUp={onUp} onPointerLeave={onUp}>

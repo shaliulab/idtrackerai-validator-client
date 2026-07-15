@@ -14,6 +14,7 @@ import { useRef } from 'react';
 import BurstTrace from './BurstTrace';
 import BurstVideo from './BurstVideo';
 import ConfidenceTrace from './ConfidenceTrace';
+import { recordBurst } from './recordBurst';
 
 const API = `http://${BACKEND_SERVER}:${BACKEND_PORT}/api/pe`;
 
@@ -38,6 +39,12 @@ export default function PEValidator({ fly, active }) {
   const videoRef = useRef(null);
   const [jumpValue, setJumpValue] = useState('');
   const [jumpBidValue, setJumpBidValue] = useState('');
+
+  const overlayCanvasRef = useRef(null);
+  const plainCanvasRef = useRef(null);
+  const distSvgRef = useRef(null);
+  const confSvgRef = useRef(null);
+  const [recording, setRecording] = useState(false);
 
     
   const OPTIONS = ['pe', 'feed', 'groom', 'walk', 'other', 'merge', 'unsure'];
@@ -128,6 +135,24 @@ export default function PEValidator({ fly, active }) {
 
     
 
+  const downloadBurstVideo = useCallback(async () => {
+    if (recording) return;
+    setRecording(true);
+    try {
+      await recordBurst({
+        videoEl:   videoRef.current,
+        overlayEl: overlayCanvasRef.current,
+        plainEl:   plainCanvasRef.current,
+        distSvgEl: distSvgRef.current,
+        confSvgEl: confSvgRef.current,
+      }, { filename: `${burstIds[burstIdx] != null ? `burst_${burstIds[burstIdx]}` : 'burst'}.webm`, fps: 30 });
+    } catch (e) {
+      setError(`recording failed: ${e.message}`);
+    } finally {
+      setRecording(false);
+    }
+  }, [recording, burstIds, burstIdx]);
+
   const jumpToBurst = useCallback((oneBased) => {
     const idx = oneBased - 1;                          // display is 1-based (70/80)
     if (idx >= 0 && idx < burstIds.length) {
@@ -201,6 +226,22 @@ export default function PEValidator({ fly, active }) {
     return -1;
   }, [burstIds, bouts, verdicts]);
 
+  // index of the next burst (after `fromIdx`) that still has at least one bout with no
+  // saved verdict; -1 if none remain. Pipeline defaults don't count as labelled — only
+  // an entry in `verdicts` does.
+  const findNextUnlabeledBurstPE = useCallback((fromIdx) => {
+    console.log(burstIds);
+    for (let i = fromIdx + 1; i < burstIds.length; i++) {
+      const bid = burstIds[i];
+      const hasUnlabeled = bouts.some(
+        b => b.burst_id === bid && b.label == "pe" && verdicts[`${b.start_fn}-${b.end_fn}`] == null
+      );
+      if (hasUnlabeled) return i;
+    }
+    return -1;
+  }, [burstIds, bouts, verdicts]);
+
+
   const gotoNextUnlabeled = useCallback(() => {
     const next = findNextUnlabeledBurst(burstIdx);
     if (next === -1) {
@@ -210,6 +251,17 @@ export default function PEValidator({ fly, active }) {
       setError(null);
     }
   }, [findNextUnlabeledBurst, burstIdx]);
+
+  const gotoNextUnlabeledPE = useCallback(() => {
+    const next = findNextUnlabeledBurstPE(burstIdx);
+    if (next === -1) {
+      setError('no later burst has an unlabeled bout');
+    } else {
+      setBurstIdx(next);
+      setError(null);
+    }
+  }, [findNextUnlabeledBurst, burstIdx]);
+
 
   const stateRef = useRef({});
   stateRef.current = { active, burstBouts, burstIds, selectedBoutIdx, verdicts,
@@ -416,6 +468,14 @@ export default function PEValidator({ fly, active }) {
                   title="jump to the next burst that still has an unlabeled bout (n)">
             next unlabeled ⏭
           </button>
+          <button onClick={gotoNextUnlabeledPE}
+                  title="jump to the next burst that still has an unlabeled PE bout (n)">
+            next unlabeled PE ⏭
+          </button>
+          <button onClick={downloadBurstVideo} disabled={recording}
+                    title="record this burst's visualization to a .webm">
+              {recording ? 'recording…' : '⤓ video'}
+            </button>
         </span>
       </div>
 
@@ -433,18 +493,21 @@ export default function PEValidator({ fly, active }) {
               height={PANEL_H}
               clipStart={clipStart}
               traceFps={trace?.fps}
+              overlayExportRef={overlayCanvasRef}
+              plainExportRef={plainCanvasRef}
               onError={e => { e.target.style.display = 'none'; }}
             />
-            {/* right side: distance trace (top) + confidence trace (bottom) */}
             <div style={{ flex: 1, minWidth: 0, height: '100%',
                           display: 'flex', flexDirection: 'column', gap: 8 }}>
               <div style={{ flex: 1, minHeight: 0 }}>
                 {trace && <BurstTrace trace={trace} playT={playT}
-                                      onScrub={seekToTraceTime} scrubbingRef={scrubbingRef} />}
+                                      onScrub={seekToTraceTime} scrubbingRef={scrubbingRef}
+                                      svgExportRef={distSvgRef} />}
               </div>
               <div style={{ flex: 1, minHeight: 0 }}>
                 {trace && <ConfidenceTrace trace={trace} playT={playT}
-                                           onScrub={seekToTraceTime} scrubbingRef={scrubbingRef} />}
+                                          onScrub={seekToTraceTime} scrubbingRef={scrubbingRef}
+                                          svgExportRef={confSvgRef} />}
               </div>
             </div>
           </div>
@@ -526,34 +589,46 @@ export default function PEValidator({ fly, active }) {
                 <td>{b.dur_s?.toFixed(2)}s</td>
                 <td>{b.pe_score?.toFixed(2)}</td>
                 <td>
-                  {OPTIONS.map(opt => {
+                  {(() => {
                     const userAnnotated = verdicts[keyOf(b)] != null;
-
-                    const chosen = effectiveVerdict(b) === opt;
-                    const isDefault =
-                      !userAnnotated &&
-                      opt === labelToVerdict(b.label);
+                    const pipelineVerdict = labelToVerdict(b.label);   // pipeline's mapped verdict
                     return (
-                      <button key={opt} onClick={() => setVerdict(b, opt)}
-                        title={isDefault ? `pipeline: ${b.label_reason || b.label}` : undefined}
-                        style={{
-                          marginRight: 4, padding: '2px 6px', cursor: 'pointer',
-                          border: chosen ? '2px solid #333' : '1px solid #bbb',
-                          borderRadius: 4,
-                          background: chosen
-                            ? (isDefault ? '#ffd54f' : VERDICT_STYLE[opt].on)
-                            : '#f4f4f4',
-
-                          color: chosen && !isDefault ? 'white' : '#333',
-
-                          fontWeight: chosen ? 'bold' : 'normal',
-
-                          fontStyle: isDefault ? 'italic' : 'normal',
-                        }}>
-                        {opt}
-                      </button>
+                      <>
+                        {OPTIONS.map(opt => {
+                          const chosen = effectiveVerdict(b) === opt;         // currently active
+                          const isPipeline = opt === pipelineVerdict;          // pipeline's prediction (always marked)
+                          const isUnconfirmedDefault = !userAnnotated && isPipeline;
+                          return (
+                            <button key={opt} onClick={() => setVerdict(b, opt)}
+                              title={isPipeline
+                                ? `pipeline predicted: ${b.label}${b.label_reason ? ` (${b.label_reason})` : ''}`
+                                : undefined}
+                              style={{
+                                position: 'relative',
+                                marginRight: 4, padding: '2px 6px', cursor: 'pointer',
+                                border: chosen ? '2px solid #333' : '1px solid #bbb',
+                                borderRadius: 4,
+                                background: chosen
+                                  ? (isUnconfirmedDefault ? '#ffd54f' : VERDICT_STYLE[opt].on)
+                                  : '#f4f4f4',
+                                color: chosen && !isUnconfirmedDefault ? 'white' : '#333',
+                                fontWeight: chosen ? 'bold' : 'normal',
+                                fontStyle: isUnconfirmedDefault ? 'italic' : 'normal',
+                                // pipeline-predicted button gets a persistent accent underline
+                                boxShadow: isPipeline ? 'inset 0 -3px 0 0 #111' : 'none',
+                              }}>
+                              {isPipeline ? '★ ' : ''}{opt}
+                            </button>
+                          );
+                        })}
+                        {/* the raw pipeline label, always visible even after annotation */}
+                        <span style={{ marginLeft: 6, fontSize: '0.78em', color: '#888',
+                                       whiteSpace: 'nowrap' }}>
+                          pred: <b>{b.label}</b>
+                        </span>
+                      </>
                     );
-                  })}
+                  })()}
                 </td>
 
               </tr>
@@ -562,9 +637,8 @@ export default function PEValidator({ fly, active }) {
         </tbody>
       </table>
       </div>
-
       <div style={{ marginTop: 8, fontSize: '0.8em', color: '#777' }}>
-        keys: <b>1</b>=pe <b>2</b>=feed <b>3</b>=groom <b>4</b>=walk <b>5</b>=other <b>6</b>=merge <b>7</b>=unsure · <b>←/→</b> bursts  <b>↑/↓</b> bouts  <b>n</b>=next unlabeled
+        keys: <b>1</b>=pe <b>2</b>=feed <b>3</b>=groom <b>4</b>=walk <b>5</b>=other <b>6</b>=merge <b>7</b>=unsure · <b>←/→</b> bursts  <b>↑/↓</b> bouts  <b>n</b>=next unlabeled · <b>★</b> = pipeline's prediction
       </div>
     </div>
 

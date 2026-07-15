@@ -1,6 +1,7 @@
 import { useRef, useState, useEffect, useLayoutEffect } from 'react';
 
-function BurstTrace({ trace, playT, onScrub, scrubbingRef }) {
+function BurstTrace({ trace, playT, onScrub, scrubbingRef, svgExportRef }) {
+
   const wrapRef = useRef(null);
   const svgRef = useRef(null);
   const [size, setSize] = useState({ W: 560, H: 240 });   // sane defaults pre-measure
@@ -74,8 +75,8 @@ function BurstTrace({ trace, playT, onScrub, scrubbingRef }) {
 
   return (
 <div ref={wrapRef} style={{ width: '100%', height: '100%' }}>
-      <svg ref={svgRef} viewBox={`0 0 ${W} ${H}`}
-           style={{ width: '100%', height: '100%', display: 'block',
+      <svg ref={(el) => { svgRef.current = el; if (svgExportRef) svgExportRef.current = el; }}
+        viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: '100%', display: 'block',
                     cursor: 'ew-resize', touchAction: 'none' }}
            onPointerDown={onDown} onPointerMove={onMove}
            onPointerUp={onUp} onPointerLeave={onUp}>
