@@ -134,24 +134,32 @@ export default function PEValidator({ fly, active }) {
     .sort((a, b) => a.bout_uid - b.bout_uid);
 
     
-
-  const downloadBurstVideo = useCallback(async () => {
+const downloadBurstVideo = useCallback(async () => {
     if (recording) return;
     setRecording(true);
     try {
+      const bid = burstIds[burstIdx];
+      // frame span of the whole burst: min start_fn .. max end_fn across its bouts
+      const inBurst = bouts.filter(b => b.burst_id === bid);
+      const startFn = inBurst.length ? Math.min(...inBurst.map(b => b.start_fn)) : null;
+      const endFn   = inBurst.length ? Math.max(...inBurst.map(b => b.end_fn))   : null;
+      const filename = (bid != null && startFn != null)
+        ? `${fly}_burst_${bid}_frame_${startFn}-${endFn}.webm`
+        : 'burst.webm';
+
       await recordBurst({
         videoEl:   videoRef.current,
         overlayEl: overlayCanvasRef.current,
         plainEl:   plainCanvasRef.current,
         distSvgEl: distSvgRef.current,
         confSvgEl: confSvgRef.current,
-      }, { filename: `${burstIds[burstIdx] != null ? `burst_${burstIds[burstIdx]}` : 'burst'}.webm`, fps: 30 });
+      }, { filename, fps: 30 });
     } catch (e) {
       setError(`recording failed: ${e.message}`);
     } finally {
       setRecording(false);
     }
-  }, [recording, burstIds, burstIdx]);
+  }, [recording, burstIds, burstIdx, bouts, fly]);
 
   const jumpToBurst = useCallback((oneBased) => {
     const idx = oneBased - 1;                          // display is 1-based (70/80)
