@@ -335,6 +335,20 @@ const downloadBurstVideo = useCallback(async () => {
     setPlayT(null);
   }, [fly, burstId]);
 
+// in the trace-fetch effect
+useEffect(() => {
+  if (burstId == null) return;
+  const t0 = performance.now();
+  axios.get(`${API}/trace`, { params: { fly, burst_id: burstId } })
+    .then(r => {
+      console.log('[trace] fetch ms:', (performance.now() - t0).toFixed(0),
+                  'points:', r.data.points?.length);
+      setTrace(r.data);
+    })
+    .catch(() => setTrace(null));
+  setPlayT(null);
+}, [fly, burstId]);
+
   // drive the playhead from the video's presented frames
   useEffect(() => {
     const vid = videoRef.current;

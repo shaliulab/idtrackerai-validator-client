@@ -83,6 +83,21 @@ export default function BurstVideo({ src, poseUrl, videoRef, width = 320, height
   const [showOverlay, setShowOverlay] = useState(false);
   const [videoError, setVideoError] = useState(null);   // null | 'notfound' | 'unreadable'
   const showRef = useRef(showOverlay);
+
+  // around the pose fetch
+  useEffect(() => {
+    if (!poseUrl) { setPose(null); return; }
+    const t0 = performance.now();
+    let cancelled = false;
+    fetch(poseUrl).then(r => r.ok ? r.json() : null).then(p => {
+      console.log('[pose] fetch+parse ms:', (performance.now() - t0).toFixed(0),
+                  'frames:', p?.frames?.length, 'bytes~:', JSON.stringify(p).length);
+      if (!cancelled) setPose(p);
+    });
+    return () => { cancelled = true; };
+  }, [poseUrl]);
+
+
   useEffect(() => { showRef.current = showOverlay; }, [showOverlay]);
 
   // reset error/ready state whenever the clip source changes
@@ -128,12 +143,15 @@ export default function BurstVideo({ src, poseUrl, videoRef, width = 320, height
     }
   }, [videoReady, pose, videoError]);
 
+
   // drive the pose overlay from the video's presented frames
   useEffect(() => {
     const vid = videoRef.current;
     if (!vid || !pose || !vid.requestVideoFrameCallback) return;
     let handle;
     const tick = (now, meta) => {
+      const d0 = performance.now();
+
       const vw = vid.videoWidth, vh = vid.videoHeight;
       const globalFrame = clipStart + meta.mediaTime * traceFps;
       const k = Math.round(globalFrame - pose.start_frame);
@@ -151,6 +169,14 @@ export default function BurstVideo({ src, poseUrl, videoRef, width = 320, height
         if (pc.width !== vw || pc.height !== vh) { pc.width = vw; pc.height = vh; }
         drawPose(pc.getContext('2d'), pose, fr, vw, vh, { alpha: 1, bg: '#ffffff' });
       }
+      const dt = performance.now() - d0;  
+
+      if (!window.__poseStats) window.__poseStats = { n: 0, sum: 0, max: 0, over: 0 };
+      const st = window.__poseStats;
+      st.n++; st.sum += dt; st.max = Math.max(st.max, dt);
+      if (dt > 4) st.over++;
+      if (st.n % 60 === 0) console.log('[pose] avg draw ms:', (st.sum/st.n).toFixed(2),
+                                       'max:', st.max.toFixed(1), 'over-4ms:', st.over, '/', st.n);
       handle = vid.requestVideoFrameCallback(tick);
     };
     handle = vid.requestVideoFrameCallback(tick);
