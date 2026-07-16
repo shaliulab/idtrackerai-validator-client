@@ -217,22 +217,14 @@ const downloadBurstVideo = useCallback(async () => {
   }, [fly, load]);
 
   const clearVerdict = useCallback(async (b) => {
-    setVerdicts(v => {                       // optimistic remove
-      const next = { ...v };
-      delete next[keyOf(b)];
-      return next;
-    });
+      setVerdicts(v => { const next = { ...v }; delete next[keyOf(b)]; return next; });
     try {
       await axios.post(`${API}/annotate`, {
-        fly,
-        start_frame: b.start_fn, end_frame: b.end_fn,
+        fly, start_frame: b.start_fn, end_frame: b.end_fn,
         burst_id: b.burst_id, bout_uid: b.bout_uid,
-        pe_score: b.pe_score, verdict: null,   // null = delete the annotation
+        pe_score: b.pe_score, verdict: null,
       });
-    } catch (e) {
-      setError(`clear failed: ${e.message}`);
-      load();   // resync on failure
-    }
+    } catch (e) { setError(`clear failed: ${e.message}`); load(); }
   }, [fly, load]);
 
 
@@ -292,36 +284,48 @@ const downloadBurstVideo = useCallback(async () => {
 
   const stateRef = useRef({});
   stateRef.current = { active, burstBouts, burstIds, selectedBoutIdx, verdicts,
-                       setVerdict, gotoNextUnlabeled };
+                       setVerdict, clearVerdict, gotoNextUnlabeled };
 
   useEffect(() => {
-    const onKey = (e) => {
-      const s = stateRef.current;
-      if (!s.active) return;
-      if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
-        setBurstIdx(i => Math.min(Math.max(i + (e.key === 'ArrowRight' ? 1 : -1), 0),
-                                  s.burstIds.length - 1));
-        return;
-      }
-      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-        e.preventDefault();
-        setSelectedBoutIdx(i => Math.min(Math.max(i + (e.key === 'ArrowDown' ? 1 : -1), 0),
-                                         s.burstBouts.length - 1));
-        return;
-      }
-      if (e.key === 'n' || e.key === 'N') {
-        s.gotoNextUnlabeled?.();
-        return;
-      }
-      const map = { '1': 'pe', '2': 'feed', '3': 'groom', '4': 'walk', '5': 'other', '6': 'merge', '7': 'unsure'};
-      if (map[e.key] && s.burstBouts.length) {
-        const target = s.burstBouts[s.selectedBoutIdx];
-        if (target) s.setVerdict(target, map[e.key]);   // only PE
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, []);   // subscribe ONCE; all live values come from stateRef
+  const onKey = (e) => {
+    const s = stateRef.current;
+    if (!s.active) return;
+    if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+      setBurstIdx(i => Math.min(Math.max(i + (e.key === 'ArrowRight' ? 1 : -1), 0),
+                                s.burstIds.length - 1));
+      return;
+    }
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      setSelectedBoutIdx(i => Math.min(Math.max(i + (e.key === 'ArrowDown' ? 1 : -1), 0),
+                                        s.burstBouts.length - 1));
+      return;
+    }
+    if (e.key === 'n' || e.key === 'N') {
+      s.gotoNextUnlabeled?.();
+      return;
+    }
+    // clear the selected bout's verdict (unpress), regardless of which verdict it holds
+    if (e.key === 'Backspace' || e.key === 'Delete' || e.key === '0') {
+      e.preventDefault();
+      const target = s.burstBouts[s.selectedBoutIdx];
+      const saved = target && s.verdicts[`${target.start_fn}-${target.end_fn}`];
+      if (target && saved != null) s.clearVerdict?.(target);
+      return;
+    }
+    const map = { '1': 'pe', '2': 'feed', '3': 'groom', '4': 'walk', '5': 'other', '6': 'merge', '7': 'unsure' };
+    if (map[e.key] && s.burstBouts.length) {
+      const target = s.burstBouts[s.selectedBoutIdx];
+      if (!target) return;
+      const saved = s.verdicts[`${target.start_fn}-${target.end_fn}`];
+      if (saved === map[e.key]) s.clearVerdict?.(target);   // same key again -> unpress
+      else s.setVerdict(target, map[e.key]);
+    }
+  };
+  window.addEventListener('keydown', onKey);
+  return () => window.removeEventListener('keydown', onKey);
+}, []);   // subscribe ONCE; all live values come from stateRef
+
 
   // fetch trace when the burst changes
   useEffect(() => {
