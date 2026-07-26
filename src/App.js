@@ -241,6 +241,25 @@ function App() {
     }
   };
 
+  const [frameRange, setFrameRange] = useState(null); // { min, max }
+
+  const fetchFrameRange = useCallback(async () => {
+    try {
+      const url = `http://${BACKEND_SERVER}:${BACKEND_PORT}/api/frame_range`;
+      const { data } = await axios.get(url);
+      const min = Number(data.min_frame);
+      const max = Number(data.max_frame);
+      if (Number.isFinite(min) && Number.isFinite(max) && max > min) {
+        setFrameRange({ min, max });
+      }
+    } catch (error) {
+      console.error('Error fetching frame range:', error);
+    }
+  }, []);
+
+  useEffect(() => { fetchFrameRange(); }, [fetchFrameRange]);
+
+
   useEffect(() => { fetchFrame(frameNumber); }, [frameNumber, showPose]);
 
   useEffect(() => {
@@ -337,6 +356,7 @@ function App() {
               onExperimentChange={(firstFrame) => {
                 requestQueue.cancelAll();
                 fetchFramerate();
+                fetchFrameRange();          // ← add
                 setNativeSize(null);
                 setFrameNumber(firstFrame);
               }}
@@ -359,6 +379,8 @@ function App() {
               recordingFramerate={recordingFramerate}
               frameNumber={frameNumber}
               setFrameNumber={setFrameNumber}
+              minFrame={frameRange?.min}
+              maxFrame={frameRange?.max}
             />
 
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, justifyContent: 'center' }}>
