@@ -17,6 +17,30 @@ import PEValidator from './PEValidator';
 const MAX_SIMULTANEOUS_REQUESTS = 1;
 const requestQueue = new RequestQueue(MAX_SIMULTANEOUS_REQUESTS);
 
+// ── Theme tokens ──────────────────────────────────────────────────────────
+// Only the colors App.js itself controls live here. Child components
+// (FrameWithSquare, BlobsTable, Buttons, …) keep their own styling; to make
+// them follow the theme you'd pass `theme` down as a prop and swap their
+// hard-coded colors for these tokens.
+const THEMES = {
+  light: {
+    bg: '#ffffff',
+    text: '#000000',
+    subtext: '#555555',
+    border: '#cccccc',
+    panelBg: '#ffffff',
+    buttonBg: '#f0f0f0',
+  },
+  dark: {
+    bg: '#1e1e1e',
+    text: '#e0e0e0',
+    subtext: '#a0a0a0',
+    border: '#444444',
+    panelBg: '#2a2a2a',
+    buttonBg: '#333333',
+  },
+};
+
 function queuedAxiosGet(url) {
   const source = axios.CancelToken.source();
   const request = () =>
@@ -49,6 +73,28 @@ function App() {
   const [flies, setFlies] = useState([]);
   const [selectedFly, setSelectedFly] = useState(null);
   const [showPose, setShowPose] = useState(false);   // controls BOTH request + draw
+
+  // ── Theme state (persisted across sessions) ──
+  const [themeName, setThemeName] = useState(() => {
+    try { return localStorage.getItem('fh-theme') || 'light'; }
+    catch { return 'light'; }
+  });
+  const theme = THEMES[themeName] || THEMES.light;
+
+  useEffect(() => {
+    try { localStorage.setItem('fh-theme', themeName); } catch { /* ignore */ }
+  }, [themeName]);
+
+  // Paint the page background too, not just the app container.
+  useEffect(() => {
+    document.body.style.backgroundColor = theme.bg;
+    document.body.style.color = theme.text;
+  }, [theme]);
+
+  const toggleTheme = useCallback(
+    () => setThemeName((t) => (t === 'light' ? 'dark' : 'light')),
+    [],
+  );
 
   // Native frame dimensions. Detected from the first decoded image
   // (or from a backend endpoint if you add one).
@@ -205,14 +251,50 @@ function App() {
     return () => clearInterval(id);
   }, [isPlaying, videoFrameRate]);
 
+  // Shared style for the two native <select> controls so they follow the theme.
+  const selectStyle = {
+    background: theme.panelBg,
+    color: theme.text,
+    border: `1px solid ${theme.border}`,
+    borderRadius: 4,
+    padding: '2px 6px',
+  };
+
   return (
-    <div style={{ fontFamily: 'Arial, sans-serif' }}>
+    <div style={{
+      fontFamily: 'Arial, sans-serif',
+      background: theme.bg,
+      color: theme.text,
+      minHeight: '100vh',
+    }}>
       {/* ── Header ── */}
-      <div style={{ padding: '4px 12px 0' }}>
-        <h1 style={{ margin: 0, fontSize: '1.3em' }}>FlyHostel Viewer</h1>
-        <h3 style={{ margin: 0, fontSize: '0.8em', fontWeight: 'normal', color: '#555' }}>
-          Developed at Liu Lab @ VIB-KU Leuven Center for Neuroscience
-        </h3>
+      <div style={{
+        display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between',
+        padding: '4px 12px 0',
+      }}>
+        <div>
+          <h1 style={{ margin: 0, fontSize: '1.3em' }}>FlyHostel Viewer</h1>
+          <h3 style={{ margin: 0, fontSize: '0.8em', fontWeight: 'normal', color: theme.subtext }}>
+            Developed at Liu Lab @ VIB-KU Leuven Center for Neuroscience
+          </h3>
+        </div>
+
+        <button
+          onClick={toggleTheme}
+          title="Toggle light/dark theme"
+          style={{
+            padding: '6px 12px',
+            borderRadius: 6,
+            border: `1px solid ${theme.border}`,
+            background: theme.buttonBg,
+            color: theme.text,
+            cursor: 'pointer',
+            fontSize: '0.85em',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {themeName === 'light' ? 'Dark mode' : 'Light mode'}
+        </button>
       </div>
 
       {/* ── Tabs ── */}
@@ -260,7 +342,7 @@ function App() {
               }}
             />
 
-            <div style={{ maxHeight: 220, overflowY: 'auto', border: '1px solid #ccc', boxSizing: 'border-box' }}>
+            <div style={{ maxHeight: 220, overflowY: 'auto', border: `1px solid ${theme.border}`, background: theme.panelBg, boxSizing: 'border-box' }}>
               <BlobsTable Data={trackingData} setFrameNumber={setFrameNumber} />
 
             </div>
@@ -300,6 +382,7 @@ function App() {
           <select
             value={selectedFly || ""}
             onChange={e => setSelectedFly(e.target.value)}
+            style={selectStyle}
           >
             {flies.map(fly => (
               <option key={fly} value={fly}>
