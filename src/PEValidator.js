@@ -27,6 +27,8 @@ const API = `http://${BACKEND_SERVER}:${BACKEND_PORT}/api/pe`;
 
 export default function PEValidator({ fly, active }) {
   
+  const [auditMode, setAuditMode] = useState(false);
+  const [auditIds, setAuditIds] = useState([]);
 
   const [bouts, setBouts] = useState([]);
   const [verdicts, setVerdicts] = useState({});   // "start-end" -> verdict
@@ -124,14 +126,30 @@ export default function PEValidator({ fly, active }) {
   // bursts sorted by that score, high first. missing scores sink to the bottom.
   // swap a/b in the comparator for low-first.
   const burstIds = useMemo(() => {
-    const ids = [...new Set(bouts.map(b => b.burst_id))];
-    return ids.sort((a, b) => (burstScore[b] ?? -Infinity) - (burstScore[a] ?? -Infinity));
-  }, [bouts, burstScore]);
+    const all = [...new Set(bouts.map(b => b.burst_id))];
+    if (auditMode && auditIds.length) {
+      const present = new Set(all);
+      return auditIds.filter(id => present.has(id));
+    }
+    return all.sort((x, y) => (burstScore[y] ?? -Infinity) - (burstScore[x] ?? -Infinity));
+  }, [bouts, auditMode, auditIds, burstScore]);
 
   const burstId = burstIds[burstIdx];
   const burstBouts = bouts
     .filter(b => b.burst_id === burstId)
     .sort((a, b) => a.bout_uid - b.bout_uid);
+
+  const burstDone = useCallback((bid) => {
+  const bs = bouts.filter(b => b.burst_id === bid);
+    return bs.length > 0 && bs.every(b => verdicts[keyOf(b)] != null);
+  }, [bouts, verdicts]);
+
+  const gotoNextIncomplete = useCallback((dir = 1) => {
+    for (let i = burstIdx + dir; i >= 0 && i < burstIds.length; i += dir) {
+      if (!burstDone(burstIds[i])) { setBurstIdx(i); return; }
+    }
+    setError(dir > 0 ? 'no more unreviewed bursts' : 'no earlier unreviewed bursts');
+  }, [burstIdx, burstIds, burstDone]);
 
     
 const downloadBurstVideo = useCallback(async () => {
@@ -321,11 +339,19 @@ const downloadBurstVideo = useCallback(async () => {
       if (saved === map[e.key]) s.clearVerdict?.(target);   // same key again -> unpress
       else s.setVerdict(target, map[e.key]);
     }
+    if (e.key === 'j') { s.gotoNextIncomplete?.(1);  return; }
+    if (e.key === 'k') { s.gotoNextIncomplete?.(-1); return; }
+
   };
   window.addEventListener('keydown', onKey);
   return () => window.removeEventListener('keydown', onKey);
 }, []);   // subscribe ONCE; all live values come from stateRef
 
+  useEffect(() => {
+    if (!fly) { setAuditIds([]); return; }
+    axios.get(`${API}/audit`, { params: { fly } })
+      .then(r => setAuditIds(r.data)).catch(() => setAuditIds([]));
+  }, [fly]);
 
   // fetch trace when the burst changes
   useEffect(() => {
@@ -523,6 +549,22 @@ useEffect(() => {
             </button>
         </span>
       </div>
+
+      <label style={{ marginLeft: 12 }}>
+        <input type="checkbox" checked={auditMode}
+              onChange={e => { setAuditMode(e.target.checked); setBurstIdx(0); }} />
+        {' '}audit mode
+      </label>
+      {auditMode && (
+        <>
+          <span style={{ marginLeft: 8, fontSize: '0.85em', color: '#777' }}>
+            {burstIds.filter(burstDone).length}/{burstIds.length} done
+          </span>
+          <button onClick={() => gotoNextIncomplete(-1)} style={{ marginLeft: 8 }}>◀ prev</button>
+          <button onClick={() => gotoNextIncomplete(1)}>next unreviewed ▸</button>
+        </>
+      )}
+      
 
       {(() => {
         const PANEL_H = 280;
