@@ -13,6 +13,7 @@ import SelectComponent from './selectComponent';
 import { FIRST_FRAME, BACKEND_SERVER, PLACEHOLDER_IMAGE, BACKEND_PORT } from './constants';
 import { BrowserRouter as Router, Route, Routes } from 'react-router-dom';
 import PEValidator from './PEValidator';
+import api from './api';
 
 const MAX_SIMULTANEOUS_REQUESTS = 1;
 const requestQueue = new RequestQueue(MAX_SIMULTANEOUS_REQUESTS);
@@ -245,10 +246,10 @@ function App() {
 
   const fetchFrameRange = useCallback(async () => {
     try {
-      const url = `http://${BACKEND_SERVER}:${BACKEND_PORT}/api/frame_range`;
-      const { data } = await axios.get(url);
-      const min = Number(data.min_frame);
-      const max = Number(data.max_frame);
+      const { data } = await api.get('/api/frame_range');
+      const parsed = typeof data === 'string' ? JSON.parse(data) : data;
+      const min = Number(parsed.min_frame);
+      const max = Number(parsed.max_frame);
       if (Number.isFinite(min) && Number.isFinite(max) && max > min) {
         setFrameRange({ min, max });
       }
@@ -256,6 +257,7 @@ function App() {
       console.error('Error fetching frame range:', error);
     }
   }, []);
+
 
   useEffect(() => { fetchFrameRange(); }, [fetchFrameRange]);
 
