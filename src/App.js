@@ -10,7 +10,7 @@ import InteractiveText from './interactiveText';
 import { RequestQueue } from './queue';
 import { BlobsTable, VerticalBlobsTable } from './blobs_table';
 import SelectComponent from './selectComponent';
-import { FIRST_FRAME, BACKEND_SERVER, PLACEHOLDER_IMAGE, BACKEND_PORT } from './constants';
+import { FIRST_FRAME, PLACEHOLDER_IMAGE } from './constants';
 import { BrowserRouter as Router, Route, Routes } from 'react-router-dom';
 import PEValidator from './PEValidator';
 import api from './api';
@@ -42,10 +42,13 @@ const THEMES = {
   },
 };
 
+// Uses the shared `api` instance so the request inherits its baseURL
+// (same-origin in production). `axios` is still imported only for
+// CancelToken, which lives on the default export, not on instances.
 function queuedAxiosGet(url) {
   const source = axios.CancelToken.source();
   const request = () =>
-    axios
+    api
       .get(url, { responseType: 'blob', cancelToken: source.token })
       .finally(() => {
         const index = requestQueue.pendingRequests.indexOf(request);
@@ -107,14 +110,13 @@ function App() {
 
   const fetchFlies = useCallback(async () => {
     try {
-      const { data } = await axios.get(
-        `http://${BACKEND_SERVER}:${BACKEND_PORT}/api/pe/flies`
-      );
+      const { data } = await api.get('/api/pe/flies');
+      const parsed = typeof data === 'string' ? JSON.parse(data) : data;
 
-      setFlies(data);
+      setFlies(parsed);
 
-      if (data.length) {
-        setSelectedFly(data[0]);
+      if (parsed.length) {
+        setSelectedFly(parsed[0]);
       } else {
         setSelectedFly(null);
       }
@@ -127,12 +129,15 @@ function App() {
 
   const fetchFramerate = useCallback(async () => {
     try {
-      const url = `http://${BACKEND_SERVER}:${BACKEND_PORT}/api/framerate`;
-      const response = await axios.get(url);
+      const response = await api.get('/api/framerate');
+      const data =
+        typeof response.data === 'string'
+          ? JSON.parse(response.data)
+          : response.data;
       const raw =
-        response.data?.framerate ??
-        response.data?.RECORDING_FRAMERATE ??
-        response.data;
+        data?.framerate ??
+        data?.RECORDING_FRAMERATE ??
+        data;
       const numeric = Number(raw);
       if (Number.isFinite(numeric) && numeric > 0) {
         setRecordingFramerate(numeric);
@@ -196,6 +201,16 @@ function App() {
     }
   };
 
+  // Release the previous object URL once React has committed the next one.
+  // Without this, every frame during playback leaks a blob.
+  useEffect(() => {
+    return () => {
+      if (typeof frame === 'string' && frame.startsWith('blob:')) {
+        URL.revokeObjectURL(frame);
+      }
+    };
+  }, [frame]);
+
   // Light validation: drop rows with missing fields, round to integers.
   // Coordinates are kept in NATIVE space — scaling happens at draw time.
   const validateData = (dataArray) => {
@@ -221,23 +236,33 @@ function App() {
   const fetchFrame = async (fn) => {
     try {
       const n = parseInt(fn, 10);
-      const frameUrl = `http://${BACKEND_SERVER}:${BACKEND_PORT}/api/frame/${n}`;
-      const trackingUrl = `http://${BACKEND_SERVER}:${BACKEND_PORT}/api/tracking/${n}?pose=${showPose ? 1 : 0}`;
-      const preprocessUrl = `http://${BACKEND_SERVER}:${BACKEND_PORT}/api/preprocess/${n}`;
+      const frameUrl = `/api/frame/${n}`;
+      const trackingUrl = `/api/tracking/${n}?pose=${showPose ? 1 : 0}`;
+      const preprocessUrl = `/api/preprocess/${n}`;
 
       const [frameResponse, trackingResponse, preprocessResponse] = await Promise.all([
         queuedAxiosGet(frameUrl),
-        axios.get(trackingUrl),
-        axios.get(preprocessUrl),
+        api.get(trackingUrl),
+        api.get(preprocessUrl),
       ]);
 
       updateFrame(frameResponse.data);
 
-      setTrackingData(validateData(trackingResponse.data.tracking_data || []));
-      setTrackingPoseData(validatePoseData(trackingResponse.data.pose || {}));
-      setNumberOfAnimals(trackingResponse.data.number_of_animals || 0);
-      setContoursData(preprocessResponse.data.contours || []);
+      const tracking =
+        typeof trackingResponse.data === 'string'
+          ? JSON.parse(trackingResponse.data)
+          : trackingResponse.data;
+      const preprocess =
+        typeof preprocessResponse.data === 'string'
+          ? JSON.parse(preprocessResponse.data)
+          : preprocessResponse.data;
+
+      setTrackingData(validateData(tracking.tracking_data || []));
+      setTrackingPoseData(validatePoseData(tracking.pose || {}));
+      setNumberOfAnimals(tracking.number_of_animals || 0);
+      setContoursData(preprocess.contours || []);
     } catch (error) {
+      if (axios.isCancel(error)) return;   // expected when scrubbing fast
       console.error('Error fetching data: ', error);
     }
   };
@@ -264,13 +289,19 @@ function App() {
 
   useEffect(() => { fetchFrame(frameNumber); }, [frameNumber, showPose]);
 
+  // Playback wraps at the real end of the experiment once /api/frame_range
+  // has answered; before that it just advances.
   useEffect(() => {
     if (!isPlaying || !videoFrameRate) return;
     const id = setInterval(() => {
-      setFrameNumber((p) => (p + videoFrameRate) % 15750000);
+      setFrameNumber((p) => {
+        const next = p + videoFrameRate;
+        if (frameRange && next > frameRange.max) return frameRange.min;
+        return next;
+      });
     }, 500);
     return () => clearInterval(id);
-  }, [isPlaying, videoFrameRate]);
+  }, [isPlaying, videoFrameRate, frameRange]);
 
   // Shared style for the two native <select> controls so they follow the theme.
   const selectStyle = {

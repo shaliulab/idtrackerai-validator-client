@@ -1,4 +1,4 @@
-// Buttons.jsx
+// buttons.js
 import React, { useEffect } from 'react';
 import {
   get_prev_chunk,
@@ -12,8 +12,7 @@ import {
   get_1seconds_back,
   get_1seconds_forward
 } from './utils';
-import axios from 'axios';
-import { BACKEND_SERVER, BACKEND_PORT } from './constants';
+import api from './api';
 import { 
   ChunkBackButton, 
   ThirtySecondsBackButton, 
@@ -42,11 +41,17 @@ const Buttons = ({ frameNumber, setFrameNumber, isPlaying, setIsPlaying, request
   };
     
   const close = () => {
-    axios
-      .post(`http://${BACKEND_SERVER}:${BACKEND_PORT}/shutdown`)
-      .then(response => {
-        const message = response.data["message"];
-        console.log(message);
+    api
+      .post('/api/shutdown')
+      .then((response) => {
+        const data =
+          typeof response.data === 'string'
+            ? JSON.parse(response.data)
+            : response.data;
+        console.log(data?.message);
+      })
+      .catch((error) => {
+        console.error('Error shutting down server:', error);
       });
   };
 
@@ -101,20 +106,36 @@ const Buttons = ({ frameNumber, setFrameNumber, isPlaying, setIsPlaying, request
   };
 
   const prev_rejection = () => {
-    axios.get(`http://${BACKEND_SERVER}:${BACKEND_PORT}/api/prev_rejection/${parseInt(frameNumber)}`)
-      .then(response => {
-        setFrameNumber(response.data["frame_number"]);  
+    api.get(`/api/prev_rejection/${parseInt(frameNumber, 10)}`)
+      .then((response) => {
+        const data =
+          typeof response.data === 'string'
+            ? JSON.parse(response.data)
+            : response.data;
+        if (data?.frame_number != null) setFrameNumber(data.frame_number);
+      })
+      .catch((error) => {
+        console.error('Error fetching previous rejection:', error);
       });
   };
 
   const next_rejection = () => {
-    axios.get(`http://${BACKEND_SERVER}:${BACKEND_PORT}/api/next_rejection/${parseInt(frameNumber)}`)
-      .then(response => {
-        setFrameNumber(response.data["frame_number"]);  
+    api.get(`/api/next_rejection/${parseInt(frameNumber, 10)}`)
+      .then((response) => {
+        const data =
+          typeof response.data === 'string'
+            ? JSON.parse(response.data)
+            : response.data;
+        if (data?.frame_number != null) setFrameNumber(data.frame_number);
+      })
+      .catch((error) => {
+        console.error('Error fetching next rejection:', error);
       });
   };
 
   // Keyboard shortcuts
+  // Deps are the values the handlers actually close over: everything else is
+  // either an updater-form setState or a stable prop.
   useEffect(() => {
     const handleKeyDown = (event) => {
       const tag = event.target.tagName.toLowerCase();
@@ -161,19 +182,8 @@ const Buttons = ({ frameNumber, setFrameNumber, isPlaying, setIsPlaying, request
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [
-    prev_chunk,
-    seconds10_back,
-    seconds1_back,
-    isPlaying,
-    play,
-    pause,
-    seconds1_forward,
-    seconds10_forward,
-    next_chunk,
-    prev_rejection,
-    next_rejection
-  ]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isPlaying, frameNumber, frameRate]);
 
   return (
     <div className="button-group">

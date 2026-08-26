@@ -2,21 +2,24 @@
 //
 // A second tab for the FlyHostel viewer: shows each burst's trace PNG + pose-overlay
 // clip, and a pe / not_pe / unsure control per bout. Matches App.js conventions:
-// axios, BACKEND_SERVER/BACKEND_PORT from constants, experiment held server-side.
+// same-origin requests through the shared `api` instance, experiment held server-side.
 //
 // Wire-up (see chat): import it in App.js, add a <Tab id="pe_validator">, and render
 // <PEValidator identity={...} /> when activeTab === 'pe_validator'.
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import axios from 'axios';
-import { BACKEND_SERVER, BACKEND_PORT } from './constants';
-import { useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import api, { apiUrl } from './api';
 import BurstTrace from './BurstTrace';
 import BurstVideo from './BurstVideo';
 import ConfidenceTrace from './ConfidenceTrace';
 import { recordBurst } from './recordBurst';
 
-const API = `http://${BACKEND_SERVER}:${BACKEND_PORT}/api/pe`;
+// Relative: axios resolves it against the instance baseURL, media URLs go
+// through apiUrl() because element src attributes don't see that baseURL.
+const API = '/api/pe';
+
+// Axios can hand back a raw string when a payload contains NaN; parse defensively.
+const unwrap = (data) => (typeof data === 'string' ? JSON.parse(data) : data);
 
 
 // API points needed
@@ -26,7 +29,7 @@ const API = `http://${BACKEND_SERVER}:${BACKEND_PORT}/api/pe`;
 // /pe/media/videos     GET
 
 export default function PEValidator({ fly, active }) {
-  
+
   const [auditMode, setAuditMode] = useState(false);
   const [auditIds, setAuditIds] = useState([]);
 
@@ -34,7 +37,8 @@ export default function PEValidator({ fly, active }) {
   const [verdicts, setVerdicts] = useState({});   // "start-end" -> verdict
   const [burstIdx, setBurstIdx] = useState(0);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
+  const [error, setError] = useState(null);       // fatal: load failed
+  const [notice, setNotice] = useState(null);     // transient: "no more unreviewed bursts"
   const [selectedBoutIdx, setSelectedBoutIdx] = useState(0);
   const [trace, setTrace] = useState(null);
   const [playT, setPlayT] = useState(null);      // current playhead time (s) in trace coords
@@ -48,7 +52,7 @@ export default function PEValidator({ fly, active }) {
   const confSvgRef = useRef(null);
   const [recording, setRecording] = useState(false);
 
-    
+
   const OPTIONS = ['pe', 'feed', 'groom', 'walk', 'other', 'merge', 'unsure'];
     const VERDICT_STYLE = {
       pe:     { on: '#2ca02c' },
@@ -60,6 +64,8 @@ export default function PEValidator({ fly, active }) {
       unsure: { on: '#ff7f0e' },
     };
 
+    const keyOf = (b) => `${b.start_fn}-${b.end_fn}`;
+
     // pipeline label -> default verdict for a non-PE bout
     const labelToVerdict = (label) =>
       label === 'pe'    ? 'pe' :
@@ -67,20 +73,18 @@ export default function PEValidator({ fly, active }) {
       label === 'groom' ? 'groom' :
       label === 'walk'  ? 'walk' :
       'other';
-  
+
     // human annotation if any; else the pipeline's own guess for non-PE bouts
     const effectiveVerdict = (b) =>
       verdicts[keyOf(b)] ?? labelToVerdict(b.label);
-    
-  const load = useCallback(async () => {
-    setLoading(true); setError(null);
-    try {
-      if (!fly) return;
 
-      const { data } = await 
-        axios.get(`${API}/bouts`, {
-          params: { fly }
-        });
+  const load = useCallback(async () => {
+    setLoading(true); setError(null); setNotice(null);
+    try {
+      if (!fly) { setBouts([]); return; }
+
+      const response = await api.get(`${API}/bouts`, { params: { fly } });
+      const data = unwrap(response.data);
       setBouts(data);
       const v = {};
       data.forEach(b => { if (b.verdict) v[`${b.start_fn}-${b.end_fn}`] = b.verdict; });
@@ -146,12 +150,12 @@ export default function PEValidator({ fly, active }) {
 
   const gotoNextIncomplete = useCallback((dir = 1) => {
     for (let i = burstIdx + dir; i >= 0 && i < burstIds.length; i += dir) {
-      if (!burstDone(burstIds[i])) { setBurstIdx(i); return; }
+      if (!burstDone(burstIds[i])) { setBurstIdx(i); setNotice(null); return; }
     }
-    setError(dir > 0 ? 'no more unreviewed bursts' : 'no earlier unreviewed bursts');
+    setNotice(dir > 0 ? 'no more unreviewed bursts' : 'no earlier unreviewed bursts');
   }, [burstIdx, burstIds, burstDone]);
 
-    
+
 const downloadBurstVideo = useCallback(async () => {
     if (recording) return;
     setRecording(true);
@@ -173,7 +177,7 @@ const downloadBurstVideo = useCallback(async () => {
         confSvgEl: confSvgRef.current,
       }, { filename, fps: 30 });
     } catch (e) {
-      setError(`recording failed: ${e.message}`);
+      setNotice(`recording failed: ${e.message}`);
     } finally {
       setRecording(false);
     }
@@ -183,21 +187,20 @@ const downloadBurstVideo = useCallback(async () => {
     const idx = oneBased - 1;                          // display is 1-based (70/80)
     if (idx >= 0 && idx < burstIds.length) {
       setBurstIdx(idx);
-      setError(null);
+      setNotice(null);
     } else {
-      setError(`burst ${oneBased} out of range (1–${burstIds.length})`);
+      setNotice(`burst ${oneBased} out of range (1–${burstIds.length})`);
     }
   }, [burstIds.length]);
 
     const jumpToBurstId = useCallback((bid) => {
       const idx = burstIds.indexOf(bid);
-      if (idx === -1) { setError(`burst_id ${bid} not found`); return; }
+      if (idx === -1) { setNotice(`burst_id ${bid} not found`); return; }
       setBurstIdx(idx);
-      setError(null);
+      setNotice(null);
     }, [burstIds]);
 
 
-  const keyOf = b => `${b.start_fn}-${b.end_fn}`;
   const scrubbingRef = useRef(false);
 
   const seekToTraceTime = useCallback((tSec) => {
@@ -222,14 +225,14 @@ const downloadBurstVideo = useCallback(async () => {
   const setVerdict = useCallback(async (b, verdict) => {
     setVerdicts(v => ({ ...v, [keyOf(b)]: verdict }));   // optimistic
     try {
-      await axios.post(`${API}/annotate`, {
+      await api.post(`${API}/annotate`, {
         fly,
         start_frame: b.start_fn, end_frame: b.end_fn,
         burst_id: b.burst_id, bout_uid: b.bout_uid,
         pe_score: b.pe_score, verdict,
       });
     } catch (e) {
-      setError(`save failed: ${e.message}`);
+      setNotice(`save failed: ${e.message}`);
       load();   // resync on failure
     }
   }, [fly, load]);
@@ -237,12 +240,12 @@ const downloadBurstVideo = useCallback(async () => {
   const clearVerdict = useCallback(async (b) => {
       setVerdicts(v => { const next = { ...v }; delete next[keyOf(b)]; return next; });
     try {
-      await axios.post(`${API}/annotate`, {
+      await api.post(`${API}/annotate`, {
         fly, start_frame: b.start_fn, end_frame: b.end_fn,
         burst_id: b.burst_id, bout_uid: b.bout_uid,
         pe_score: b.pe_score, verdict: null,
       });
-    } catch (e) { setError(`clear failed: ${e.message}`); load(); }
+    } catch (e) { setNotice(`clear failed: ${e.message}`); load(); }
   }, [fly, load]);
 
 
@@ -252,7 +255,6 @@ const downloadBurstVideo = useCallback(async () => {
   // saved verdict; -1 if none remain. Pipeline defaults don't count as labelled — only
   // an entry in `verdicts` does.
   const findNextUnlabeledBurst = useCallback((fromIdx) => {
-    console.log(burstIds);
     for (let i = fromIdx + 1; i < burstIds.length; i++) {
       const bid = burstIds[i];
       const hasUnlabeled = bouts.some(
@@ -263,15 +265,12 @@ const downloadBurstVideo = useCallback(async () => {
     return -1;
   }, [burstIds, bouts, verdicts]);
 
-  // index of the next burst (after `fromIdx`) that still has at least one bout with no
-  // saved verdict; -1 if none remain. Pipeline defaults don't count as labelled — only
-  // an entry in `verdicts` does.
+  // same, but only counts bouts the pipeline itself called PE.
   const findNextUnlabeledBurstPE = useCallback((fromIdx) => {
-    console.log(burstIds);
     for (let i = fromIdx + 1; i < burstIds.length; i++) {
       const bid = burstIds[i];
       const hasUnlabeled = bouts.some(
-        b => b.burst_id === bid && b.label == "pe" && verdicts[`${b.start_fn}-${b.end_fn}`] == null
+        b => b.burst_id === bid && b.label === 'pe' && verdicts[`${b.start_fn}-${b.end_fn}`] == null
       );
       if (hasUnlabeled) return i;
     }
@@ -282,27 +281,27 @@ const downloadBurstVideo = useCallback(async () => {
   const gotoNextUnlabeled = useCallback(() => {
     const next = findNextUnlabeledBurst(burstIdx);
     if (next === -1) {
-      setError('no later burst has an unlabeled bout');
+      setNotice('no later burst has an unlabeled bout');
     } else {
       setBurstIdx(next);
-      setError(null);
+      setNotice(null);
     }
   }, [findNextUnlabeledBurst, burstIdx]);
 
   const gotoNextUnlabeledPE = useCallback(() => {
     const next = findNextUnlabeledBurstPE(burstIdx);
     if (next === -1) {
-      setError('no later burst has an unlabeled bout');
+      setNotice('no later burst has an unlabeled PE bout');
     } else {
       setBurstIdx(next);
-      setError(null);
+      setNotice(null);
     }
-  }, [findNextUnlabeledBurst, burstIdx]);
+  }, [findNextUnlabeledBurstPE, burstIdx]);
 
 
   const stateRef = useRef({});
   stateRef.current = { active, burstBouts, burstIds, selectedBoutIdx, verdicts,
-                       setVerdict, clearVerdict, gotoNextUnlabeled };
+                       setVerdict, clearVerdict, gotoNextUnlabeled, gotoNextIncomplete };
 
   useEffect(() => {
   const onKey = (e) => {
@@ -338,6 +337,7 @@ const downloadBurstVideo = useCallback(async () => {
       const saved = s.verdicts[`${target.start_fn}-${target.end_fn}`];
       if (saved === map[e.key]) s.clearVerdict?.(target);   // same key again -> unpress
       else s.setVerdict(target, map[e.key]);
+      return;
     }
     if (e.key === 'j') { s.gotoNextIncomplete?.(1);  return; }
     if (e.key === 'k') { s.gotoNextIncomplete?.(-1); return; }
@@ -349,31 +349,32 @@ const downloadBurstVideo = useCallback(async () => {
 
   useEffect(() => {
     if (!fly) { setAuditIds([]); return; }
-    axios.get(`${API}/audit`, { params: { fly } })
-      .then(r => setAuditIds(r.data)).catch(() => setAuditIds([]));
+    api.get(`${API}/audit`, { params: { fly } })
+      .then(r => setAuditIds(unwrap(r.data)))
+      .catch(() => setAuditIds([]));
   }, [fly]);
 
   // fetch trace when the burst changes
   useEffect(() => {
     if (burstId == null) return;
-    axios.get(`${API}/trace`, { params: { fly, burst_id: burstId } })
-      .then(r => setTrace(r.data)).catch(() => setTrace(null));
-    setPlayT(null);
-  }, [fly, burstId]);
+    const controller = new AbortController();
+    const t0 = performance.now();
 
-// in the trace-fetch effect
-useEffect(() => {
-  if (burstId == null) return;
-  const t0 = performance.now();
-  axios.get(`${API}/trace`, { params: { fly, burst_id: burstId } })
-    .then(r => {
-      console.log('[trace] fetch ms:', (performance.now() - t0).toFixed(0),
-                  'points:', r.data.points?.length);
-      setTrace(r.data);
-    })
-    .catch(() => setTrace(null));
-  setPlayT(null);
-}, [fly, burstId]);
+    api.get(`${API}/trace`, { params: { fly, burst_id: burstId }, signal: controller.signal })
+      .then(r => {
+        const data = unwrap(r.data);
+        console.log('[trace] fetch ms:', (performance.now() - t0).toFixed(0),
+                    'points:', data.points?.length);
+        setTrace(data);
+      })
+      .catch(() => {
+        if (controller.signal.aborted) return;   // superseded by a newer burst
+        setTrace(null);
+      });
+
+    setPlayT(null);
+    return () => controller.abort();
+  }, [fly, burstId]);
 
   // drive the playhead from the video's presented frames
   useEffect(() => {
@@ -427,7 +428,7 @@ useEffect(() => {
     // persist each bout (PK is per-bout); fire together, resync if any fail
     Promise.allSettled(
       burstBouts.map(b =>
-        axios.post(`${API}/annotate`, {
+        api.post(`${API}/annotate`, {
           fly,
           start_frame: b.start_fn, end_frame: b.end_fn,
           burst_id: b.burst_id, bout_uid: b.bout_uid,
@@ -436,7 +437,7 @@ useEffect(() => {
       )
     ).then(results => {
       if (results.some(r => r.status === 'rejected')) {
-        setError('some bulk saves failed');
+        setNotice('some bulk saves failed');
         load();   // resync truth from the server
       }
     });
@@ -468,10 +469,15 @@ useEffect(() => {
     [burstBouts, trace]
   );
 
+  // Early returns, in priority order. `error` only takes over the whole panel when
+  // there's nothing to show; otherwise it renders as a dismissible banner below.
+  if (!fly)    return <div style={{ padding: 12 }}>Select a fly…</div>;
   if (loading) return <div style={{ padding: 12 }}>Loading bouts…</div>;
-  if (error)   return <div style={{ padding: 12, color: '#d62728' }}>{error}</div>;
+  if (error && !bouts.length) {
+    return <div style={{ padding: 12, color: '#d62728' }}>{error}</div>;
+  }
   if (!bouts.length) {
-  return (
+    return (
       <div style={{ padding: 12 }}>
         {`No PE bouts for this fly (${fly}).`}
       </div>
@@ -481,18 +487,12 @@ useEffect(() => {
   const nReviewed = Object.keys(verdicts).length;
   const selectedBout = burstBouts[selectedBoutIdx];
   const traceStem = burstBouts[0]?.trace_stem; // same for all bouts in the burst
-  const tracePng = traceStem && `${API}/media/plots/${traceStem}.png`;
-  const burstClip = traceStem && `${API}/media/videos/${traceStem}.mp4`;
+  // Media URLs land in element src attributes, so they need apiUrl(), not the
+  // axios baseURL.
+  const tracePng   = traceStem && apiUrl(`${API}/media/plots/${traceStem}.png`);
+  const burstClip  = traceStem && apiUrl(`${API}/media/videos/${traceStem}.mp4`);
   // burst-level pose: one file per burst, aligned to the burst clip. Covers every bout.
-  const burstPose = traceStem && `${API}/media/videos/${traceStem}.pose.json`;
-  
-
-  if (!fly)    return <div style={{ padding: 12 }}>Select a fly…</div>;
-  if (loading) return <div style={{ padding: 12 }}>Loading bouts…</div>;
-  if (error)   return <div style={{ padding: 12, color: '#d62728' }}>{error}</div>;
-  if (!bouts.length) return (
-    <div style={{ padding: 12 }}>{`No PE bouts for this fly (${fly}).`}</div>
-  );
+  const burstPose  = traceStem && apiUrl(`${API}/media/videos/${traceStem}.pose.json`);
 
   return (
     <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start', padding: '0 12px' }}>
@@ -540,7 +540,7 @@ useEffect(() => {
             next unlabeled ⏭
           </button>
           <button onClick={gotoNextUnlabeledPE}
-                  title="jump to the next burst that still has an unlabeled PE bout (n)">
+                  title="jump to the next burst that still has an unlabeled PE bout">
             next unlabeled PE ⏭
           </button>
           <button onClick={downloadBurstVideo} disabled={recording}
@@ -564,7 +564,16 @@ useEffect(() => {
           <button onClick={() => gotoNextIncomplete(1)}>next unreviewed ▸</button>
         </>
       )}
-      
+
+      {notice && (
+        <div style={{ marginTop: 6, padding: '4px 8px', background: '#fff3cd',
+                      border: '1px solid #ffe08a', borderRadius: 4, fontSize: '0.85em',
+                      display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span>{notice}</span>
+          <button onClick={() => setNotice(null)} style={{ marginLeft: 8 }}>dismiss</button>
+        </div>
+      )}
+
 
       {(() => {
         const PANEL_H = 280;
@@ -656,10 +665,8 @@ useEffect(() => {
               ))}
             </td>
           </tr>
-          
+
         {burstBouts.map((b, idx) => {
-                    const v = verdicts[keyOf(b)];
-                    const clipMp4 = `${API}/media/videos/${b.media_stem}.mp4`;
                     const isSel = idx === selectedBoutIdx;
                     return (
                       <tr key={keyOf(b)}
@@ -729,7 +736,7 @@ useEffect(() => {
       </table>
       </div>
       <div style={{ marginTop: 8, fontSize: '0.8em', color: '#777' }}>
-        keys: <b>1</b>=pe <b>2</b>=feed <b>3</b>=groom <b>4</b>=walk <b>5</b>=other <b>6</b>=merge <b>7</b>=unsure · <b>←/→</b> bursts  <b>↑/↓</b> bouts  <b>n</b>=next unlabeled · <b>★</b> = pipeline's prediction
+        keys: <b>1</b>=pe <b>2</b>=feed <b>3</b>=groom <b>4</b>=walk <b>5</b>=other <b>6</b>=merge <b>7</b>=unsure · <b>←/→</b> bursts  <b>↑/↓</b> bouts  <b>n</b>=next unlabeled  <b>j/k</b>=next/prev unreviewed · <b>★</b> = pipeline's prediction
       </div>
     </div>
 

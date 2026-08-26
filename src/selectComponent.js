@@ -1,20 +1,24 @@
+// selectComponent.js
+
 import React, { useEffect, useState } from "react";
 import Select from 'react-select';
-import axios from 'axios';
-import { BACKEND_SERVER, BACKEND_PORT, FIRST_FRAME } from './constants';
+import api from './api';
+import { FIRST_FRAME } from './constants';
+
+// Module-level so it isn't a new object on every render (which would make the
+// effect below need it as a dependency).
+const defaultOption = { value: "", label: "Browse available experiments..." };
+
+const unwrap = (data) => (typeof data === 'string' ? JSON.parse(data) : data);
 
 
 async function postLoad(experiment) {
-  const response = await axios.post(
-    `http://${BACKEND_SERVER}:${BACKEND_PORT}/api/load`,
-    { experiment }
-  );
-  return response.data;
+  const response = await api.post('/api/load', { experiment });
+  return unwrap(response.data);
 }
 
 
 const SelectComponent = ({ onExperimentChange }) => {
-  const defaultOption = { value: "", label: "Browse available experiments..." };
   const [options, setOptions] = useState([defaultOption]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSwitching, setIsSwitching] = useState(false);
@@ -22,14 +26,17 @@ const SelectComponent = ({ onExperimentChange }) => {
   const [inputValue, setInputValue] = useState("");
 
   useEffect(() => {
-    axios.get(`http://${BACKEND_SERVER}:${BACKEND_PORT}/api/list`)
+    api.get('/api/list')
       .then(response => {
-        const data = response.data["experiments"];
+        const data = unwrap(response.data)["experiments"];
         if (Array.isArray(data)) {
           setOptions([defaultOption, ...data.map(item => ({ value: item, label: item }))]);
         }
       })
-      .catch(err => console.error("Error fetching experiments:", err))
+      .catch(err => {
+        console.error("Error fetching experiments:", err);
+        setError(`Could not load the experiment list: ${err.message}`);
+      })
       .finally(() => setIsLoading(false));
   }, []);
 
@@ -57,6 +64,7 @@ const SelectComponent = ({ onExperimentChange }) => {
   };
 
   const handleKeyDown = (e) => {
+    e.stopPropagation();                       // keep typing out of the global shortcuts
     if (e.key === "Enter") handleLoad(inputValue);
   };
 
