@@ -3,8 +3,6 @@ import React, { useEffect } from 'react';
 import {
   get_prev_chunk,
   get_next_chunk,
-  get_chunk_back,
-  get_chunk_forward,
   get_30seconds_back,
   get_30seconds_forward,
   get_10seconds_back,

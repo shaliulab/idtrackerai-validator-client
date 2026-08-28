@@ -1,4 +1,6 @@
-import React, { useRef, useEffect, useState } from 'react';
+// FrameWithSquare.js
+
+import React, { useRef, useEffect, useState, useImperativeHandle } from 'react';
 
 import {
   SQUARE_HEIGHT,
@@ -30,11 +32,20 @@ const INSET_BORDER_WIDTH = 2;
 
 function generateColorPalette(numColors) {
   const colors = [];
-  for (let i = 0; i < numColors; i++) {
-    const hue = Math.floor((i / numColors) * 360);
+  const n = Math.max(1, numColors);
+  for (let i = 0; i < n; i++) {
+    const hue = Math.floor((i / n) * 360);
     colors.push(`hsl(${hue}, 100%, 50%)`);
   }
   return colors;
+}
+
+// Colour lookup that tolerates a missing or zero identity and a zero animal
+// count (which would otherwise produce `colors[NaN]` -> undefined -> black).
+function colorFor(colors, identity) {
+  const idx = parseInt(identity, 10);
+  if (!Number.isFinite(idx) || colors.length === 0) return '#000000';
+  return colors[((idx % colors.length) + colors.length) % colors.length];
 }
 
 const FrameWithSquare = React.forwardRef(
@@ -51,21 +62,35 @@ const FrameWithSquare = React.forwardRef(
       displayWidth = 1000,
       displayHeight = 1000,
       nativeSize,
-      showPose, setShowPose
-
+      showPose,
+      setShowPose,
     },
     ref,
   ) => {
-    const canvasRef = useRef();
-    const imgRef = useRef();
-    const [clickPairs, setClickPairs] = useState([]);
+    const canvasRef = useRef(null);
+    const imgRef = useRef(null);
     const [hoverPos, setHoverPos] = useState(null);
+
+    // Click log. Nothing renders from it, so a ref is the right container:
+    // as state it was being mutated in place and returned by identity, which
+    // React treats as "no change" and skips the re-render anyway.
+    const clickPairsRef = useRef([]);
+
+    // Expose the log (and the canvas) to the parent through the forwarded ref
+    // instead of leaving it unused.
+    useImperativeHandle(ref, () => ({
+      canvas: canvasRef.current,
+      getClickPairs: () => clickPairsRef.current,
+      clearClickPairs: () => { clickPairsRef.current = []; },
+    }), []);
 
     const sx = nativeSize ? displayWidth / nativeSize.width : 1;
     const sy = nativeSize ? displayHeight / nativeSize.height : 1;
 
     const handleClick = (event) => {
-      const rect = event.target.getBoundingClientRect();
+      // currentTarget, not target: the click lands on the <canvas>, and using
+      // target would break if another element is ever layered over it.
+      const rect = event.currentTarget.getBoundingClientRect();
       const xDisp = event.clientX - rect.left;
       const yDisp = event.clientY - rect.top;
 
@@ -78,33 +103,24 @@ const FrameWithSquare = React.forwardRef(
           yDisp >= ay - SQUARE_HEIGHT / 2 &&
           yDisp <= ay + SQUARE_HEIGHT / 2
         ) {
-          const identity = animal.identity;
-          const fragment = animal.fragment;
-          const timestamp = Date.now();
-          const x_native = animal.x;
-          const y_native = animal.y;
+          const entry = {
+            timestamp: Date.now(),
+            frameNumber,
+            x: xDisp,
+            y: yDisp,
+            x_native: animal.x,
+            y_native: animal.y,
+            identity: animal.identity,
+            fragment: animal.fragment,
+          };
 
-          setClickPairs((prevData) => {
-            const newData = prevData;
-            if (newData.length > 0) {
-              const index = newData[newData.length - 1][0].index + 1;
-              if (newData[newData.length - 1].length % 2 === 0) {
-                newData.push([
-                  { index, timestamp, frameNumber, x: xDisp, y: yDisp, x_native, y_native, identity, fragment },
-                ]);
-              } else {
-                newData[newData.length - 1].push({
-                  index, timestamp, frameNumber, x: xDisp, y: yDisp, x_native, y_native, identity, fragment,
-                });
-              }
-            } else {
-              const index = 0;
-              newData.push([
-                { index, timestamp, frameNumber, x: xDisp, y: yDisp, x_native, y_native, identity, fragment },
-              ]);
-            }
-            return newData;
-          });
+          const pairs = clickPairsRef.current;
+          const last = pairs[pairs.length - 1];
+          if (last && last.length === 1) {
+            last.push(entry);        // complete the open pair
+          } else {
+            pairs.push([entry]);     // start a new one
+          }
         }
       });
     };
@@ -134,109 +150,106 @@ const FrameWithSquare = React.forwardRef(
     }, [videoFrameRate, setFrameNumber]);
 
     useEffect(() => {
-      if (!canvasRef.current) return;
-
-      const context = canvasRef.current.getContext('2d');
+      const canvas = canvasRef.current;
       const img = imgRef.current;
+      if (!canvas || !img || !imageURL) return;
+
+      const context = canvas.getContext('2d');
       const colors = generateColorPalette(number_of_animals);
 
+      // Draws one animal's skeleton and keypoints through a coordinate
+      // transform, so the main view and the magnifier share this code instead
+      // of keeping two copies in sync.
+      const drawPose = (animalPose, color, toDisplay, visible, sizes) => {
+        for (const [partA, partB] of SKELETON) {
+          const bpA = animalPose[partA];
+          const bpB = animalPose[partB];
+          if (!bpA || !bpB) continue;
+          if (bpA[0] == null || bpA[1] == null || bpB[0] == null || bpB[1] == null) continue;
+          if (!visible(bpA[0], bpA[1]) || !visible(bpB[0], bpB[1])) continue;
+
+          const [dx1, dy1] = toDisplay(bpA[0], bpA[1]);
+          const [dx2, dy2] = toDisplay(bpB[0], bpB[1]);
+
+          context.beginPath();
+          context.moveTo(dx1, dy1);
+          context.lineTo(dx2, dy2);
+          context.lineWidth = 2;
+          context.globalAlpha = 0.7;
+          context.strokeStyle = color;
+          context.stroke();
+        }
+
+        for (const [bpName, coords] of Object.entries(animalPose)) {
+          if (!coords || coords[0] == null || coords[1] == null) continue;
+          if (!visible(coords[0], coords[1])) continue;
+
+          const [dx, dy] = toDisplay(coords[0], coords[1]);
+
+          context.fillStyle = color;
+          context.globalAlpha = 0.8;
+          context.strokeStyle = 'white';
+          context.lineWidth = 1;
+
+          if (bpName === 'proboscis') {
+            const s = sizes.triangle;
+            context.beginPath();
+            context.moveTo(dx, dy - s);          // apex
+            context.lineTo(dx - s, dy + s);
+            context.lineTo(dx + s, dy + s);
+            context.closePath();
+            context.fill();
+            context.stroke();
+          } else {
+            context.beginPath();
+            context.arc(dx, dy, sizes.radius, 0, 2 * Math.PI);
+            context.fill();
+            context.stroke();
+          }
+        }
+      };
+
       const draw = () => {
-        canvasRef.current.width = displayWidth;
-        canvasRef.current.height = displayHeight;
+        canvas.width = displayWidth;
+        canvas.height = displayHeight;
 
         context.clearRect(0, 0, displayWidth, displayHeight);
         context.drawImage(img, 0, 0, displayWidth, displayHeight);
 
         // Tracking labels
-        trackingData.forEach(function (animal) {
-          const writeIdentity = (ctx, a, color) => {
-            ctx.font = TEXT_SIZE.toString().concat('px ', TEXT_FAMILY.toString());
-            ctx.fillStyle = color;
-            const v = a?.[LABEL_FIELD] ?? a?.identity ?? '';
-            ctx.fillText(String(v), a.x * sx, a.y * sy);
-          };
-
-          let color = '#000000';
-          if (animal.identity != null && animal.identity !== 0) {
-            color = colors[parseInt(animal.identity) % number_of_animals];
-          }
-          writeIdentity(context, animal, color);
+        context.font = `${TEXT_SIZE}px ${TEXT_FAMILY}`;
+        trackingData.forEach((animal) => {
+          const color =
+            animal.identity != null && animal.identity !== 0
+              ? colorFor(colors, animal.identity)
+              : '#000000';
+          context.fillStyle = color;
+          const v = animal?.[LABEL_FIELD] ?? animal?.identity ?? '';
+          context.fillText(String(v), animal.x * sx, animal.y * sy);
         });
 
         // ===== POSE RENDERING =====
-        if (showPose) {
-          for (let identityKey in poseData) {
+        if (showPose && poseData) {
+          for (const identityKey of Object.keys(poseData)) {
             const animalPose = poseData[identityKey];
-
-            // Draw skeleton connections
-            for (const [partA, partB] of SKELETON) {
-              if (!(partA in animalPose)) continue;
-              if (!(partB in animalPose)) continue;
-
-              const bpA = animalPose[partA];
-              const bpB = animalPose[partB];
-
-              if (!bpA || !bpB || bpA[0] === null || bpA[1] === null || bpB[0] === null || bpB[1] === null) {
-                continue;
-              }
-
-              const [x1, y1] = bpA;
-              const [x2, y2] = bpB;
-
-              const color = colors[parseInt(identityKey) % number_of_animals];
-              context.beginPath();
-              context.moveTo(x1 * sx, y1 * sy);
-              context.lineTo(x2 * sx, y2 * sy);
-              context.lineWidth = 2;
-              context.globalAlpha = 0.7;
-              context.strokeStyle = color;
-              context.stroke();
-              context.closePath();
-            }
-
-            // Draw keypoints
-            for (const [bpName, coords] of Object.entries(animalPose)) {
-              if (!coords || coords[0] === null || coords[1] === null) continue;
-
-              const [x, y] = coords;
-              const displayX = x * sx;
-              const displayY = y * sy;
-              const color = colors[parseInt(identityKey) % number_of_animals];
-
-              context.fillStyle = color;
-              context.globalAlpha = 0.8;
-              context.strokeStyle = 'white';
-              context.lineWidth = 1;
-
-              // Special triangle shape for proboscis
-              if (bpName === 'proboscis') {
-                const size = 6;
-                context.beginPath();
-                context.moveTo(displayX, displayY - size); // Top point
-                context.lineTo(displayX - size, displayY + size); // Bottom left
-                context.lineTo(displayX + size, displayY + size); // Bottom right
-                context.closePath();
-                context.fill();
-                context.stroke();
-              } else {
-                // Regular circular keypoints
-                const radius = 4;
-                context.beginPath();
-                context.arc(displayX, displayY, radius, 0, 2 * Math.PI);
-                context.fill();
-                context.stroke();
-              }
-            }
+            if (!animalPose) continue;
+            drawPose(
+              animalPose,
+              colorFor(colors, identityKey),
+              (x, y) => [x * sx, y * sy],
+              () => true,
+              { triangle: 6, radius: 4 },
+            );
           }
           context.globalAlpha = 1.0;
         }
 
         // Contours
-        if (PRINT_CONTOUR) {
+        if (PRINT_CONTOUR && contoursData) {
           const contour_color = 'hsla(120, 100%, 50%, 0.2)';
-          contoursData.forEach(function (contour) {
+          contoursData.forEach((contour) => {
             context.beginPath();
-            contour.forEach(function (point, idx) {
+            contour.forEach((point, idx) => {
               const rawX = Array.isArray(point[0]) ? point[0][0] : point[0];
               const rawY = Array.isArray(point[0]) ? point[0][1] : point[1];
               const x = rawX * sx;
@@ -255,17 +268,15 @@ const FrameWithSquare = React.forwardRef(
           const nx = hoverPos.x / sx;
           const ny = hoverPos.y / sy;
 
+          // Clamp the sampled region to the image. Math.max(0, …) second so a
+          // frame narrower than the inset still yields a non-negative origin.
           const half = INSET_NATIVE_SIZE / 2;
-          let srcX = nx - half;
-          let srcY = ny - half;
-          srcX = Math.max(0, Math.min(srcX, nativeSize.width - INSET_NATIVE_SIZE));
-          srcY = Math.max(0, Math.min(srcY, nativeSize.height - INSET_NATIVE_SIZE));
+          const srcX = Math.max(0, Math.min(nx - half, nativeSize.width - INSET_NATIVE_SIZE));
+          const srcY = Math.max(0, Math.min(ny - half, nativeSize.height - INSET_NATIVE_SIZE));
 
           const halfDisp = INSET_DISPLAY_SIZE / 2;
-          let dstX = hoverPos.x - halfDisp;
-          let dstY = hoverPos.y - halfDisp;
-          dstX = Math.max(0, Math.min(dstX, displayWidth - INSET_DISPLAY_SIZE));
-          dstY = Math.max(0, Math.min(dstY, displayHeight - INSET_DISPLAY_SIZE));
+          const dstX = Math.max(0, Math.min(hoverPos.x - halfDisp, displayWidth - INSET_DISPLAY_SIZE));
+          const dstY = Math.max(0, Math.min(hoverPos.y - halfDisp, displayHeight - INSET_DISPLAY_SIZE));
 
           context.imageSmoothingEnabled = false;
           context.drawImage(
@@ -275,85 +286,24 @@ const FrameWithSquare = React.forwardRef(
           );
           context.imageSmoothingEnabled = true;
 
-          // ===== DRAW POSE IN MAGNIFIER =====
-          if (showPose) {
-            const zoomFactor = INSET_DISPLAY_SIZE / INSET_NATIVE_SIZE;
+          // ===== POSE INSIDE THE MAGNIFIER =====
+          if (showPose && poseData) {
+            const zoom = INSET_DISPLAY_SIZE / INSET_NATIVE_SIZE;
+            const toDisplay = (x, y) => [dstX + (x - srcX) * zoom, dstY + (y - srcY) * zoom];
+            const visible = (x, y) =>
+              x >= srcX && x < srcX + INSET_NATIVE_SIZE &&
+              y >= srcY && y < srcY + INSET_NATIVE_SIZE;
 
-            for (let identityKey in poseData) {
+            for (const identityKey of Object.keys(poseData)) {
               const animalPose = poseData[identityKey];
-
-              // Draw skeleton connections
-              for (const [partA, partB] of SKELETON) {
-                if (!(partA in animalPose) || !(partB in animalPose)) continue;
-
-                const bpA = animalPose[partA];
-                const bpB = animalPose[partB];
-
-                if (!bpA || !bpB || bpA[0] === null || bpA[1] === null || bpB[0] === null || bpB[1] === null) {
-                  continue;
-                }
-
-                const [x1, y1] = bpA;
-                const [x2, y2] = bpB;
-
-                const inMagnifier1 = x1 >= srcX && x1 < srcX + INSET_NATIVE_SIZE && y1 >= srcY && y1 < srcY + INSET_NATIVE_SIZE;
-                const inMagnifier2 = x2 >= srcX && x2 < srcX + INSET_NATIVE_SIZE && y2 >= srcY && y2 < srcY + INSET_NATIVE_SIZE;
-
-                if (!inMagnifier1 || !inMagnifier2) continue;
-
-                const dispX1 = dstX + (x1 - srcX) * zoomFactor;
-                const dispY1 = dstY + (y1 - srcY) * zoomFactor;
-                const dispX2 = dstX + (x2 - srcX) * zoomFactor;
-                const dispY2 = dstY + (y2 - srcY) * zoomFactor;
-
-                const color = colors[parseInt(identityKey) % number_of_animals];
-                context.beginPath();
-                context.moveTo(dispX1, dispY1);
-                context.lineTo(dispX2, dispY2);
-                context.lineWidth = 2;
-                context.globalAlpha = 0.7;
-                context.strokeStyle = color;
-                context.stroke();
-                context.closePath();
-              }
-
-              // Draw keypoints
-              for (const [bpName, coords] of Object.entries(animalPose)) {
-                if (!coords || coords[0] === null || coords[1] === null) continue;
-
-                const [x, y] = coords;
-
-                if (x < srcX || x >= srcX + INSET_NATIVE_SIZE || y < srcY || y >= srcY + INSET_NATIVE_SIZE) {
-                  continue;
-                }
-
-                const dispX = dstX + (x - srcX) * zoomFactor;
-                const dispY = dstY + (y - srcY) * zoomFactor;
-                const color = colors[parseInt(identityKey) % number_of_animals];
-
-                context.fillStyle = color;
-                context.globalAlpha = 0.8;
-                context.strokeStyle = 'white';
-                context.lineWidth = 1;
-
-                // Special triangle for proboscis in magnifier
-                if (bpName === 'proboscis') {
-                  const size = 4;
-                  context.beginPath();
-                  context.moveTo(dispX, dispY - size);
-                  context.lineTo(dispX - size, dispY + size);
-                  context.lineTo(dispX + size, dispY + size);
-                  context.closePath();
-                  context.fill();
-                  context.stroke();
-                } else {
-                  const radius = 2.5;
-                  context.beginPath();
-                  context.arc(dispX, dispY, radius, 0, 2 * Math.PI);
-                  context.fill();
-                  context.stroke();
-                }
-              }
+              if (!animalPose) continue;
+              drawPose(
+                animalPose,
+                colorFor(colors, identityKey),
+                toDisplay,
+                visible,
+                { triangle: 4, radius: 2.5 },
+              );
             }
             context.globalAlpha = 1.0;
           }
@@ -363,7 +313,6 @@ const FrameWithSquare = React.forwardRef(
           context.lineWidth = INSET_BORDER_WIDTH;
           context.strokeRect(dstX, dstY, INSET_DISPLAY_SIZE, INSET_DISPLAY_SIZE);
 
-          context.strokeStyle = INSET_BORDER_COLOR;
           context.lineWidth = 1;
           context.beginPath();
           context.moveTo(hoverPos.x - 6, hoverPos.y);
@@ -378,8 +327,11 @@ const FrameWithSquare = React.forwardRef(
         draw();
       } else {
         img.onload = draw;
+        img.onerror = () => {};       // a revoked blob URL should not throw
         img.src = imageURL;
       }
+
+      return () => { img.onload = null; img.onerror = null; };
     }, [
       imageURL,
       trackingData,
@@ -394,19 +346,18 @@ const FrameWithSquare = React.forwardRef(
       hoverPos,
       nativeSize,
       showPose,
-      ref,
     ]);
 
     return (
       <div>
-        <div style={{ 
-          display: 'flex', 
-          gap: '10px', 
-          alignItems: 'center', 
+        <div style={{
+          display: 'flex',
+          gap: '10px',
+          alignItems: 'center',
           marginBottom: '10px',
           padding: '5px 10px',
           backgroundColor: '#f0f0f0',
-          borderRadius: '4px'
+          borderRadius: '4px',
         }}>
           <label style={{ display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer' }}>
             <input
@@ -419,21 +370,20 @@ const FrameWithSquare = React.forwardRef(
           </label>
         </div>
         <div style={{ width: displayWidth }}>
-          <div
+          <canvas
+            ref={canvasRef}
             onClick={handleClick}
             onMouseMove={handleMouseMove}
             onMouseLeave={handleMouseLeave}
-          >
-            <canvas
-              ref={canvasRef}
-              style={{ width: displayWidth, height: displayHeight, display: 'block' }}
-            />
-          </div>
+            style={{ width: displayWidth, height: displayHeight, display: 'block' }}
+          />
           <img ref={imgRef} style={{ display: 'none' }} alt="" />
         </div>
       </div>
     );
   },
 );
+
+FrameWithSquare.displayName = 'FrameWithSquare';
 
 export default FrameWithSquare;

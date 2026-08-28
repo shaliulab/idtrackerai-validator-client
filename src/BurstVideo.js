@@ -87,7 +87,6 @@ export default function BurstVideo({ src, poseUrl, videoRef, width = 320, height
   // around the pose fetch
   useEffect(() => {
     if (!poseUrl) { setPose(null); return; }
-    const t0 = performance.now();
     let cancelled = false;
     fetch(poseUrl)
       .then(r => (r.ok ? r.json() : null))
