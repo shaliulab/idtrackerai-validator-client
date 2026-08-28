@@ -43,7 +43,7 @@ const THEMES = {
 
 // Uses the shared `api` instance so the request inherits its baseURL
 // (same-origin in production). `axios` is still imported only for
-// CancelToken, which lives on the default export, not on instances.
+// CancelToken and isCancel, which live on the default export, not on instances.
 function queuedAxiosGet(url) {
   const source = axios.CancelToken.source();
   const request = () =>
@@ -68,7 +68,7 @@ function App() {
   const [frame, setFrame] = useState(PLACEHOLDER_IMAGE);
   const [frameNumber, setFrameNumber] = useState(FIRST_FRAME);
   const [trackingData, setTrackingData] = useState([]);
-  const [trackingPoseData, setTrackingPoseData] = useState([]);
+  const [trackingPoseData, setTrackingPoseData] = useState({});
   const [contoursData, setContoursData] = useState([]);
   const [isPlaying, setIsPlaying] = useState(false);
   const [videoFrameRate, setVideoFrameRate] = useState(1);
@@ -99,8 +99,7 @@ function App() {
     [],
   );
 
-  // Native frame dimensions. Detected from the first decoded image
-  // (or from a backend endpoint if you add one).
+  // Native frame dimensions, read from the first decoded image.
   const [nativeSize, setNativeSize] = useState(null); // { width, height }
 
   const FrameWithSquareRef = useRef(null);
@@ -147,11 +146,9 @@ function App() {
     }
   }, []);
 
-  useEffect(() => { fetchFramerate(); }, []);
+  useEffect(() => { fetchFramerate(); }, [fetchFramerate]);
 
-  useEffect(() => {
-    fetchFlies();
-  }, [fetchFlies]);
+  useEffect(() => { fetchFlies(); }, [fetchFlies]);
 
   // Ctrl+1 / Ctrl+2 switch tabs
   useEffect(() => {
@@ -181,21 +178,17 @@ function App() {
     return () => window.removeEventListener('keydown', onKey);
   }, [flies, activeTab]);
 
-  // Probe the first decoded frame to learn the native image size.
-  const probeImageSize = (blobUrl) =>
-    new Promise((resolve, reject) => {
-      const img = new Image();
-      img.onload = () => resolve({ width: img.naturalWidth, height: img.naturalHeight });
-      img.onerror = reject;
-      img.src = blobUrl;
-    });
-
   const updateFrame = (blobData) => {
-    const url = URL.createObjectURL(blobData);
-    setFrame(url);
+    setFrame(URL.createObjectURL(blobData));
     if (!nativeSize) {
-      probeImageSize(url)
-        .then((dims) => setNativeSize(dims))
+      // Read the dimensions from the blob rather than from the object URL:
+      // the URL is revoked as soon as the next frame arrives, which can race
+      // an <img> that has not finished decoding.
+      createImageBitmap(blobData)
+        .then((bmp) => {
+          setNativeSize({ width: bmp.width, height: bmp.height });
+          bmp.close();
+        })
         .catch(() => {});
     }
   };
@@ -230,9 +223,15 @@ function App() {
     }));
   };
 
+  // Placeholder: pose data is passed through unchanged for now.
   const validatePoseData = (dataArray) => dataArray;
 
+  // Monotonic counter so a slow response for an older frame cannot overwrite
+  // the state belonging to a newer one.
+  const fetchSeqRef = useRef(0);
+
   const fetchFrame = async (fn) => {
+    const seq = ++fetchSeqRef.current;
     try {
       const n = parseInt(fn, 10);
       const frameUrl = `/api/frame/${n}`;
@@ -245,7 +244,10 @@ function App() {
         api.get(preprocessUrl),
       ]);
 
-      updateFrame(frameResponse.data);
+      // A newer frame was requested while these were in flight. Applying this
+      // response would leave the overlay describing a different frame than the
+      // image on screen.
+      if (seq !== fetchSeqRef.current) return;
 
       const tracking =
         typeof trackingResponse.data === 'string'
@@ -256,6 +258,7 @@ function App() {
           ? JSON.parse(preprocessResponse.data)
           : preprocessResponse.data;
 
+      updateFrame(frameResponse.data);
       setTrackingData(validateData(tracking.tracking_data || []));
       setTrackingPoseData(validatePoseData(tracking.pose || {}));
       setNumberOfAnimals(tracking.number_of_animals || 0);
@@ -282,10 +285,11 @@ function App() {
     }
   }, []);
 
-
   useEffect(() => { fetchFrameRange(); }, [fetchFrameRange]);
 
-
+  // fetchFrame is recreated on every render, so it cannot go in the dep array:
+  // including it would refetch continuously.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { fetchFrame(frameNumber); }, [frameNumber, showPose]);
 
   // Playback wraps at the real end of the experiment once /api/frame_range
@@ -388,7 +392,7 @@ function App() {
               onExperimentChange={(firstFrame) => {
                 requestQueue.cancelAll();
                 fetchFramerate();
-                fetchFrameRange();          // ← add
+                fetchFrameRange();
                 setNativeSize(null);
                 setFrameNumber(firstFrame);
               }}

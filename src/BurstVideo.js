@@ -89,11 +89,10 @@ export default function BurstVideo({ src, poseUrl, videoRef, width = 320, height
     if (!poseUrl) { setPose(null); return; }
     const t0 = performance.now();
     let cancelled = false;
-    fetch(poseUrl).then(r => r.ok ? r.json() : null).then(p => {
-      console.log('[pose] fetch+parse ms:', (performance.now() - t0).toFixed(0),
-                  'frames:', p?.frames?.length, 'bytes~:', JSON.stringify(p).length);
-      if (!cancelled) setPose(p);
-    });
+    fetch(poseUrl)
+      .then(r => (r.ok ? r.json() : null))
+      .then(p => { if (!cancelled) setPose(p); })
+      .catch(() => { if (!cancelled) setPose(null); });
     return () => { cancelled = true; };
   }, [poseUrl]);
 
@@ -110,16 +109,6 @@ export default function BurstVideo({ src, poseUrl, videoRef, width = 320, height
       .then(r => setVideoError(r.ok ? 'unreadable' : 'notfound'))
       .catch(() => setVideoError('notfound'));   // can't reach -> treat as missing
   };
-
-  // fetch the burst-level pose whenever the burst changes
-  useEffect(() => {
-    if (!poseUrl) { setPose(null); return; }
-    let cancelled = false;
-    fetch(poseUrl).then(r => (r.ok ? r.json() : null))
-      .then(p => { if (!cancelled) setPose(p); })
-      .catch(() => { if (!cancelled) setPose(null); });
-    return () => { cancelled = true; };
-  }, [poseUrl]);
 
   // when the video src changes, hold playback until metadata is loaded
   useEffect(() => {
@@ -141,7 +130,7 @@ export default function BurstVideo({ src, poseUrl, videoRef, width = 320, height
     if (videoReady && pose && vid && !videoError) {
       vid.play().catch(() => {});
     }
-  }, [videoReady, pose, videoError]);
+  }, [videoReady, pose, videoError, videoRef]);
 
 
   // drive the pose overlay from the video's presented frames
