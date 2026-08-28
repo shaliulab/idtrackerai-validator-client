@@ -1,5 +1,4 @@
 import React, { useRef, useEffect, useState } from 'react';
-import ScrollNumberInput from './scrollableNumber';
 
 import {
   SQUARE_HEIGHT,
@@ -108,26 +107,6 @@ const FrameWithSquare = React.forwardRef(
           });
         }
       });
-    };
-
-    const forgetLastClick = () => {
-      setClickPairs((prevData) => {
-        const newData = [...prevData];
-        if (newData.length % 2 === 1) {
-          newData[newData.length - 1].pop();
-        } else if (newData.length !== 0) {
-          newData.pop();
-        }
-        return newData;
-      });
-    };
-
-    const forgetClickFactory = (index) => () => {
-      const clicks = [];
-      for (let i = 0; i < clickPairs.length; i++) {
-        if (clickPairs[i][0].index !== index) clicks.push(clickPairs[i]);
-      }
-      setClickPairs(clicks);
     };
 
     const handleMouseMove = (event) => {

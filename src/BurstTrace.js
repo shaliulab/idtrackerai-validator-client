@@ -1,4 +1,4 @@
-import { useRef, useState, useEffect, useLayoutEffect } from 'react';
+import { useRef, useState, useLayoutEffect } from 'react';
 
 function BurstTrace({ trace, playT, onScrub, scrubbingRef, svgExportRef }) {
 

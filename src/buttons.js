@@ -39,32 +39,7 @@ const Buttons = ({ frameNumber, setFrameNumber, isPlaying, setIsPlaying, request
     setIsPlaying(false);
     requestQueue.cancelAll();
   };
-    
-  const close = () => {
-    api
-      .post('/api/shutdown')
-      .then((response) => {
-        const data =
-          typeof response.data === 'string'
-            ? JSON.parse(response.data)
-            : response.data;
-        console.log(data?.message);
-      })
-      .catch((error) => {
-        console.error('Error shutting down server:', error);
-      });
-  };
-
-  const chunk_back = () => {
-    if (frameRate == null) return;
-    setFrameNumber((prev) => get_chunk_back(prev, frameRate));
-  };
-    
-  const chunk_forward = () => {
-    if (frameRate == null) return;
-    setFrameNumber((prev) => get_chunk_forward(prev, frameRate));
-  };
-
+  
   const prev_chunk = () => {
     if (frameRate == null) return;
     setFrameNumber((prev) => get_prev_chunk(prev, frameRate));

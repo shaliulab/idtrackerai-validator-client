@@ -8,10 +8,9 @@ import Slider from './slider';
 import Tab from './Tab';
 import InteractiveText from './interactiveText';
 import { RequestQueue } from './queue';
-import { BlobsTable, VerticalBlobsTable } from './blobs_table';
+import { BlobsTable } from './blobs_table';
 import SelectComponent from './selectComponent';
 import { FIRST_FRAME, PLACEHOLDER_IMAGE } from './constants';
-import { BrowserRouter as Router, Route, Routes } from 'react-router-dom';
 import PEValidator from './PEValidator';
 import api from './api';
 

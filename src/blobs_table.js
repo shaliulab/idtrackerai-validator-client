@@ -114,39 +114,4 @@ const BlobsTable = ({ Data, setFrameNumber }) => {
   );
 };
 
-const VerticalBlobsTable = ({ Data }) => {
-  const headers = [
-    "Frame Number", "Chunk", "Frame idx", "X", "Y", "Identity",
-    "Local Identity", "In frame index", "Fragment", "Area", "YOLOv7", "ZT"
-  ];
-  const extractors = [
-    row => row.frame_number,
-    row => Math.floor(row.frame_number / row.chunksize),
-    row => row.frame_number % row.chunksize,
-    row => row.x,
-    row => row.y,
-    row => row.identity,
-    row => row.local_identity,
-    row => row.in_frame_index,
-    row => row.fragment,
-    row => row.area,
-    row => row.modified.toString(),
-    row => row.ZT,
-  ];
-  return (
-    <table className="data-table">
-      <tbody>
-        {headers.map((header, headerIndex) => (
-          <tr key={header}>
-            <th>{header}</th>
-            {Data.map((row, rowIndex) => (
-              <td key={rowIndex}>{extractors[headerIndex](row)}</td>
-            ))}
-          </tr>
-        ))}
-      </tbody>
-    </table>
-  );
-};
-
-export { BlobsTable, VerticalBlobsTable };
+export { BlobsTable };

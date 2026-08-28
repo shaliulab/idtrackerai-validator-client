@@ -1,5 +1,3 @@
-import React, { useRef, useEffect } from 'react';
-
 const InteractiveText = React.forwardRef(({ value, setValue, id, labelText }, ref) => {
     
     const handleInputChange = (event) => {
