@@ -301,7 +301,7 @@ const downloadBurstVideo = useCallback(async () => {
 
   const stateRef = useRef({});
   stateRef.current = { active, burstBouts, burstIds, selectedBoutIdx, verdicts,
-                       setVerdict, clearVerdict, gotoNextUnlabeled, gotoNextIncomplete };
+                       setVerdict, clearVerdict, setAllInBurst, gotoNextUnlabeled, gotoNextIncomplete };
 
   useEffect(() => {
   const onKey = (e) => {
@@ -330,6 +330,22 @@ const downloadBurstVideo = useCallback(async () => {
       if (target && saved != null) s.clearVerdict?.(target);
       return;
     }
+
+    // Shift+1..7 -> mark EVERY bout in the burst. Must use e.code: with Shift held,
+    // e.key is '!', '@', '#'... not the digit. Shift-only, so it can't collide with
+    // App.js's Ctrl+Shift+digit fly switcher.
+    if (e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      const m = /^Digit([1-7])$/.exec(e.code);
+      if (m) {
+        e.preventDefault();
+        const opt = OPTIONS[parseInt(m[1], 10) - 1];
+        const n = s.burstBouts.length;
+        if (n > 5 && !window.confirm(`Mark all ${n} bouts as "${opt}"?`)) return;
+        s.setAllInBurst?.(opt);
+        return;
+      }
+    }
+
     const map = { '1': 'pe', '2': 'feed', '3': 'groom', '4': 'walk', '5': 'other', '6': 'merge', '7': 'unsure' };
     if (map[e.key] && s.burstBouts.length) {
       const target = s.burstBouts[s.selectedBoutIdx];
@@ -737,6 +753,7 @@ const downloadBurstVideo = useCallback(async () => {
       </div>
       <div style={{ marginTop: 8, fontSize: '0.8em', color: '#777' }}>
         keys: <b>1</b>=pe <b>2</b>=feed <b>3</b>=groom <b>4</b>=walk <b>5</b>=other <b>6</b>=merge <b>7</b>=unsure · <b>←/→</b> bursts  <b>↑/↓</b> bouts  <b>n</b>=next unlabeled  <b>j/k</b>=next/prev unreviewed · <b>★</b> = pipeline's prediction
+        keys: <b>1–7</b> verdict for selected bout · <b>Shift+1–7</b> same verdict for ALL bouts in burst · <b>←/→</b> bursts …
       </div>
     </div>
 
