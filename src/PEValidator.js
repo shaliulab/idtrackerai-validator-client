@@ -248,6 +248,33 @@ const downloadBurstVideo = useCallback(async () => {
     } catch (e) { setNotice(`clear failed: ${e.message}`); load(); }
   }, [fly, load]);
 
+  // Defined BEFORE stateRef.current below: that assignment runs during render,
+  // so anything it references must already exist (const is not hoisted).
+  const setAllInBurst = useCallback((verdict) => {
+    // optimistic: one state update for the whole burst
+    setVerdicts(v => {
+      const next = { ...v };
+      burstBouts.forEach(b => { next[keyOf(b)] = verdict; });
+      return next;
+    });
+    // persist each bout (PK is per-bout); fire together, resync if any fail
+    Promise.allSettled(
+      burstBouts.map(b =>
+        api.post(`${API}/annotate`, {
+          fly,
+          start_frame: b.start_fn, end_frame: b.end_fn,
+          burst_id: b.burst_id, bout_uid: b.bout_uid,
+          pe_score: b.pe_score, verdict,
+        })
+      )
+    ).then(results => {
+      if (results.some(r => r.status === 'rejected')) {
+        setNotice('some bulk saves failed');
+        load();   // resync truth from the server
+      }
+    });
+  }, [burstBouts, fly, load]);
+
 
   useEffect(() => { setSelectedBoutIdx(0); }, [burstId]);
 
@@ -300,8 +327,9 @@ const downloadBurstVideo = useCallback(async () => {
 
 
   const stateRef = useRef({});
-  stateRef.current = { active, burstBouts, burstIds, selectedBoutIdx, verdicts,
-                       setVerdict, clearVerdict, setAllInBurst, gotoNextUnlabeled, gotoNextIncomplete };
+  stateRef.current = { active, burstBouts, burstIds, selectedBoutIdx, verdicts, OPTIONS,
+                       setVerdict, clearVerdict, setAllInBurst, gotoNextUnlabeled,
+                       gotoNextIncomplete };
 
   useEffect(() => {
   const onKey = (e) => {
@@ -338,8 +366,9 @@ const downloadBurstVideo = useCallback(async () => {
       const m = /^Digit([1-7])$/.exec(e.code);
       if (m) {
         e.preventDefault();
-        const opt = OPTIONS[parseInt(m[1], 10) - 1];
+        const opt = s.OPTIONS[parseInt(m[1], 10) - 1];
         const n = s.burstBouts.length;
+        if (!n) return;
         if (n > 5 && !window.confirm(`Mark all ${n} bouts as "${opt}"?`)) return;
         s.setAllInBurst?.(opt);
         return;
@@ -432,32 +461,6 @@ const downloadBurstVideo = useCallback(async () => {
 
     setPlayT((globalFrame - trace.start_frame) / trace.fps);
   }, [burstBouts, trace]);
-
-
-  const setAllInBurst = useCallback((verdict) => {
-    // optimistic: one state update for the whole burst
-    setVerdicts(v => {
-      const next = { ...v };
-      burstBouts.forEach(b => { next[keyOf(b)] = verdict; });
-      return next;
-    });
-    // persist each bout (PK is per-bout); fire together, resync if any fail
-    Promise.allSettled(
-      burstBouts.map(b =>
-        api.post(`${API}/annotate`, {
-          fly,
-          start_frame: b.start_fn, end_frame: b.end_fn,
-          burst_id: b.burst_id, bout_uid: b.bout_uid,
-          pe_score: b.pe_score, verdict,
-        })
-      )
-    ).then(results => {
-      if (results.some(r => r.status === 'rejected')) {
-        setNotice('some bulk saves failed');
-        load();   // resync truth from the server
-      }
-    });
-  }, [burstBouts, fly, load]);
 
 
   useEffect(() => {
@@ -752,8 +755,11 @@ const downloadBurstVideo = useCallback(async () => {
       </table>
       </div>
       <div style={{ marginTop: 8, fontSize: '0.8em', color: '#777' }}>
-        keys: <b>1</b>=pe <b>2</b>=feed <b>3</b>=groom <b>4</b>=walk <b>5</b>=other <b>6</b>=merge <b>7</b>=unsure · <b>←/→</b> bursts  <b>↑/↓</b> bouts  <b>n</b>=next unlabeled  <b>j/k</b>=next/prev unreviewed · <b>★</b> = pipeline's prediction
-        keys: <b>1–7</b> verdict for selected bout · <b>Shift+1–7</b> same verdict for ALL bouts in burst · <b>←/→</b> bursts …
+        keys: <b>1–7</b> verdict for the selected bout (same key again unpresses) ·{' '}
+        <b>Shift+1–7</b> same verdict for ALL bouts in the burst ·{' '}
+        <b>0</b>/<b>Backspace</b> clear ·{' '}
+        <b>←/→</b> bursts · <b>↑/↓</b> bouts · <b>n</b> next unlabeled ·{' '}
+        <b>j/k</b> next/prev unreviewed · <b>★</b> = pipeline's prediction
       </div>
     </div>
 
