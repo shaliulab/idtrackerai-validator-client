@@ -269,6 +269,26 @@ function App() {
     }
   };
 
+  const [useVal, setUseVal] = useState(false);
+
+  useEffect(() => {
+    api.get('/api/use_val')
+      .then(r => setUseVal(Boolean(r.data.use_val)))
+      .catch(() => {});
+  }, []);
+
+  const toggleUseVal = async (checked) => {
+    try {
+      const { data } = await api.post('/api/use_val', { use_val: checked });
+      setUseVal(Boolean(data.use_val));
+      fetchFrameRange();                 // bounds differ between the two tables
+      fetchFrame(frameNumber);           // reload tracking from the new source
+    } catch (e) {
+      console.error('Could not switch validation source:', e);
+    }
+  };
+
+
   const [frameRange, setFrameRange] = useState(null); // { min, max }
 
   const fetchFrameRange = useCallback(async () => {
@@ -323,7 +343,7 @@ function App() {
       minHeight: '100vh',
     }}>
       {/* ── Header ── */}
-      <div style={{
+     <div style={{
         display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between',
         padding: '4px 12px 0',
       }}>
@@ -334,22 +354,49 @@ function App() {
           </h3>
         </div>
 
-        <button
-          onClick={toggleTheme}
-          title="Toggle light/dark theme"
-          style={{
-            padding: '6px 12px',
-            borderRadius: 6,
-            border: `1px solid ${theme.border}`,
-            background: theme.buttonBg,
-            color: theme.text,
-            cursor: 'pointer',
-            fontSize: '0.85em',
-            whiteSpace: 'nowrap',
-          }}
-        >
-          {themeName === 'light' ? 'Dark mode' : 'Light mode'}
-        </button>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+
+
+          <label
+            title="Read tracking from IDENTITY_VAL (validated) instead of IDENTITY"
+            style={{
+              display: 'flex', alignItems: 'center', gap: 6,
+              padding: '6px 12px',
+              borderRadius: 6,
+              border: `1px solid ${theme.border}`,
+              background: theme.buttonBg,
+              color: theme.text,
+              cursor: 'pointer',
+              fontSize: '0.85em',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={useVal}
+              onChange={(e) => toggleUseVal(e.target.checked)}
+              style={{ cursor: 'pointer' }}
+            />
+            Validated tracking
+          </label>
+
+          <button
+            onClick={toggleTheme}
+            title="Toggle light/dark theme"
+            style={{
+              padding: '6px 12px',
+              borderRadius: 6,
+              border: `1px solid ${theme.border}`,
+              background: theme.buttonBg,
+              color: theme.text,
+              cursor: 'pointer',
+              fontSize: '0.85em',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {themeName === 'light' ? 'Dark mode' : 'Light mode'}
+          </button>
+        </div>
       </div>
 
       {/* ── Tabs ── */}
