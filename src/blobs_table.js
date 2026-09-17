@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import './TableStyles.css';
 import { useState, useMemo } from 'react';
 
