@@ -269,6 +269,24 @@ function App() {
     }
   };
 
+  const [frameRange, setFrameRange] = useState(null); // { min, max }
+
+  const fetchFrameRange = useCallback(async () => {
+    try {
+      const { data } = await api.get('/api/frame_range');
+      const parsed = typeof data === 'string' ? JSON.parse(data) : data;
+      const min = Number(parsed.min_frame);
+      const max = Number(parsed.max_frame);
+      if (Number.isFinite(min) && Number.isFinite(max) && max > min) {
+        setFrameRange({ min, max });
+      }
+    } catch (error) {
+      console.error('Error fetching frame range:', error);
+    }
+  }, []);
+
+  // Declared after fetchFrameRange: this handler calls it, and `const` is not
+  // hoisted.
   const [useVal, setUseVal] = useState(false);
 
   useEffect(() => {
@@ -287,23 +305,6 @@ function App() {
       console.error('Could not switch validation source:', e);
     }
   };
-
-
-  const [frameRange, setFrameRange] = useState(null); // { min, max }
-
-  const fetchFrameRange = useCallback(async () => {
-    try {
-      const { data } = await api.get('/api/frame_range');
-      const parsed = typeof data === 'string' ? JSON.parse(data) : data;
-      const min = Number(parsed.min_frame);
-      const max = Number(parsed.max_frame);
-      if (Number.isFinite(min) && Number.isFinite(max) && max > min) {
-        setFrameRange({ min, max });
-      }
-    } catch (error) {
-      console.error('Error fetching frame range:', error);
-    }
-  }, []);
 
   useEffect(() => { fetchFrameRange(); }, [fetchFrameRange]);
 
