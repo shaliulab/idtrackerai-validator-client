@@ -10,7 +10,7 @@ import InteractiveText from './interactiveText';
 import { RequestQueue } from './queue';
 import { BlobsTable } from './blobs_table';
 import SelectComponent from './selectComponent';
-import { FIRST_FRAME, PLACEHOLDER_IMAGE } from './constants';
+import { FIRST_FRAME, PLACEHOLDER_IMAGE, LABEL_FIELD } from './constants';
 import PEValidator from './PEValidator';
 import api from './api';
 
@@ -87,6 +87,16 @@ function App() {
   useEffect(() => {
     try { localStorage.setItem('fh-theme', themeName); } catch { /* ignore */ }
   }, [themeName]);
+
+  // ── Which tracking field is drawn on the frame (persisted like the theme) ──
+  const [labelField, setLabelField] = useState(() => {
+    try { return localStorage.getItem('fh-label-field') || LABEL_FIELD; }
+    catch { return LABEL_FIELD; }
+  });
+
+  useEffect(() => {
+    try { localStorage.setItem('fh-label-field', labelField); } catch { /* ignore */ }
+  }, [labelField]);
 
   // Paint the page background too, not just the app container.
   useEffect(() => {
@@ -428,9 +438,10 @@ function App() {
               nativeSize={nativeSize}
               showPose={showPose}          // ← controlled
               setShowPose={setShowPose}     // ← controlled
-
+              labelField={labelField}       // ← controlled
+              setLabelField={setLabelField} // ← controlled
             />
-          </div>
+        </div>
 
 
           {/* Right: controls */}

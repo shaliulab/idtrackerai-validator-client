@@ -1,6 +1,6 @@
 // FrameWithSquare.js
 
-import React, { useRef, useEffect, useState, useImperativeHandle } from 'react';
+import React, { useRef, useEffect, useState, useMemo, useImperativeHandle } from 'react';
 
 import {
   SQUARE_HEIGHT,
@@ -8,6 +8,7 @@ import {
   TEXT_SIZE,
   TEXT_FAMILY,
   LABEL_FIELD,
+  LABEL_FIELD_CANDIDATES,
   PRINT_CONTOUR,
 } from './constants';
 
@@ -48,6 +49,16 @@ function colorFor(colors, identity) {
   return colors[((idx % colors.length) + colors.length) % colors.length];
 }
 
+// Keep labels short: long floats (area, t) would otherwise smear across the
+// frame and overlap neighbouring animals.
+function formatLabel(value) {
+  if (value == null) return '';
+  if (typeof value === 'number' && !Number.isInteger(value)) {
+    return value.toFixed(1);
+  }
+  return String(value);
+}
+
 const FrameWithSquare = React.forwardRef(
   (
     {
@@ -64,12 +75,26 @@ const FrameWithSquare = React.forwardRef(
       nativeSize,
       showPose,
       setShowPose,
+      labelField = LABEL_FIELD,
+      setLabelField,
     },
     ref,
   ) => {
     const canvasRef = useRef(null);
     const imgRef = useRef(null);
     const [hoverPos, setHoverPos] = useState(null);
+
+    // Which fields the current tracking rows actually carry. Derived from the
+    // data rather than hard-coded, so a backend that stops sending `fragment`
+    // does not leave a dead option in the menu.
+    const labelOptions = useMemo(() => {
+      const row = trackingData?.[0];
+      if (!row) return [labelField];
+      const present = LABEL_FIELD_CANDIDATES.filter((f) => f in row);
+      // Always offer whatever is currently selected, even if this frame's rows
+      // happen not to include it.
+      return present.includes(labelField) ? present : [labelField, ...present];
+    }, [trackingData, labelField]);
 
     // Click log. Nothing renders from it, so a ref is the right container:
     // as state it was being mutated in place and returned by identity, which
@@ -216,7 +241,9 @@ const FrameWithSquare = React.forwardRef(
         context.clearRect(0, 0, displayWidth, displayHeight);
         context.drawImage(img, 0, 0, displayWidth, displayHeight);
 
-        // Tracking labels
+        // Tracking labels. Colour still follows identity regardless of which
+        // field is displayed, so an animal keeps the same colour when the
+        // label switches to area or fragment.
         context.font = `${TEXT_SIZE}px ${TEXT_FAMILY}`;
         trackingData.forEach((animal) => {
           const color =
@@ -224,8 +251,8 @@ const FrameWithSquare = React.forwardRef(
               ? colorFor(colors, animal.identity)
               : '#000000';
           context.fillStyle = color;
-          const v = animal?.[LABEL_FIELD] ?? animal?.identity ?? '';
-          context.fillText(String(v), animal.x * sx, animal.y * sy);
+          const v = animal?.[labelField] ?? animal?.identity ?? '';
+          context.fillText(formatLabel(v), animal.x * sx, animal.y * sy);
         });
 
         // ===== POSE RENDERING =====
@@ -346,6 +373,7 @@ const FrameWithSquare = React.forwardRef(
       hoverPos,
       nativeSize,
       showPose,
+      labelField,
     ]);
 
     return (
@@ -367,6 +395,23 @@ const FrameWithSquare = React.forwardRef(
               style={{ cursor: 'pointer' }}
             />
             <span style={{ fontWeight: 'bold' }}>Show Pose</span>
+          </label>
+
+          <label
+            style={{ display: 'flex', alignItems: 'center', gap: '5px' }}
+            title="Which field to draw next to each animal"
+          >
+            <span style={{ fontWeight: 'bold' }}>Label:</span>
+            <select
+              value={labelField}
+              onChange={(e) => setLabelField?.(e.target.value)}
+              disabled={!setLabelField}
+              style={{ padding: '2px 6px', borderRadius: 4, cursor: 'pointer' }}
+            >
+              {labelOptions.map((f) => (
+                <option key={f} value={f}>{f}</option>
+              ))}
+            </select>
           </label>
         </div>
         <div style={{ width: displayWidth }}>
