@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import './TableStyles.css';
+import { useState, useMemo } from 'react';
 
-const BlobsTable = ({ Data, setFrameNumber }) => {
-  // ↓ All hooks and helpers go INSIDE this function
+const BlobsTable = ({ Data, setFrameNumber, number_of_animals }) => {
+  
   const [draft, setDraft] = useState('');
   const [editingRow, setEditingRow] = useState(null);
 
@@ -27,11 +28,11 @@ const BlobsTable = ({ Data, setFrameNumber }) => {
   // Always render numberOfAnimals rows so the table height is constant and the
   // controls below it don't jump when a frame has fewer detections.
   const rows = useMemo(() => {
-    const n = numberOfAnimals ?? Data.length;
-    const padded = Data.slice(0, n);
-    while (padded.length < n) padded.push(null);     // null = placeholder row
-    return padded;
-  }, [Data, numberOfAnimals]);
+      const n = Math.max(Number(number_of_animals) || 0, Data.length);
+      const padded = Data.slice(0, n);
+      while (padded.length < n) padded.push(null);     // null = placeholder row
+      return padded;
+    }, [Data, number_of_animals]);
 
   const cellInputStyle = {
     width: '100%',
