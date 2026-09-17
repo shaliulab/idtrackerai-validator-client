@@ -11,8 +11,7 @@ const defaultOption = { value: "", label: "Browse available experiments..." };
 
 const unwrap = (data) => (typeof data === 'string' ? JSON.parse(data) : data);
 
-
-async function postLoad(experiment) {
+export async function postLoad(experiment) {
   const response = await api.post('/api/load', { experiment });
   return unwrap(response.data);
 }

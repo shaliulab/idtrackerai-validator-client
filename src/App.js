@@ -9,7 +9,8 @@ import Tab from './Tab';
 import InteractiveText from './interactiveText';
 import { RequestQueue } from './queue';
 import { BlobsTable } from './blobs_table';
-import SelectComponent from './selectComponent';
+import SelectComponent, { postLoad } from './selectComponent';
+
 import { FIRST_FRAME, PLACEHOLDER_IMAGE, LABEL_FIELD } from './constants';
 import PEValidator from './PEValidator';
 import api from './api';
@@ -346,19 +347,24 @@ function App() {
     padding: '2px 6px',
   };
 
+  const flatToSlash = (exp) => {
+    const parts = exp.split('_');
+    return parts.length < 3 ? exp
+      : `${parts[0]}/${parts[1]}/${parts.slice(2).join('_')}`;
+  };
 
 
-  // Switch backend experiment + select the fly. The experiment POST must be the SAME
-  // request SelectComponent makes — extract it from SelectComponent into a shared
-  // helper (or export it) rather than duplicating the URL here.
   const switchToFly = useCallback(async (flyId) => {
     const experiment = flyId.split('__')[0];
     const current = selectedFly?.split('__')[0];
     if (experiment !== current) {
-      await loadExperimentOnBackend(experiment);   // <- SelectComponent's request
+      // PEValidator's fly ids are flat (FlyHostel4_2X_2025-06-28_16-00-00);
+      // /api/load expects the slash form, as typed in SelectComponent.
+      const data = await postLoad(flatToSlash(experiment));
       requestQueue.cancelAll();
       fetchFramerate(); fetchFrameRange(); setNativeSize(null);
-      await fetchFlies();                          // fly list follows the experiment
+      setFrameNumber(data.first_frame ?? FIRST_FRAME);
+      await fetchFlies();
     }
     setSelectedFly(flyId);
   }, [selectedFly, fetchFlies, fetchFramerate, fetchFrameRange]);

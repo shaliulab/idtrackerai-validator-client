@@ -28,7 +28,7 @@ const unwrap = (data) => (typeof data === 'string' ? JSON.parse(data) : data);
 // /pe/trace            GET
 // /pe/media/videos     GET
 
-export default function PEValidator({ fly, active }) {
+export default function PEValidator({ fly, active, onRequestFly }) {
 
   const [auditMode, setAuditMode] = useState(false);
   const [auditIds, setAuditIds] = useState([]);
@@ -107,15 +107,6 @@ export default function PEValidator({ fly, active }) {
     api.get(`${API}/audit`, { params: { all: 1 } })
       .then(r => setAuditAll(unwrap(r.data))).catch(() => setAuditAll([]));
   }, [auditMode]);
-
-  useEffect(() => {
-    const t = pendingAuditTarget.current;
-    if (!t || t.fly !== fly || !bouts.length) return;
-    const idx = burstIds.indexOf(t.burst_id);
-    if (idx !== -1) { setBurstIdx(idx); setNotice(null); }
-    else setNotice(`burst ${t.burst_id} not in ${fly} — regenerate the audit CSV?`);
-    pendingAuditTarget.current = null;
-  }, [fly, bouts, burstIds]);
 
 
   // per-burst score for ordering: prefer a burst-level score if the backend supplies
@@ -316,6 +307,17 @@ const downloadBurstVideo = useCallback(async () => {
 
   useEffect(() => { setSelectedBoutIdx(0); }, [burstId]);
 
+  
+  useEffect(() => {
+    const t = pendingAuditTarget.current;
+    if (!t || t.fly !== fly || !bouts.length) return;
+    const idx = burstIds.indexOf(t.burst_id);
+    if (idx !== -1) { setBurstIdx(idx); setNotice(null); }
+    else setNotice(`burst ${t.burst_id} not in ${fly} — regenerate the audit CSV?`);
+    pendingAuditTarget.current = null;
+  }, [fly, bouts, burstIds]);
+
+  
   // index of the next burst (after `fromIdx`) that still has at least one bout with no
   // saved verdict; -1 if none remain. Pipeline defaults don't count as labelled — only
   // an entry in `verdicts` does.
@@ -422,8 +424,8 @@ const downloadBurstVideo = useCallback(async () => {
       else s.setVerdict(target, map[e.key]);
       return;
     }
-    if (e.key === 'j') { s.gotoNextIncomplete?.(1);  return; }
-    if (e.key === 'k') { s.gotoNextIncomplete?.(-1); return; }
+    if (e.key === 'k') { s.gotoNextIncomplete?.(1);  return; }
+    if (e.key === 'j') { s.gotoNextIncomplete?.(-1); return; }
 
   };
   window.addEventListener('keydown', onKey);
@@ -798,7 +800,7 @@ const downloadBurstVideo = useCallback(async () => {
         <b>Shift+1–7</b> same verdict for ALL bouts in the burst ·{' '}
         <b>0</b>/<b>Backspace</b> clear ·{' '}
         <b>←/→</b> bursts · <b>↑/↓</b> bouts · <b>n</b> next unlabeled ·{' '}
-        <b>j/k</b> next/prev unreviewed · <b>★</b> = pipeline's prediction
+        <b>k/j</b> next/prev unreviewed · <b>★</b> = pipeline's prediction
       </div>
     </div>
 
