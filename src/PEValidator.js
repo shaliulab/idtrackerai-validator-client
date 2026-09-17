@@ -51,7 +51,8 @@ export default function PEValidator({ fly, active }) {
   const distSvgRef = useRef(null);
   const confSvgRef = useRef(null);
   const [recording, setRecording] = useState(false);
-
+  const [auditAll, setAuditAll] = useState([]);        // [{fly, burst_id, done}]
+  const pendingAuditTarget = useRef(null);             // {fly, burst_id} awaiting load
 
   const OPTIONS = ['pe', 'feed', 'groom', 'walk', 'other', 'merge', 'unsure'];
     const VERDICT_STYLE = {
@@ -100,6 +101,22 @@ export default function PEValidator({ fly, active }) {
 
 
   useEffect(() => { load(); }, [load]);
+  // global audit list (all flies), refreshed when audit mode turns on
+  useEffect(() => {
+    if (!auditMode) return;
+    api.get(`${API}/audit`, { params: { all: 1 } })
+      .then(r => setAuditAll(unwrap(r.data))).catch(() => setAuditAll([]));
+  }, [auditMode]);
+
+  useEffect(() => {
+    const t = pendingAuditTarget.current;
+    if (!t || t.fly !== fly || !bouts.length) return;
+    const idx = burstIds.indexOf(t.burst_id);
+    if (idx !== -1) { setBurstIdx(idx); setNotice(null); }
+    else setNotice(`burst ${t.burst_id} not in ${fly} — regenerate the audit CSV?`);
+    pendingAuditTarget.current = null;
+  }, [fly, bouts, burstIds]);
+
 
   // per-burst score for ordering: prefer a burst-level score if the backend supplies
   // one (burst_pe_score); otherwise fall back to the mean of the bouts' pe_score.
@@ -149,11 +166,32 @@ export default function PEValidator({ fly, active }) {
   }, [bouts, verdicts]);
 
   const gotoNextIncomplete = useCallback((dir = 1) => {
-    for (let i = burstIdx + dir; i >= 0 && i < burstIds.length; i += dir) {
-      if (!burstDone(burstIds[i])) { setBurstIdx(i); setNotice(null); return; }
+    if (!auditMode || !auditAll.length) {              // old within-fly behaviour
+      for (let i = burstIdx + dir; i >= 0 && i < burstIds.length; i += dir) {
+        if (!burstDone(burstIds[i])) { setBurstIdx(i); setNotice(null); return; }
+      }
+      setNotice('no more unreviewed bursts'); return;
     }
-    setNotice(dir > 0 ? 'no more unreviewed bursts' : 'no earlier unreviewed bursts');
-  }, [burstIdx, burstIds, burstDone]);
+    const pos = auditAll.findIndex(a => a.fly === fly && a.burst_id === burstId);
+    for (let i = (pos === -1 ? -1 : pos) + dir;
+         i >= 0 && i < auditAll.length; i += dir) {
+      const a = auditAll[i];
+      const isDone = a.fly === fly ? burstDone(a.burst_id) : a.done === true;
+      if (isDone || a.done === null) continue;         // null = feather missing, skip
+      if (a.fly === fly) {
+        const idx = burstIds.indexOf(a.burst_id);
+        if (idx !== -1) { setBurstIdx(idx); setNotice(null); return; }
+      } else {
+        pendingAuditTarget.current = { fly: a.fly, burst_id: a.burst_id };
+        setNotice(`switching to ${a.fly}…`);
+        onRequestFly?.(a.fly);
+        return;
+      }
+    }
+    setNotice(dir > 0 ? 'audit complete — no unreviewed bursts left'
+                      : 'no earlier unreviewed bursts');
+  }, [auditMode, auditAll, fly, burstId, burstIdx, burstIds, burstDone, onRequestFly]);
+
 
 
 const downloadBurstVideo = useCallback(async () => {
@@ -571,7 +609,8 @@ const downloadBurstVideo = useCallback(async () => {
 
       <label style={{ marginLeft: 12 }}>
         <input type="checkbox" checked={auditMode}
-              onChange={e => { setAuditMode(e.target.checked); setBurstIdx(0); }} />
+               onChange={e => { setAuditMode(e.target.checked); setBurstIdx(0);
+                               pendingAuditTarget.current = null; }} /> 
         {' '}audit mode
       </label>
       {auditMode && (

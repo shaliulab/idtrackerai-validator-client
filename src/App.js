@@ -346,6 +346,24 @@ function App() {
     padding: '2px 6px',
   };
 
+
+
+  // Switch backend experiment + select the fly. The experiment POST must be the SAME
+  // request SelectComponent makes — extract it from SelectComponent into a shared
+  // helper (or export it) rather than duplicating the URL here.
+  const switchToFly = useCallback(async (flyId) => {
+    const experiment = flyId.split('__')[0];
+    const current = selectedFly?.split('__')[0];
+    if (experiment !== current) {
+      await loadExperimentOnBackend(experiment);   // <- SelectComponent's request
+      requestQueue.cancelAll();
+      fetchFramerate(); fetchFrameRange(); setNativeSize(null);
+      await fetchFlies();                          // fly list follows the experiment
+    }
+    setSelectedFly(flyId);
+  }, [selectedFly, fetchFlies, fetchFramerate, fetchFrameRange]);
+  
+
   return (
     <div style={{
       fontFamily: 'Arial, sans-serif',
@@ -513,6 +531,7 @@ function App() {
       <PEValidator
             fly={selectedFly}
             active={activeTab === 'pe_validator'}
+            onRequestFly={switchToFly}
         />
       </div>
     </div>
