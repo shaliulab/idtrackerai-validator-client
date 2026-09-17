@@ -39,6 +39,17 @@ const SelectComponent = ({ onExperimentChange }) => {
       .finally(() => setIsLoading(false));
   }, []);
 
+  // The backend holds the loaded experiment, so it survives a page reload; ask it
+  // rather than persisting anything client-side.
+  useEffect(() => {
+    api.get('/api/current_experiment')
+      .then(r => {
+        const exp = unwrap(r.data)?.experiment;
+        if (exp) setInputValue(exp);
+      })
+      .catch(() => {});
+  }, []);
+
   const handleLoad = async (experiment) => {
     const trimmed = experiment.trim();
     if (!trimmed) return;
@@ -94,7 +105,7 @@ const SelectComponent = ({ onExperimentChange }) => {
         <Select
           options={options}
           onChange={handleDropdownChange}
-          defaultValue={defaultOption}
+          value={inputValue ? { value: inputValue, label: inputValue } : defaultOption}
           isDisabled={isSwitching}
           placeholder="Browse available experiments..."
         />

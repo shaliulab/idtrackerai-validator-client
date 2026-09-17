@@ -24,6 +24,15 @@ const BlobsTable = ({ Data, setFrameNumber }) => {
     setEditingChunkRow(null);
   };
 
+  // Always render numberOfAnimals rows so the table height is constant and the
+  // controls below it don't jump when a frame has fewer detections.
+  const rows = useMemo(() => {
+    const n = numberOfAnimals ?? Data.length;
+    const padded = Data.slice(0, n);
+    while (padded.length < n) padded.push(null);     // null = placeholder row
+    return padded;
+  }, [Data, numberOfAnimals]);
+
   const cellInputStyle = {
     width: '100%',
     background: 'transparent',
@@ -54,60 +63,72 @@ const BlobsTable = ({ Data, setFrameNumber }) => {
           <th>ZT</th>
         </tr>
       </thead>
-      <tbody>
-        {Data.map((row, index) => (
-          <tr key={index}>
-            <td>
-              <input
-                type="number"
-                value={editingRow === index ? draft : (row.frame_number ?? '')}
-                onFocus={() => {
-                  setEditingRow(index);
-                  setDraft(String(row.frame_number ?? ''));
-                }}
-                onChange={(e) => setDraft(e.target.value)}
-                onBlur={() => commit(draft)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') e.target.blur();
-                  else if (e.key === 'Escape') setEditingRow(null);
-                }}
-                style={cellInputStyle}
-                onWheel={(e) => e.target.blur()}
-              />
-            </td>
-            <td>
-              <input
-                type="number"
-                value={
-                  editingChunkRow === index
-                    ? chunkDraft
-                    : Math.floor(row.frame_number / row.chunksize)
-                }
-                onFocus={() => {
-                  setEditingChunkRow(index);
-                  setChunkDraft(String(Math.floor(row.frame_number / row.chunksize)));
-                }}
-                onChange={(e) => setChunkDraft(e.target.value)}
-                onBlur={() => commitChunk(chunkDraft, row.chunksize)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') e.target.blur();
-                  else if (e.key === 'Escape') setEditingChunkRow(null);
-                }}
-                style={cellInputStyle}
-                onWheel={(e) => e.target.blur()}
-              />
-            </td>
-            <td>{row.frame_number % row.chunksize}</td>
-            <td>{row.x}</td>
-            <td>{row.y}</td>
-            <td>{row.identity}</td>
-            <td>{row.local_identity}</td>
-            <td>{row.in_frame_index}</td>
-            <td>{row.fragment}</td>
-            <td>{row.area}</td>
-            <td>{row.modified.toString()}</td>
-            <td>{row.ZT}</td>
-          </tr>
+            <tbody>
+        {rows.map((row, index) => (
+          row ? (
+            <tr key={`row-${index}`}>
+              <td>
+                <input
+                  type="number"
+                  value={editingRow === index ? draft : (row.frame_number ?? '')}
+                  onFocus={() => {
+                    setEditingRow(index);
+                    setDraft(String(row.frame_number ?? ''));
+                  }}
+                  onChange={(e) => setDraft(e.target.value)}
+                  onBlur={() => commit(draft)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') e.target.blur();
+                    else if (e.key === 'Escape') setEditingRow(null);
+                  }}
+                  style={cellInputStyle}
+                  onWheel={(e) => e.target.blur()}
+                />
+              </td>
+              <td>
+                <input
+                  type="number"
+                  value={
+                    editingChunkRow === index
+                      ? chunkDraft
+                      : Math.floor(row.frame_number / row.chunksize)
+                  }
+                  onFocus={() => {
+                    setEditingChunkRow(index);
+                    setChunkDraft(String(Math.floor(row.frame_number / row.chunksize)));
+                  }}
+                  onChange={(e) => setChunkDraft(e.target.value)}
+                  onBlur={() => commitChunk(chunkDraft, row.chunksize)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') e.target.blur();
+                    else if (e.key === 'Escape') setEditingChunkRow(null);
+                  }}
+                  style={cellInputStyle}
+                  onWheel={(e) => e.target.blur()}
+                />
+              </td>
+              <td>{row.frame_number % row.chunksize}</td>
+              <td>{row.x}</td>
+              <td>{row.y}</td>
+              <td>{row.identity}</td>
+              <td>{row.local_identity}</td>
+              <td>{row.in_frame_index}</td>
+              <td>{row.fragment}</td>
+              <td>{row.area}</td>
+              <td>{row.modified?.toString()}</td>
+              <td>{row.ZT}</td>
+            </tr>
+          ) : (
+            // placeholder: keeps the table height constant when a frame has fewer
+            // detections than animals, so the controls below don't jump.
+            <tr key={`pad-${index}`} style={{ visibility: 'hidden' }}>
+              <td><input type="number" readOnly value="" style={cellInputStyle} /></td>
+              <td><input type="number" readOnly value="" style={cellInputStyle} /></td>
+              <td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td>
+              <td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td>
+              <td>&nbsp;</td><td>&nbsp;</td>
+            </tr>
+          )
         ))}
       </tbody>
     </table>

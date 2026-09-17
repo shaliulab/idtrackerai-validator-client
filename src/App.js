@@ -472,6 +472,7 @@ function App() {
           <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
 
             <SelectComponent
+              key={selectedFly?.split('__')[0]}
               onExperimentChange={(firstFrame) => {
                 requestQueue.cancelAll();
                 fetchFramerate();
@@ -482,7 +483,8 @@ function App() {
             />
 
             <div style={{ maxHeight: 220, overflowY: 'auto', border: `1px solid ${theme.border}`, background: theme.panelBg, boxSizing: 'border-box' }}>
-              <BlobsTable Data={trackingData} setFrameNumber={setFrameNumber} />
+              <BlobsTable Data={trackingData} setFrameNumber={setFrameNumber}
+                          number_of_animals={number_of_animals} />
 
             </div>
 
