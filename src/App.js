@@ -117,6 +117,20 @@ function App() {
   const [number_of_animals, setNumberOfAnimals] = useState(6);
   const [activeTab, setActiveTab] = useState('idtrackerai_viewer');
 
+  const [animalMetadata, setAnimalMetadata] = useState({});
+
+  const fetchAnimalMetadata = useCallback(async () => {
+    try {
+      const { data } = await api.get('/api/animal_metadata');
+      setAnimalMetadata(typeof data === 'string' ? JSON.parse(data) : data);
+    } catch (err) {
+      console.error('Error fetching animal metadata:', err);
+      setAnimalMetadata({});
+    }
+  }, []);
+
+  useEffect(() => { fetchAnimalMetadata(); }, [fetchAnimalMetadata]);
+
   const fetchFlies = useCallback(async () => {
     try {
       const { data } = await api.get('/api/pe/flies');
@@ -477,14 +491,16 @@ function App() {
                 requestQueue.cancelAll();
                 fetchFramerate();
                 fetchFrameRange();
+                fetchAnimalMetadata();
                 setNativeSize(null);
                 setFrameNumber(firstFrame);
               }}
             />
 
-            <div style={{ maxHeight: 220, overflowY: 'auto', border: `1px solid ${theme.border}`, background: theme.panelBg, boxSizing: 'border-box' }}>
+            <div style={{ maxHeight: 220, overflowY: 'auto', overflowX: 'auto', border: `1px solid ${theme.border}`, background: theme.panelBg, boxSizing: 'border-box' }}>
               <BlobsTable Data={trackingData} setFrameNumber={setFrameNumber}
-                          number_of_animals={number_of_animals} />
+                          number_of_animals={number_of_animals}
+                          animalMetadata={animalMetadata} />
 
             </div>
 

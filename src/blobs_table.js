@@ -1,8 +1,32 @@
 import './TableStyles.css';
 import { useState, useMemo } from 'react';
 
-const BlobsTable = ({ Data, setFrameNumber, number_of_animals }) => {
-  
+// Column definitions: key used only for React keys; w = width in px
+const COLUMNS = [
+  { key: 'frame',    label: 'Frame #',   w: 82  },
+  { key: 'chunk',    label: 'Chunk',     w: 54  },
+  { key: 'fidx',     label: 'Frm idx',   w: 54  },
+  { key: 'x',        label: 'X',         w: 42  },
+  { key: 'y',        label: 'Y',         w: 42  },
+  { key: 'identity', label: 'Id',        w: 42  },
+  { key: 'sex',      label: 'Sex',       w: 36  },
+  { key: 'genotype', label: 'Genotype',  w: 110 },
+  { key: 'local_id', label: 'Loc Id',    w: 50  },
+  { key: 'in_frame', label: 'InFrm',     w: 50  },
+  { key: 'fragment', label: 'Frag',      w: 50  },
+  { key: 'area',     label: 'Area',      w: 46  },
+  { key: 'yolo',     label: 'YOLO',      w: 46  },
+  { key: 'zt',       label: 'ZT',        w: 70  },
+];
+
+// Cell that truncates overflow and shows full value in native tooltip on hover
+const TC = ({ value, title }) => {
+  const display = value ?? '—';
+  const tip = title ?? (value != null ? String(value) : '');
+  return <td title={tip}>{display}</td>;
+};
+
+const BlobsTable = ({ Data, setFrameNumber, number_of_animals, animalMetadata = {} }) => {
   const [draft, setDraft] = useState('');
   const [editingRow, setEditingRow] = useState(null);
 
@@ -17,119 +41,93 @@ const BlobsTable = ({ Data, setFrameNumber, number_of_animals }) => {
 
   const commitChunk = (val, chunksize) => {
     const chunk = parseInt(val, 10);
-    const cs = Number(chunksize);  // coerce string -> number
+    const cs = Number(chunksize);
     if (Number.isFinite(chunk) && chunk >= 0 && Number.isFinite(cs) && cs > 0 && setFrameNumber) {
       setFrameNumber(chunk * cs);
     }
     setEditingChunkRow(null);
   };
 
-  // Always render numberOfAnimals rows so the table height is constant and the
-  // controls below it don't jump when a frame has fewer detections.
   const rows = useMemo(() => {
-      const n = Math.max(Number(number_of_animals) || 0, Data.length);
-      const padded = Data.slice(0, n);
-      while (padded.length < n) padded.push(null);     // null = placeholder row
-      return padded;
-    }, [Data, number_of_animals]);
-
-  const cellInputStyle = {
-    width: '100%',
-    background: 'transparent',
-    border: 'none',
-    textAlign: 'center',
-    font: 'inherit',
-    color: 'inherit',
-    outline: 'none',
-    padding: 0,
-    MozAppearance: 'textfield',
-  };
+    const n = Math.max(Number(number_of_animals) || 0, Data.length);
+    const padded = Data.slice(0, n);
+    while (padded.length < n) padded.push(null);
+    return padded;
+  }, [Data, number_of_animals]);
 
   return (
     <table className="data-table">
+      <colgroup>
+        {COLUMNS.map(c => <col key={c.key} style={{ width: c.w }} />)}
+      </colgroup>
       <thead>
         <tr>
-          <th>Frame Number</th>
-          <th>Chunk</th>
-          <th>Frame idx</th>
-          <th>X</th>
-          <th>Y</th>
-          <th>Identity</th>
-          <th>Local Identity</th>
-          <th>In frame index</th>
-          <th>Fragment</th>
-          <th>Area</th>
-          <th>YOLOv7</th>
-          <th>ZT</th>
+          {COLUMNS.map(c => <th key={c.key} title={c.label}>{c.label}</th>)}
         </tr>
       </thead>
-            <tbody>
-        {rows.map((row, index) => (
-          row ? (
+      <tbody>
+        {rows.map((row, index) => {
+          if (!row) {
+            return (
+              <tr key={`pad-${index}`} style={{ visibility: 'hidden' }}>
+                <td><input type="number" readOnly value="" /></td>
+                <td><input type="number" readOnly value="" /></td>
+                {COLUMNS.slice(2).map(c => <td key={c.key}>&nbsp;</td>)}
+              </tr>
+            );
+          }
+
+          const meta = animalMetadata[String(row.identity)] ?? {};
+
+          return (
             <tr key={`row-${index}`}>
+              {/* Frame Number — editable, navigates to that frame */}
               <td>
                 <input
                   type="number"
                   value={editingRow === index ? draft : (row.frame_number ?? '')}
-                  onFocus={() => {
-                    setEditingRow(index);
-                    setDraft(String(row.frame_number ?? ''));
-                  }}
-                  onChange={(e) => setDraft(e.target.value)}
+                  onFocus={() => { setEditingRow(index); setDraft(String(row.frame_number ?? '')); }}
+                  onChange={e => setDraft(e.target.value)}
                   onBlur={() => commit(draft)}
-                  onKeyDown={(e) => {
+                  onKeyDown={e => {
                     if (e.key === 'Enter') e.target.blur();
                     else if (e.key === 'Escape') setEditingRow(null);
                   }}
-                  style={cellInputStyle}
-                  onWheel={(e) => e.target.blur()}
+                  onWheel={e => e.target.blur()}
                 />
               </td>
+
+              {/* Chunk — editable, jumps to chunk * chunksize */}
               <td>
                 <input
                   type="number"
-                  value={
-                    editingChunkRow === index
-                      ? chunkDraft
-                      : Math.floor(row.frame_number / row.chunksize)
-                  }
-                  onFocus={() => {
-                    setEditingChunkRow(index);
-                    setChunkDraft(String(Math.floor(row.frame_number / row.chunksize)));
-                  }}
-                  onChange={(e) => setChunkDraft(e.target.value)}
+                  value={editingChunkRow === index ? chunkDraft : Math.floor(row.frame_number / row.chunksize)}
+                  onFocus={() => { setEditingChunkRow(index); setChunkDraft(String(Math.floor(row.frame_number / row.chunksize))); }}
+                  onChange={e => setChunkDraft(e.target.value)}
                   onBlur={() => commitChunk(chunkDraft, row.chunksize)}
-                  onKeyDown={(e) => {
+                  onKeyDown={e => {
                     if (e.key === 'Enter') e.target.blur();
                     else if (e.key === 'Escape') setEditingChunkRow(null);
                   }}
-                  style={cellInputStyle}
-                  onWheel={(e) => e.target.blur()}
+                  onWheel={e => e.target.blur()}
                 />
               </td>
-              <td>{row.frame_number % row.chunksize}</td>
-              <td>{row.x}</td>
-              <td>{row.y}</td>
-              <td>{row.identity}</td>
-              <td>{row.local_identity}</td>
-              <td>{row.in_frame_index}</td>
-              <td>{row.fragment}</td>
-              <td>{row.area}</td>
-              <td>{row.modified?.toString()}</td>
-              <td>{row.ZT}</td>
+
+              <TC value={row.frame_number % row.chunksize} />
+              <TC value={row.x} />
+              <TC value={row.y} />
+              <TC value={row.identity} />
+              <TC value={meta.sex || '—'} />
+              <TC value={meta.genotype || '—'} title={meta.genotype || ''} />
+              <TC value={row.local_identity} />
+              <TC value={row.in_frame_index} />
+              <TC value={row.fragment} />
+              <TC value={row.area} />
+              <TC value={row.modified?.toString()} />
+              <TC value={row.ZT} />
             </tr>
-          ) : (
-            // placeholder: keeps the table height constant when a frame has fewer
-            // detections than animals, so the controls below don't jump.
-            <tr key={`pad-${index}`} style={{ visibility: 'hidden' }}>
-              <td><input type="number" readOnly value="" style={cellInputStyle} /></td>
-              <td><input type="number" readOnly value="" style={cellInputStyle} /></td>
-              <td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td>
-              <td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td>
-              <td>&nbsp;</td><td>&nbsp;</td>
-            </tr>
-          )
-        ))}
+          );
+        })}
       </tbody>
     </table>
   );

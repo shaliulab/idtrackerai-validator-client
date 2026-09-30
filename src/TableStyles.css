@@ -1,37 +1,75 @@
-
 .data-table {
-  width: 100%;
   border-collapse: collapse;
-  font-family: Arial, sans-serif;
-  font-size: 0.9em;
-  margin: 10px 0;
+  font-family: 'Consolas', 'SF Mono', 'Liberation Mono', monospace;
+  font-size: 0.75em;
+  table-layout: fixed;
+  /* no width: 100% — fixed columns determine the width; container scrolls */
 }
 
-.data-table thead {
-  background-color: #4CAF50;
-  color: white;
-}
-
+/* ── Header ─────────────────────────────────────────────── */
 .data-table thead th {
-  padding: 10px;
-  text-align: left;
-}
-
-.data-table tbody td {
-  padding: 8px;
-  border-bottom: 1px solid #ddd;
-}
-
-.data-table tbody tr:nth-child(even) {
-  background-color: #f2f2f2;
-}
-
-.data-table tbody tr:hover {
-  background-color: #ddd;
-}
-
-.data-table td, 
-.data-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: #334155;
+  color: #f1f5f9;
+  padding: 5px 4px;
   text-align: center;
-  /* Other styles */
+  font-weight: 600;
+  font-size: 0.72em;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  border-right: 1px solid #4a5568;
+  cursor: default;
+  user-select: none;
+}
+
+.data-table thead th:last-child {
+  border-right: none;
+}
+
+/* ── Body cells ─────────────────────────────────────────── */
+.data-table tbody td {
+  padding: 3px 4px;
+  border-bottom: 1px solid #e2e8f0;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.data-table tbody tr:nth-child(even) td {
+  background-color: #f8fafc;
+}
+
+.data-table tbody tr:hover td {
+  background-color: #dbeafe;
+}
+
+/* ── Editable number inputs ─────────────────────────────── */
+.data-table input[type="number"] {
+  width: 100%;
+  background: transparent;
+  border: none;
+  text-align: center;
+  font: inherit;
+  color: inherit;
+  outline: none;
+  padding: 0;
+  -moz-appearance: textfield;
+}
+
+.data-table input[type="number"]::-webkit-outer-spin-button,
+.data-table input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.data-table input[type="number"]:focus {
+  outline: 1px solid #3b82f6;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.9);
 }
