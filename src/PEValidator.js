@@ -461,6 +461,37 @@ const downloadBurstVideo = useCallback(async () => {
     return () => controller.abort();
   }, [fly, burstId]);
 
+
+  const [segs, setSegs] = useState(null);         // {auto, gt, done, params}
+  const [segMethod, setSegMethod] = useState('visible');
+
+  const loadSegs = useCallback(() => {
+    if (burstId == null || !fly) return;
+    api.get(`${API}/segments`, { params: { fly, burst_id: burstId, method: segMethod } })
+      .then(r => setSegs(unwrap(r.data))).catch(() => setSegs(null));
+  }, [fly, burstId, segMethod]);
+  useEffect(() => { loadSegs(); }, [loadSegs]);
+
+  const addGt = useCallback(async (t0, t1) => {        // times in trace seconds
+    if (!trace) return;
+    const f = (t) => trace.start_frame + Math.round(t * trace.fps);
+    await api.post(`${API}/gt_segment`, { fly, start_frame: f(Math.min(t0, t1)),
+                                          end_frame: f(Math.max(t0, t1)) });
+    loadSegs();
+  }, [trace, fly, loadSegs]);
+
+  const deleteGt = useCallback(async (s) => {
+    await api.post(`${API}/gt_segment`, { fly, start_frame: s.start_frame,
+                                          end_frame: s.end_frame, delete: true });
+    loadSegs();
+  }, [fly, loadSegs]);
+
+  const setWindowDone = useCallback(async (done) => {
+    await api.post(`${API}/gt_window`, { fly, burst_id: burstId, done });
+    loadSegs();
+  }, [fly, burstId, loadSegs]);
+
+
   // drive the playhead from the video's presented frames
   useEffect(() => {
     const vid = videoRef.current;
@@ -625,6 +656,18 @@ const downloadBurstVideo = useCallback(async () => {
         </>
       )}
 
+      <select value={segMethod} onChange={e => setSegMethod(e.target.value)}
+              style={{ marginLeft: 12 }}>
+        <option value="none">seg: hidden (annotate blind)</option>
+        <option value="visible">seg: visible</option>
+      </select>
+      <label style={{ marginLeft: 8 }}>
+        <input type="checkbox" checked={!!segs?.done}
+               onChange={e => setWindowDone(e.target.checked)} />
+        {' '}segmentation done ({segs?.gt?.length ?? 0} GT events)
+      </label>
+
+
       {notice && (
         <div style={{ marginTop: 6, padding: '4px 8px', background: '#fff3cd',
                       border: '1px solid #ffe08a', borderRadius: 4, fontSize: '0.85em',
@@ -658,7 +701,9 @@ const downloadBurstVideo = useCallback(async () => {
               <div style={{ flex: 1, minHeight: 0 }}>
                 {trace && <BurstTrace trace={trace} playT={playT}
                                       onScrub={seekToTraceTime} scrubbingRef={scrubbingRef}
-                                      svgExportRef={distSvgRef} />}
+                                      svgExportRef={distSvgRef}
+                                      segments={segs} onAddGt={addGt} onDeleteGt={deleteGt}
+                                      />}
               </div>
               <div style={{ flex: 1, minHeight: 0 }}>
                 {trace && <ConfidenceTrace trace={trace} playT={playT}
@@ -783,6 +828,8 @@ const downloadBurstVideo = useCallback(async () => {
                         <span style={{ marginLeft: 6, fontSize: '0.78em', color: '#888',
                                        whiteSpace: 'nowrap' }}>
                           pred: <b>{b.label}</b>
+                          {b.label_source === 'override' &&
+                            <span title={`pipeline said ${b.label_pipeline}`}> (rescued)</span>}
                         </span>
                       </>
                     );
