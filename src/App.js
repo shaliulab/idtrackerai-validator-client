@@ -440,6 +440,21 @@ function App() {
         <Tab id="pe_validator"      activeTab={activeTab} setActiveTab={setActiveTab}>PE validation</Tab>
       </div>
 
+      {/* ── Experiment selector (shared across tabs) ── */}
+      <div style={{ padding: '0 12px 8px' }}>
+        <SelectComponent
+          key={selectedFly?.split('__')[0]}
+          onExperimentChange={(firstFrame) => {
+            requestQueue.cancelAll();
+            fetchFramerate();
+            fetchFrameRange();
+            fetchFlies();
+            setNativeSize(null);
+            setFrameNumber(firstFrame);
+          }}
+        />
+      </div>
+
       {/* ── Two-column body ── */}
       <div style={{
         display: activeTab === 'idtrackerai_viewer' ? 'flex' : 'none',
@@ -470,17 +485,6 @@ function App() {
 
           {/* Right: controls */}
           <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
-
-            <SelectComponent
-              key={selectedFly?.split('__')[0]}
-              onExperimentChange={(firstFrame) => {
-                requestQueue.cancelAll();
-                fetchFramerate();
-                fetchFrameRange();
-                setNativeSize(null);
-                setFrameNumber(firstFrame);
-              }}
-            />
 
             <div style={{ maxHeight: 220, overflowY: 'auto', border: `1px solid ${theme.border}`, background: theme.panelBg, boxSizing: 'border-box' }}>
               <BlobsTable Data={trackingData} setFrameNumber={setFrameNumber}
