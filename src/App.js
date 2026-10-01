@@ -1,6 +1,6 @@
 // App.js  —  Frontend of the flyhostel viewer
 
-import React, { useState, useRef, useEffect, useCallback, Suspense, lazy } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo, Suspense, lazy } from 'react';
 import FrameWithSquare from './FrameWithSquare';
 import Buttons from './buttons';
 import Slider from './slider';
@@ -155,6 +155,10 @@ function App() {
 
   // Blobs table "etho" button: show that fly's ethogram at the displayed frame.
   const [ethogramRequest, setEthogramRequest] = useState(null);   // { fly, frameNumber, nonce }
+  const ethogramIdentities = useMemo(
+    () => new Set(ethogramFlies.filter((f) => f.available).map((f) => Number(f.fly.split('__')[1]))),
+    [ethogramFlies],
+  );
   const openEthogram = useCallback((identity, frame) => {
     const suffix = `__${String(identity).padStart(2, '0')}`;
     const entry = ethogramFlies.find((f) => f.fly.endsWith(suffix));
@@ -522,7 +526,8 @@ function App() {
               <BlobsTable Data={trackingData} setFrameNumber={setFrameNumber}
                           number_of_animals={number_of_animals}
                           animalMetadata={animalMetadata}
-                          onOpenEthogram={openEthogram} />
+                          onOpenEthogram={openEthogram}
+                          ethogramIdentities={ethogramIdentities} />
 
             </div>
 

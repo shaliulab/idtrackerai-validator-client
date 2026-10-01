@@ -46,7 +46,9 @@ const NAV_BTN_DISABLED = {
   opacity: 0.45,
 };
 
-const BlobsTable = ({ Data, setFrameNumber, number_of_animals, animalMetadata = {}, onOpenEthogram }) => {
+// ethogramIdentities: identities with an ethogram in the loaded experiment. Identity 0 is
+// an unidentified blob in groups, but the only fly in single-animal (1X) experiments.
+const BlobsTable = ({ Data, setFrameNumber, number_of_animals, animalMetadata = {}, onOpenEthogram, ethogramIdentities }) => {
   const [draft, setDraft] = useState('');
   const [editingRow, setEditingRow] = useState(null);
 
@@ -114,6 +116,7 @@ const BlobsTable = ({ Data, setFrameNumber, number_of_animals, animalMetadata = 
           }
 
           const meta = animalMetadata[String(row.identity)] ?? {};
+          const hasEthogram = Boolean(onOpenEthogram) && row.identity != null && ethogramIdentities?.has(Number(row.identity));
           const prevKey = `prev_${row.identity}`;
           const nextKey = `next_${row.identity}`;
 
@@ -178,9 +181,11 @@ const BlobsTable = ({ Data, setFrameNumber, number_of_animals, animalMetadata = 
               {/* Ethogram of this fly at this frame */}
               <td>
                 <button
-                  style={onOpenEthogram && row.identity ? NAV_BTN : NAV_BTN_DISABLED}
-                  disabled={!onOpenEthogram || !row.identity}
-                  title={`Ethogram of fly ${row.identity} at frame ${row.frame_number}`}
+                  style={hasEthogram ? NAV_BTN : NAV_BTN_DISABLED}
+                  disabled={!hasEthogram}
+                  title={hasEthogram
+                    ? `Ethogram of fly ${row.identity} at frame ${row.frame_number}`
+                    : `No ethogram for identity ${row.identity} in this experiment`}
                   onClick={() => onOpenEthogram(row.identity, row.frame_number)}
                 >etho</button>
               </td>
