@@ -64,8 +64,17 @@ export default function EthogramViewer({ flies, request, active, theme, selectSt
   const programmaticRef = useRef(false);              // ignore our own relayouts
   const cursorTRef = useRef(null);
 
-  // Keep the selection within the current group of flies.
+  // Keep the selection within the current group of flies. A new experiment has
+  // its own time axis: start it at the figure's default window, not at the old cursor.
+  const experimentRef = useRef(null);
   useEffect(() => {
+    const experiment = flies.length ? flies[0].fly.split('__')[0] : null;
+    if (experiment !== experimentRef.current) {
+      experimentRef.current = experiment;
+      cursorTRef.current = null;
+      setCursorT(null);
+      setProperties(null);
+    }
     if (!flies.length) { setFly(null); return; }
     if (!flies.some((f) => f.fly === fly)) {
       const first = flies.find((f) => f.available) || flies[0];

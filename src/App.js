@@ -378,6 +378,18 @@ function App() {
   };
 
 
+  // Everything that depends on the loaded experiment, refreshed after /api/load.
+  const onExperimentLoaded = useCallback(async (firstFrame) => {
+    player.invalidate();
+    setNativeSize(null);
+    setFrameNumber(firstFrame);
+    fetchFramerate();
+    fetchFrameRange();
+    fetchAnimalMetadata();
+    fetchEthogramFlies();
+    await fetchFlies();
+  }, [player, fetchFramerate, fetchFrameRange, fetchAnimalMetadata, fetchEthogramFlies, fetchFlies]);
+
   const switchToFly = useCallback(async (flyId) => {
     const experiment = flyId.split('__')[0];
     const current = selectedFly?.split('__')[0];
@@ -385,14 +397,10 @@ function App() {
       // PEValidator's fly ids are flat (FlyHostel4_2X_2025-06-28_16-00-00);
       // /api/load expects the slash form, as typed in SelectComponent.
       const data = await postLoad(flatToSlash(experiment));
-      player.invalidate();
-      fetchFramerate(); fetchFrameRange(); setNativeSize(null);
-      setFrameNumber(data.first_frame ?? FIRST_FRAME);
-      await fetchFlies();
-      fetchEthogramFlies();
+      await onExperimentLoaded(data.first_frame ?? FIRST_FRAME);
     }
     setSelectedFly(flyId);
-  }, [selectedFly, fetchFlies, fetchFramerate, fetchFrameRange, fetchEthogramFlies, player]);
+  }, [selectedFly, onExperimentLoaded]);
   
 
   return (
@@ -473,14 +481,7 @@ function App() {
       <div style={{ padding: '0 12px 8px' }}>
         <SelectComponent
           key={selectedFly?.split('__')[0]}
-          onExperimentChange={(firstFrame) => {
-            player.invalidate();
-            fetchFramerate();
-            fetchFrameRange();
-            fetchFlies();
-            setNativeSize(null);
-            setFrameNumber(firstFrame);
-          }}
+          onExperimentChange={onExperimentLoaded}
         />
       </div>
 
@@ -516,20 +517,6 @@ function App() {
 
           {/* Right: controls */}
           <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
-
-            <SelectComponent
-              key={selectedFly?.split('__')[0]}
-              onExperimentChange={(firstFrame) => {
-                player.invalidate();
-                fetchFramerate();
-                fetchFrameRange();
-                fetchAnimalMetadata();
-                fetchFlies();
-                fetchEthogramFlies();
-                setNativeSize(null);
-                setFrameNumber(firstFrame);
-              }}
-            />
 
             <div style={{ maxHeight: 220, overflowY: 'auto', overflowX: 'auto', border: `1px solid ${theme.border}`, background: theme.panelBg, boxSizing: 'border-box' }}>
               <BlobsTable Data={trackingData} setFrameNumber={setFrameNumber}
