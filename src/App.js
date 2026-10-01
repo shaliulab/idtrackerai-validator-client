@@ -104,6 +104,7 @@ function App() {
   const [number_of_animals, setNumberOfAnimals] = useState(6);
   const [activeTab, setActiveTab] = useState('idtrackerai_viewer');
   const consoleState = useConsoleState();
+  const { log } = useConsole();
 
   const [animalMetadata, setAnimalMetadata] = useState({});
 
@@ -151,6 +152,20 @@ function App() {
   }, []);
 
   useEffect(() => { fetchEthogramFlies(); }, [fetchEthogramFlies]);
+
+  // Blobs table "etho" button: show that fly's ethogram at the displayed frame.
+  const [ethogramRequest, setEthogramRequest] = useState(null);   // { fly, frameNumber, nonce }
+  const openEthogram = useCallback((identity, frame) => {
+    const suffix = `__${String(identity).padStart(2, '0')}`;
+    const entry = ethogramFlies.find((f) => f.fly.endsWith(suffix));
+    if (!entry) {
+      log('warning', `No ethogram found for fly ${identity} of the loaded experiment`);
+      return;
+    }
+    setIsPlaying(false);
+    setEthogramRequest({ fly: entry.fly, frameNumber: frame, nonce: Date.now() });
+    setActiveTab('ethogram');
+  }, [ethogramFlies, log]);
 
   const fetchFramerate = useCallback(async () => {
     try {
@@ -234,7 +249,6 @@ function App() {
   showPoseRef.current = showPose;
   const nativeSizeRef = useRef(nativeSize);
   nativeSizeRef.current = nativeSize;
-  const { log } = useConsole();
 
   const playerRef = useRef(null);
   if (playerRef.current === null) {
@@ -520,7 +534,8 @@ function App() {
             <div style={{ maxHeight: 220, overflowY: 'auto', overflowX: 'auto', border: `1px solid ${theme.border}`, background: theme.panelBg, boxSizing: 'border-box' }}>
               <BlobsTable Data={trackingData} setFrameNumber={setFrameNumber}
                           number_of_animals={number_of_animals}
-                          animalMetadata={animalMetadata} />
+                          animalMetadata={animalMetadata}
+                          onOpenEthogram={openEthogram} />
 
             </div>
 
@@ -582,6 +597,7 @@ function App() {
         <Suspense fallback={<div style={{ padding: 12 }}>Loading…</div>}>
           <EthogramViewer
             flies={ethogramFlies}
+            request={ethogramRequest}
             active={activeTab === 'ethogram'}
             theme={theme}
             selectStyle={selectStyle}

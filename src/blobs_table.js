@@ -13,6 +13,7 @@ const COLUMNS = [
   { key: 'sex',      label: 'Sex',       w: 36  },
   { key: 'genotype', label: 'Genotype',  w: 110 },
   { key: 'sleep',    label: 'Sleep',     w: 74  },
+  { key: 'ethogram', label: 'Etho',      w: 48  },
   { key: 'local_id', label: 'Loc Id',    w: 50  },
   { key: 'in_frame', label: 'InFrm',     w: 50  },
   { key: 'fragment', label: 'Frag',      w: 50  },
@@ -45,7 +46,7 @@ const NAV_BTN_DISABLED = {
   opacity: 0.45,
 };
 
-const BlobsTable = ({ Data, setFrameNumber, number_of_animals, animalMetadata = {} }) => {
+const BlobsTable = ({ Data, setFrameNumber, number_of_animals, animalMetadata = {}, onOpenEthogram }) => {
   const [draft, setDraft] = useState('');
   const [editingRow, setEditingRow] = useState(null);
 
@@ -172,6 +173,16 @@ const BlobsTable = ({ Data, setFrameNumber, number_of_animals, animalMetadata = 
                   title={`Start of the next sleep bout of fly ${row.identity} (after the current one, if asleep)`}
                   onClick={() => navSleep('next', row.identity, row.frame_number)}
                 >z →</button>
+              </td>
+
+              {/* Ethogram of this fly at this frame */}
+              <td>
+                <button
+                  style={onOpenEthogram && row.identity ? NAV_BTN : NAV_BTN_DISABLED}
+                  disabled={!onOpenEthogram || !row.identity}
+                  title={`Ethogram of fly ${row.identity} at frame ${row.frame_number}`}
+                  onClick={() => onOpenEthogram(row.identity, row.frame_number)}
+                >etho</button>
               </td>
 
               <TC value={row.local_identity} />

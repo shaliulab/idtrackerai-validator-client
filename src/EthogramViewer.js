@@ -19,6 +19,12 @@ const unwrap = (data) => (typeof data === 'string' ? JSON.parse(data) : data);
 // Figures are 10-25 MB of JSON each: keep only the last few in memory.
 const FIGURE_CACHE_SIZE = 6;
 
+// frame number -> seconds since the start of the fly's movie (null if unknown)
+const movieTimeOf = (props, frameNumber) =>
+  props && props.first_chunk != null
+    ? (frameNumber - props.first_chunk * props.chunksize) / props.framerate
+    : null;
+
 // seconds since ZT0 -> "hh:mm:ss" (hours keep counting past 24 on later days)
 const formatZT = (zt) => {
   const s = Math.round(zt);
@@ -35,7 +41,7 @@ const errorMessage = async (err) => {
   return data?.error || err.message;
 };
 
-export default function EthogramViewer({ flies, active, theme, selectStyle, onOpenInViewer }) {
+export default function EthogramViewer({ flies, request, active, theme, selectStyle, onOpenInViewer }) {
   const [fly, setFly] = useState(null);
   const [properties, setProperties] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -98,6 +104,25 @@ export default function EthogramViewer({ flies, active, theme, selectStyle, onOp
     });
   }, [relayout, moveCursor]);
 
+  // ── Requests from elsewhere in the app (blobs table "etho" button):
+  //    show fly `request.fly` at frame `request.frameNumber` ──
+  const pendingSeekRef = useRef(null);       // { fly, frameNumber } applied once that fly is loaded
+  useEffect(() => {
+    if (!request) return;
+    pendingSeekRef.current = request;
+    if (request.fly !== fly) {
+      setFly(request.fly);                   // the load effect below applies the seek
+      return;
+    }
+    const t = loading ? null : movieTimeOf(properties, request.frameNumber);
+    if (t == null) return;                   // still loading: applied by the load effect
+    pendingSeekRef.current = null;
+    centerOn(t);
+    if (videoRef.current && hasMovie) videoRef.current.currentTime = Math.max(0, t);
+  // Only react to new requests, not to the state they read.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [request]);
+
   // ── Load figure + properties for the selected fly ──
   useEffect(() => {
     if (!active || !fly) return;
@@ -111,6 +136,13 @@ export default function EthogramViewer({ flies, active, theme, selectStyle, onOp
         const { data: props } = await api.get(`${API}/${fly}/properties`);
         if (cancelled) return;
         setProperties(unwrap(props));
+
+        const pending = pendingSeekRef.current;
+        if (pending?.fly === fly) {
+          const t = movieTimeOf(unwrap(props), pending.frameNumber);
+          if (t != null) moveCursor(t);      // the layout below centers on the cursor
+          pendingSeekRef.current = null;
+        }
 
         if (entry && !entry.available) {
           throw new Error(`No ethogram has been generated for ${fly}`);
