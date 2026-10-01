@@ -512,6 +512,7 @@ function App() {
                 fetchFramerate();
                 fetchFrameRange();
                 fetchAnimalMetadata();
+                fetchFlies();
                 fetchEthogramFlies();
                 setNativeSize(null);
                 setFrameNumber(firstFrame);

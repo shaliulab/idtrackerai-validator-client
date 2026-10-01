@@ -18,12 +18,33 @@ const unwrap = (data) => (typeof data === 'string' ? JSON.parse(data) : data);
 // Figures are 10-25 MB of JSON each: keep only the last few in memory.
 const FIGURE_CACHE_SIZE = 6;
 
+// seconds since ZT0 -> "hh:mm:ss" (hours keep counting past 24 on later days)
+const formatZT = (zt) => {
+  const s = Math.round(zt);
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${pad(Math.floor(s / 3600))}:${pad(Math.floor((s % 3600) / 60))}:${pad(s % 60)}`;
+};
+
+// Error payloads of blob requests arrive as a Blob, not as parsed JSON.
+const errorMessage = async (err) => {
+  let data = err.response?.data;
+  if (data instanceof Blob) {
+    try { data = JSON.parse(await data.text()); } catch { data = null; }
+  }
+  return data?.error || err.message;
+};
+
 export default function EthogramViewer({ flies, active, theme, selectStyle, onOpenInViewer }) {
   const [fly, setFly] = useState(null);
   const [properties, setProperties] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [cursorT, setCursorT] = useState(null);      // seconds since movie start
+  const [gotoMode, setGotoMode] = useState('frame_number');   // 'frame_number' | 'zt'
+  const [gotoValue, setGotoValue] = useState('');
+  const [notice, setNotice] = useState(null);        // result of the last go-to / capture
+  const [actionError, setActionError] = useState(null);
+  const [capturing, setCapturing] = useState(false);
 
   const plotRef = useRef(null);
   const videoRef = useRef(null);
@@ -245,6 +266,52 @@ export default function EthogramViewer({ flies, active, theme, selectStyle, onOp
       ? Math.round(properties.first_chunk * properties.chunksize + cursorT * properties.framerate)
       : null;
 
+  useEffect(() => { setNotice(null); setActionError(null); }, [fly]);
+
+  // ── Go to a frame number (since chunk 0) or a ZT time (s since ZT0 of day 1) ──
+  const goTo = useCallback(async () => {
+    const value = Number(gotoValue);
+    if (!fly || gotoValue.trim() === '' || !Number.isFinite(value)) {
+      setActionError('Enter a number');
+      return;
+    }
+    setActionError(null);
+    try {
+      const { data } = await api.get(`${API}/${fly}/locate`, { params: { [gotoMode]: value } });
+      const position = unwrap(data);
+      centerOn(position.movie_time);
+      if (videoRef.current && hasMovie) videoRef.current.currentTime = Math.max(0, position.movie_time);
+      setNotice({ kind: 'goto', ...position });
+    } catch (err) {
+      setActionError(await errorMessage(err));
+    }
+  }, [fly, gotoMode, gotoValue, centerOn, hasMovie]);
+
+  // ── Export the movie of the ongoing (or else next) sleep bout ──
+  const captureSleepBout = useCallback(async () => {
+    if (!fly || cursorFrame == null) return;
+    setActionError(null);
+    setCapturing(true);
+    try {
+      const params = { frame_number: cursorFrame };
+      const { data: bout } = await api.get(`${API}/${fly}/sleep_bout`, { params });
+      setNotice({ kind: 'bout', ...unwrap(bout) });
+      const { data: video } = await api.get(`${API}/${fly}/sleep_bout/video`, { params, responseType: 'blob' });
+      const url = URL.createObjectURL(video);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${fly}_sleep_${bout.start_frame}-${bout.end_frame}.mp4`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 10000);
+    } catch (err) {
+      setActionError(await errorMessage(err));
+    } finally {
+      setCapturing(false);
+    }
+  }, [fly, cursorFrame]);
+
   const buttonStyle = {
     padding: '4px 10px',
     borderRadius: 4,
@@ -287,8 +354,61 @@ export default function EthogramViewer({ flies, active, theme, selectStyle, onOp
         {loading && <span style={{ color: theme.subtext }}>Loading ethogram…</span>}
       </div>
 
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', paddingBottom: 8 }}>
+        <form
+          style={{ display: 'flex', gap: 6, alignItems: 'center' }}
+          onSubmit={(e) => { e.preventDefault(); goTo(); }}
+        >
+          Go to&nbsp;
+          <select value={gotoMode} onChange={(e) => setGotoMode(e.target.value)} style={selectStyle}>
+            <option value="frame_number">frame number (since chunk 0)</option>
+            <option value="zt">ZT seconds (since ZT0 of day 1)</option>
+          </select>
+          <input
+            value={gotoValue}
+            onChange={(e) => setGotoValue(e.target.value)}
+            placeholder={gotoMode === 'zt' ? 'e.g. 40000' : 'e.g. 3300000'}
+            style={{ ...selectStyle, width: 110 }}
+          />
+          <button type="submit" style={buttonStyle} disabled={!fly}>Go</button>
+        </form>
+
+        <button
+          style={buttonStyle}
+          onClick={captureSleepBout}
+          disabled={!hasMovie || cursorFrame == null || capturing}
+          title="Download the movie of the sleep bout at the cursor, or of the next one if the fly is awake"
+        >
+          {capturing ? 'Capturing…' : 'Capture sleep bout video'}
+        </button>
+
+        {notice?.kind === 'goto' && (
+          <span style={{ color: theme.subtext }}>
+            frame {notice.frame_number} · ZT {notice.zt.toFixed(1)} s ({formatZT(notice.zt)})
+            {notice.in_movie ? (
+              <>
+                {' · '}
+                <a
+                  href={apiUrl(`${API}/${fly}/movie_frame?frame_number=${notice.frame_number}`)}
+                  target="_blank" rel="noreferrer" style={{ color: theme.text }}
+                >
+                  open still
+                </a>
+              </>
+            ) : ' · not covered by the movie'}
+          </span>
+        )}
+        {notice?.kind === 'bout' && (
+          <span style={{ color: theme.subtext }}>
+            {notice.current ? 'Current' : 'Next'} sleep bout: frames {notice.start_frame}–{notice.end_frame}
+            {' '}({(notice.duration / 60).toFixed(1)} min)
+          </span>
+        )}
+      </div>
+
       {!flies.length && <div style={{ color: theme.subtext }}>No experiment loaded.</div>}
       {error && <div style={{ color: '#d62728', padding: '4px 0' }}>{error}</div>}
+      {actionError && <div style={{ color: '#d62728', padding: '4px 0' }}>{actionError}</div>}
 
       {hasMovie && (
         <div style={{ display: 'flex', justifyContent: 'center', paddingBottom: 8 }}>
