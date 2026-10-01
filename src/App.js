@@ -14,6 +14,7 @@ import SelectComponent, { postLoad } from './selectComponent';
 import { FIRST_FRAME, PLACEHOLDER_IMAGE, LABEL_FIELD } from './constants';
 import PEValidator from './PEValidator';
 import api from './api';
+import MessageConsole, { useConsoleState, consoleHeight } from './MessageConsole';
 
 // Plotly is ~1.5 MB gzipped: load it in its own chunk, off the viewer's critical path.
 const EthogramViewer = lazy(() => import('./EthogramViewer'));
@@ -119,6 +120,7 @@ function App() {
   const FrameWithSquareRef = useRef(null);
   const [number_of_animals, setNumberOfAnimals] = useState(6);
   const [activeTab, setActiveTab] = useState('idtrackerai_viewer');
+  const consoleState = useConsoleState();
 
   const [animalMetadata, setAnimalMetadata] = useState({});
 
@@ -409,6 +411,9 @@ function App() {
       background: theme.bg,
       color: theme.text,
       minHeight: '100vh',
+      // leave room for the console docked at the bottom
+      paddingBottom: consoleHeight(consoleState?.open ?? true),
+      boxSizing: 'border-box',
     }}>
       {/* ── Header ── */}
      <div style={{
@@ -595,6 +600,8 @@ function App() {
           />
         </Suspense>
       </div>
+
+      <MessageConsole theme={theme} />
     </div>
   );
 }

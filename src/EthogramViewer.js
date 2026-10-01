@@ -9,6 +9,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import Plotly from 'plotly.js-dist-min';
 import Hls from 'hls.js';
 import api, { apiUrl } from './api';
+import { useConsole } from './MessageConsole';
 
 const API = '/api/ethogram';
 
@@ -23,20 +24,6 @@ const formatZT = (zt) => {
   const s = Math.round(zt);
   const pad = (n) => String(n).padStart(2, '0');
   return `${pad(Math.floor(s / 3600))}:${pad(Math.floor((s % 3600) / 60))}:${pad(s % 60)}`;
-};
-
-// Save a blob response under the filename the server put in Content-Disposition.
-const downloadResponse = (response, fallbackName) => {
-  const disposition = response.headers['content-disposition'] || '';
-  const match = /filename="?([^";]+)"?/.exec(disposition);
-  const url = URL.createObjectURL(response.data);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = match ? match[1] : fallbackName;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 10000);
 };
 
 // Error payloads of blob requests arrive as a Blob, not as parsed JSON.
@@ -59,6 +46,7 @@ export default function EthogramViewer({ flies, active, theme, selectStyle, onOp
   const [notice, setNotice] = useState(null);        // result of the last go-to / capture
   const [actionError, setActionError] = useState(null);
   const [capturing, setCapturing] = useState(false);
+  const { log, trackJob } = useConsole();
   const [capturingAll, setCapturingAll] = useState(false);
   const [saveOnServer, setSaveOnServer] = useState(false);  // all-bouts export: save vs download
 
@@ -286,11 +274,17 @@ export default function EthogramViewer({ flies, active, theme, selectStyle, onOp
 
   useEffect(() => { setNotice(null); setActionError(null); }, [fly]);
 
+  // Errors show under the controls and in the console.
+  const reportError = useCallback((message) => {
+    setActionError(message);
+    log('error', fly && !message.includes(fly) ? `${fly}: ${message}` : message);
+  }, [fly, log]);
+
   // ── Go to a frame number (since chunk 0) or a ZT time (s since ZT0 of day 1) ──
   const goTo = useCallback(async () => {
     const value = Number(gotoValue);
     if (!fly || gotoValue.trim() === '' || !Number.isFinite(value)) {
-      setActionError('Enter a number');
+      reportError('Enter a number');
       return;
     }
     setActionError(null);
@@ -300,10 +294,11 @@ export default function EthogramViewer({ flies, active, theme, selectStyle, onOp
       centerOn(position.movie_time);
       if (videoRef.current && hasMovie) videoRef.current.currentTime = Math.max(0, position.movie_time);
       setNotice({ kind: 'goto', ...position });
+      log('info', `${fly}: went to frame ${position.frame_number} · ZT ${position.zt.toFixed(1)} s (${formatZT(position.zt)})`);
     } catch (err) {
-      setActionError(await errorMessage(err));
+      reportError(await errorMessage(err));
     }
-  }, [fly, gotoMode, gotoValue, centerOn, hasMovie]);
+  }, [fly, gotoMode, gotoValue, centerOn, hasMovie, log, reportError]);
 
   // ── Jump to the start of the previous / next sleep bout (an ongoing one is skipped) ──
   const navigateSleepBout = useCallback(async (direction) => {
@@ -315,55 +310,47 @@ export default function EthogramViewer({ flies, active, theme, selectStyle, onOp
       centerOn(bout.movie_time);
       if (videoRef.current && hasMovie) videoRef.current.currentTime = Math.max(0, bout.movie_time);
       setNotice({ kind: 'bout', ...bout, label: 'Sleep bout' });
+      log('info', `${fly}: ${direction === 'next' ? 'next' : 'previous'} sleep bout, frames ${bout.start_frame}–${bout.end_frame} (${(bout.duration / 60).toFixed(1)} min)`);
     } catch (err) {
-      setActionError(await errorMessage(err));
+      reportError(await errorMessage(err));
     }
-  }, [fly, cursorFrame, centerOn, hasMovie]);
+  }, [fly, cursorFrame, centerOn, hasMovie, log, reportError]);
 
   // ── Export the movie of the ongoing (or else next) sleep bout ──
+  // Video exports run as backend jobs; the console shows their progress and
+  // downloads the result (or reports where it was saved).
+  const runVideoJob = useCallback(async (body, setBusy) => {
+    setActionError(null);
+    setBusy(true);
+    try {
+      const { data } = await api.post(`${API}/${fly}/sleep_bouts/videos`, { ...body, save: saveOnServer });
+      const job = await trackJob(unwrap(data));
+      if (job.status === 'failed') setActionError(job.error);
+    } catch (err) {
+      reportError(await errorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  }, [fly, saveOnServer, trackJob, reportError]);
+
   const captureSleepBout = useCallback(async () => {
     if (!fly || cursorFrame == null) return;
-    setActionError(null);
-    setCapturing(true);
     try {
-      const params = { frame_number: cursorFrame };
-      const { data: bout } = await api.get(`${API}/${fly}/sleep_bout`, { params });
-      setNotice({ kind: 'bout', ...unwrap(bout) });
-      const response = await api.get(`${API}/${fly}/sleep_bout/video`, { params, responseType: 'blob' });
-      downloadResponse(response, `${fly}_sleep_bout.mp4`);
+      const { data } = await api.get(`${API}/${fly}/sleep_bout`, { params: { frame_number: cursorFrame } });
+      setNotice({ kind: 'bout', ...unwrap(data) });
     } catch (err) {
-      setActionError(await errorMessage(err));
-    } finally {
-      setCapturing(false);
+      reportError(await errorMessage(err));
+      return;
     }
-  }, [fly, cursorFrame]);
+    await runVideoJob({ frame_number: cursorFrame }, setCapturing);
+  }, [fly, cursorFrame, runVideoJob, reportError]);
 
-  // ── Export one video per sleep bout of the fly: zip download, or saved on the server ──
+  // ── One video per sleep bout of the fly ──
   const captureAllSleepBouts = useCallback(async () => {
     if (!fly) return;
-    setActionError(null);
     setNotice(null);
-    setCapturingAll(true);
-    try {
-      const url = `${API}/${fly}/sleep_bouts/videos`;
-      if (saveOnServer) {
-        const { data } = await api.post(url, { save: true });
-        setNotice({ kind: 'all_bouts', ...unwrap(data) });
-      } else {
-        const response = await api.post(url, { save: false }, { responseType: 'blob' });
-        downloadResponse(response, `${fly}_sleep_bouts.zip`);
-        setNotice({
-          kind: 'all_bouts',
-          count: Number(response.headers['x-videos']),
-          skippedCount: Number(response.headers['x-skipped']),
-        });
-      }
-    } catch (err) {
-      setActionError(await errorMessage(err));
-    } finally {
-      setCapturingAll(false);
-    }
-  }, [fly, saveOnServer]);
+    await runVideoJob({}, setCapturingAll);
+  }, [fly, runVideoJob]);
 
   const buttonStyle = {
     padding: '4px 10px',
@@ -462,7 +449,7 @@ export default function EthogramViewer({ flies, active, theme, selectStyle, onOp
         </button>
         <label
           style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}
-          title="Save the videos under <experiment>/flyhostel/videos/<fly>/ on the server instead of downloading them"
+          title="Save sleep bout videos under <experiment>/flyhostel/videos/<fly>/ on the server instead of downloading them"
         >
           <input type="checkbox" checked={saveOnServer} onChange={(e) => setSaveOnServer(e.target.checked)} />
           save on server
@@ -482,15 +469,6 @@ export default function EthogramViewer({ flies, active, theme, selectStyle, onOp
                 </a>
               </>
             ) : ' · not covered by the movie'}
-          </span>
-        )}
-        {notice?.kind === 'all_bouts' && (
-          <span style={{ color: theme.subtext }}>
-            {notice.directory
-              ? `Saved ${notice.videos.length} videos to ${notice.directory}`
-              : `Downloaded ${notice.count} videos`}
-            {(notice.skipped?.length || notice.skippedCount) > 0 &&
-              ` · ${notice.skipped?.length ?? notice.skippedCount} bouts skipped (see server log)`}
           </span>
         )}
         {notice?.kind === 'bout' && (
