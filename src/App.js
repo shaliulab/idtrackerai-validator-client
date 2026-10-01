@@ -1,6 +1,6 @@
 // App.js  —  Frontend of the flyhostel viewer
 
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, Suspense, lazy } from 'react';
 import axios from 'axios';
 import FrameWithSquare from './FrameWithSquare';
 import Buttons from './buttons';
@@ -14,6 +14,9 @@ import SelectComponent, { postLoad } from './selectComponent';
 import { FIRST_FRAME, PLACEHOLDER_IMAGE, LABEL_FIELD } from './constants';
 import PEValidator from './PEValidator';
 import api from './api';
+
+// Plotly is ~1.5 MB gzipped: load it in its own chunk, off the viewer's critical path.
+const EthogramViewer = lazy(() => import('./EthogramViewer'));
 
 const MAX_SIMULTANEOUS_REQUESTS = 1;
 const requestQueue = new RequestQueue(MAX_SIMULTANEOUS_REQUESTS);
@@ -150,6 +153,20 @@ function App() {
     }
   }, []);
 
+  const [ethogramFlies, setEthogramFlies] = useState([]);   // [{fly, available}]
+
+  const fetchEthogramFlies = useCallback(async () => {
+    try {
+      const { data } = await api.get('/api/ethogram/flies');
+      setEthogramFlies(typeof data === 'string' ? JSON.parse(data) : data);
+    } catch (err) {
+      console.error("Couldn't fetch ethogram flies", err);
+      setEthogramFlies([]);
+    }
+  }, []);
+
+  useEffect(() => { fetchEthogramFlies(); }, [fetchEthogramFlies]);
+
   const fetchFramerate = useCallback(async () => {
     try {
       const response = await api.get('/api/framerate');
@@ -175,12 +192,13 @@ function App() {
 
   useEffect(() => { fetchFlies(); }, [fetchFlies]);
 
-  // Ctrl+1 / Ctrl+2 switch tabs
+  // Ctrl+1 / Ctrl+2 / Ctrl+3 switch tabs
   useEffect(() => {
     const onKey = (e) => {
       if (!e.ctrlKey || e.metaKey || e.altKey) return;   // Ctrl only, not Cmd/Alt combos
       if (e.key === '1') { e.preventDefault(); setActiveTab('idtrackerai_viewer'); }
       else if (e.key === '2') { e.preventDefault(); setActiveTab('pe_validator'); }
+      else if (e.key === '3') { e.preventDefault(); setActiveTab('ethogram'); }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -379,9 +397,10 @@ function App() {
       fetchFramerate(); fetchFrameRange(); setNativeSize(null);
       setFrameNumber(data.first_frame ?? FIRST_FRAME);
       await fetchFlies();
+      fetchEthogramFlies();
     }
     setSelectedFly(flyId);
-  }, [selectedFly, fetchFlies, fetchFramerate, fetchFrameRange]);
+  }, [selectedFly, fetchFlies, fetchFramerate, fetchFrameRange, fetchEthogramFlies]);
   
 
   return (
@@ -452,6 +471,7 @@ function App() {
       <div style={{ padding: '2px 12px 4px' }}>
         <Tab id="idtrackerai_viewer" activeTab={activeTab} setActiveTab={setActiveTab}>Idtrackerai viewer</Tab>
         <Tab id="pe_validator"      activeTab={activeTab} setActiveTab={setActiveTab}>PE validation</Tab>
+        <Tab id="ethogram"          activeTab={activeTab} setActiveTab={setActiveTab}>Ethograms</Tab>
       </div>
 
       {/* ── Two-column body ── */}
@@ -492,6 +512,7 @@ function App() {
                 fetchFramerate();
                 fetchFrameRange();
                 fetchAnimalMetadata();
+                fetchEthogramFlies();
                 setNativeSize(null);
                 setFrameNumber(firstFrame);
               }}
@@ -557,6 +578,21 @@ function App() {
             active={activeTab === 'pe_validator'}
             onRequestFly={switchToFly}
         />
+      </div>
+
+      <div style={{ display: activeTab === 'ethogram' ? 'block' : 'none' }}>
+        <Suspense fallback={<div style={{ padding: 12 }}>Loading…</div>}>
+          <EthogramViewer
+            flies={ethogramFlies}
+            active={activeTab === 'ethogram'}
+            theme={theme}
+            selectStyle={selectStyle}
+            onOpenInViewer={(fn) => {
+              setFrameNumber(fn);
+              setActiveTab('idtrackerai_viewer');
+            }}
+          />
+        </Suspense>
       </div>
     </div>
   );
