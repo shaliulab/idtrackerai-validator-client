@@ -49,6 +49,16 @@
   background-color: #dbeafe;
 }
 
+/* ── Sleep nav buttons ──────────────────────────────────── */
+.data-table td button {
+  vertical-align: middle;
+}
+
+.data-table td button:hover:not(:disabled) {
+  background: #e2e8f0;
+  border-color: #64748b;
+}
+
 /* ── Editable number inputs ─────────────────────────────── */
 .data-table input[type="number"] {
   width: 100%;

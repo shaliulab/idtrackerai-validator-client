@@ -1,5 +1,6 @@
 import './TableStyles.css';
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
+import api from './api';
 
 // Column definitions: key used only for React keys; w = width in px
 const COLUMNS = [
@@ -11,6 +12,7 @@ const COLUMNS = [
   { key: 'identity', label: 'Id',        w: 42  },
   { key: 'sex',      label: 'Sex',       w: 36  },
   { key: 'genotype', label: 'Genotype',  w: 110 },
+  { key: 'sleep',    label: 'Sleep',     w: 74  },
   { key: 'local_id', label: 'Loc Id',    w: 50  },
   { key: 'in_frame', label: 'InFrm',     w: 50  },
   { key: 'fragment', label: 'Frag',      w: 50  },
@@ -19,11 +21,28 @@ const COLUMNS = [
   { key: 'zt',       label: 'ZT',        w: 70  },
 ];
 
-// Cell that truncates overflow and shows full value in native tooltip on hover
+// Cell that truncates overflow and shows the full value in a native tooltip on hover
 const TC = ({ value, title }) => {
   const display = value ?? '—';
   const tip = title ?? (value != null ? String(value) : '');
   return <td title={tip}>{display}</td>;
+};
+
+const NAV_BTN = {
+  padding: '1px 5px',
+  fontSize: '0.8em',
+  cursor: 'pointer',
+  border: '1px solid #94a3b8',
+  borderRadius: 3,
+  background: '#f1f5f9',
+  lineHeight: 1.4,
+  userSelect: 'none',
+};
+
+const NAV_BTN_DISABLED = {
+  ...NAV_BTN,
+  cursor: 'default',
+  opacity: 0.45,
 };
 
 const BlobsTable = ({ Data, setFrameNumber, number_of_animals, animalMetadata = {} }) => {
@@ -32,6 +51,9 @@ const BlobsTable = ({ Data, setFrameNumber, number_of_animals, animalMetadata = 
 
   const [chunkDraft, setChunkDraft] = useState('');
   const [editingChunkRow, setEditingChunkRow] = useState(null);
+
+  // { "prev_1": true, "next_3": true, ... }  — tracks in-flight requests
+  const [sleepLoading, setSleepLoading] = useState({});
 
   const commit = (val) => {
     const n = parseInt(val, 10);
@@ -47,6 +69,19 @@ const BlobsTable = ({ Data, setFrameNumber, number_of_animals, animalMetadata = 
     }
     setEditingChunkRow(null);
   };
+
+  const navSleep = useCallback(async (dir, identity, frameNumber) => {
+    const key = `${dir}_${identity}`;
+    setSleepLoading(s => ({ ...s, [key]: true }));
+    try {
+      const { data } = await api.get(`/api/sleep/${dir}/${identity}/${frameNumber}`);
+      if (data.frame_number != null) setFrameNumber(data.frame_number);
+    } catch (e) {
+      console.error('Sleep nav failed:', e);
+    } finally {
+      setSleepLoading(s => ({ ...s, [key]: false }));
+    }
+  }, [setFrameNumber]);
 
   const rows = useMemo(() => {
     const n = Math.max(Number(number_of_animals) || 0, Data.length);
@@ -78,6 +113,8 @@ const BlobsTable = ({ Data, setFrameNumber, number_of_animals, animalMetadata = 
           }
 
           const meta = animalMetadata[String(row.identity)] ?? {};
+          const prevKey = `prev_${row.identity}`;
+          const nextKey = `next_${row.identity}`;
 
           return (
             <tr key={`row-${index}`}>
@@ -97,7 +134,7 @@ const BlobsTable = ({ Data, setFrameNumber, number_of_animals, animalMetadata = 
                 />
               </td>
 
-              {/* Chunk — editable, jumps to chunk * chunksize */}
+              {/* Chunk — editable, jumps to chunk × chunksize */}
               <td>
                 <input
                   type="number"
@@ -119,6 +156,24 @@ const BlobsTable = ({ Data, setFrameNumber, number_of_animals, animalMetadata = 
               <TC value={row.identity} />
               <TC value={meta.sex || '—'} />
               <TC value={meta.genotype || '—'} title={meta.genotype || ''} />
+
+              {/* Sleep navigation */}
+              <td style={{ whiteSpace: 'nowrap' }}>
+                <button
+                  style={sleepLoading[prevKey] ? NAV_BTN_DISABLED : NAV_BTN}
+                  disabled={!!sleepLoading[prevKey]}
+                  title={`Previous frame where fly ${row.identity} is asleep`}
+                  onClick={() => navSleep('prev', row.identity, row.frame_number)}
+                >← z</button>
+                {' '}
+                <button
+                  style={sleepLoading[nextKey] ? NAV_BTN_DISABLED : NAV_BTN}
+                  disabled={!!sleepLoading[nextKey]}
+                  title={`Next frame where fly ${row.identity} is asleep`}
+                  onClick={() => navSleep('next', row.identity, row.frame_number)}
+                >z →</button>
+              </td>
+
               <TC value={row.local_identity} />
               <TC value={row.in_frame_index} />
               <TC value={row.fragment} />
