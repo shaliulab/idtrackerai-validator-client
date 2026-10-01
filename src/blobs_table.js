@@ -162,14 +162,14 @@ const BlobsTable = ({ Data, setFrameNumber, number_of_animals, animalMetadata = 
                 <button
                   style={sleepLoading[prevKey] ? NAV_BTN_DISABLED : NAV_BTN}
                   disabled={!!sleepLoading[prevKey]}
-                  title={`Previous frame where fly ${row.identity} is asleep`}
+                  title={`Start of the previous sleep bout of fly ${row.identity} (before the current one, if asleep)`}
                   onClick={() => navSleep('prev', row.identity, row.frame_number)}
                 >← z</button>
                 {' '}
                 <button
                   style={sleepLoading[nextKey] ? NAV_BTN_DISABLED : NAV_BTN}
                   disabled={!!sleepLoading[nextKey]}
-                  title={`Next frame where fly ${row.identity} is asleep`}
+                  title={`Start of the next sleep bout of fly ${row.identity} (after the current one, if asleep)`}
                   onClick={() => navSleep('next', row.identity, row.frame_number)}
                 >z →</button>
               </td>

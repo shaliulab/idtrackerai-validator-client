@@ -25,6 +25,20 @@ const formatZT = (zt) => {
   return `${pad(Math.floor(s / 3600))}:${pad(Math.floor((s % 3600) / 60))}:${pad(s % 60)}`;
 };
 
+// Save a blob response under the filename the server put in Content-Disposition.
+const downloadResponse = (response, fallbackName) => {
+  const disposition = response.headers['content-disposition'] || '';
+  const match = /filename="?([^";]+)"?/.exec(disposition);
+  const url = URL.createObjectURL(response.data);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = match ? match[1] : fallbackName;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10000);
+};
+
 // Error payloads of blob requests arrive as a Blob, not as parsed JSON.
 const errorMessage = async (err) => {
   let data = err.response?.data;
@@ -45,6 +59,8 @@ export default function EthogramViewer({ flies, active, theme, selectStyle, onOp
   const [notice, setNotice] = useState(null);        // result of the last go-to / capture
   const [actionError, setActionError] = useState(null);
   const [capturing, setCapturing] = useState(false);
+  const [capturingAll, setCapturingAll] = useState(false);
+  const [saveOnServer, setSaveOnServer] = useState(false);  // all-bouts export: save vs download
 
   const plotRef = useRef(null);
   const videoRef = useRef(null);
@@ -224,10 +240,12 @@ export default function EthogramViewer({ flies, active, theme, selectStyle, onOp
     const video = videoRef.current;
     if (!video) return;
     const onTime = () => {
-      const t = Math.floor(video.currentTime);
-      if (t === lastTimeUpdateRef.current) return;
-      lastTimeUpdateRef.current = t;
-      centerOn(t);
+      // Update at most once per second of video, but keep the exact time: a
+      // floored cursor would sit before a sleep bout we just jumped to.
+      const second = Math.floor(video.currentTime);
+      if (second === lastTimeUpdateRef.current) return;
+      lastTimeUpdateRef.current = second;
+      centerOn(video.currentTime);
     };
     video.addEventListener('timeupdate', onTime);
     return () => video.removeEventListener('timeupdate', onTime);
@@ -287,6 +305,21 @@ export default function EthogramViewer({ flies, active, theme, selectStyle, onOp
     }
   }, [fly, gotoMode, gotoValue, centerOn, hasMovie]);
 
+  // ── Jump to the start of the previous / next sleep bout (an ongoing one is skipped) ──
+  const navigateSleepBout = useCallback(async (direction) => {
+    if (!fly || cursorFrame == null) return;
+    setActionError(null);
+    try {
+      const { data } = await api.get(`${API}/${fly}/sleep_bout/${direction}`, { params: { frame_number: cursorFrame } });
+      const bout = unwrap(data);
+      centerOn(bout.movie_time);
+      if (videoRef.current && hasMovie) videoRef.current.currentTime = Math.max(0, bout.movie_time);
+      setNotice({ kind: 'bout', ...bout, label: 'Sleep bout' });
+    } catch (err) {
+      setActionError(await errorMessage(err));
+    }
+  }, [fly, cursorFrame, centerOn, hasMovie]);
+
   // ── Export the movie of the ongoing (or else next) sleep bout ──
   const captureSleepBout = useCallback(async () => {
     if (!fly || cursorFrame == null) return;
@@ -296,21 +329,41 @@ export default function EthogramViewer({ flies, active, theme, selectStyle, onOp
       const params = { frame_number: cursorFrame };
       const { data: bout } = await api.get(`${API}/${fly}/sleep_bout`, { params });
       setNotice({ kind: 'bout', ...unwrap(bout) });
-      const { data: video } = await api.get(`${API}/${fly}/sleep_bout/video`, { params, responseType: 'blob' });
-      const url = URL.createObjectURL(video);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `${fly}_sleep_${bout.start_frame}-${bout.end_frame}.mp4`;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 10000);
+      const response = await api.get(`${API}/${fly}/sleep_bout/video`, { params, responseType: 'blob' });
+      downloadResponse(response, `${fly}_sleep_bout.mp4`);
     } catch (err) {
       setActionError(await errorMessage(err));
     } finally {
       setCapturing(false);
     }
   }, [fly, cursorFrame]);
+
+  // ── Export one video per sleep bout of the fly: zip download, or saved on the server ──
+  const captureAllSleepBouts = useCallback(async () => {
+    if (!fly) return;
+    setActionError(null);
+    setNotice(null);
+    setCapturingAll(true);
+    try {
+      const url = `${API}/${fly}/sleep_bouts/videos`;
+      if (saveOnServer) {
+        const { data } = await api.post(url, { save: true });
+        setNotice({ kind: 'all_bouts', ...unwrap(data) });
+      } else {
+        const response = await api.post(url, { save: false }, { responseType: 'blob' });
+        downloadResponse(response, `${fly}_sleep_bouts.zip`);
+        setNotice({
+          kind: 'all_bouts',
+          count: Number(response.headers['x-videos']),
+          skippedCount: Number(response.headers['x-skipped']),
+        });
+      }
+    } catch (err) {
+      setActionError(await errorMessage(err));
+    } finally {
+      setCapturingAll(false);
+    }
+  }, [fly, saveOnServer]);
 
   const buttonStyle = {
     padding: '4px 10px',
@@ -375,12 +428,45 @@ export default function EthogramViewer({ flies, active, theme, selectStyle, onOp
 
         <button
           style={buttonStyle}
+          onClick={() => navigateSleepBout('prev')}
+          disabled={cursorFrame == null}
+          title="Start of the previous sleep bout (before the current one, if the fly is asleep)"
+        >
+          ← sleep bout
+        </button>
+        <button
+          style={buttonStyle}
+          onClick={() => navigateSleepBout('next')}
+          disabled={cursorFrame == null}
+          title="Start of the next sleep bout (after the current one, if the fly is asleep)"
+        >
+          sleep bout →
+        </button>
+
+        <button
+          style={buttonStyle}
           onClick={captureSleepBout}
           disabled={!hasMovie || cursorFrame == null || capturing}
           title="Download the movie of the sleep bout at the cursor, or of the next one if the fly is awake"
         >
           {capturing ? 'Capturing…' : 'Capture sleep bout video'}
         </button>
+
+        <button
+          style={buttonStyle}
+          onClick={captureAllSleepBouts}
+          disabled={!hasMovie || capturingAll}
+          title="One video per sleep bout of this fly"
+        >
+          {capturingAll ? 'Capturing all bouts…' : 'Capture all sleep bouts'}
+        </button>
+        <label
+          style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}
+          title="Save the videos under <experiment>/flyhostel/videos/<fly>/ on the server instead of downloading them"
+        >
+          <input type="checkbox" checked={saveOnServer} onChange={(e) => setSaveOnServer(e.target.checked)} />
+          save on server
+        </label>
 
         {notice?.kind === 'goto' && (
           <span style={{ color: theme.subtext }}>
@@ -398,9 +484,18 @@ export default function EthogramViewer({ flies, active, theme, selectStyle, onOp
             ) : ' · not covered by the movie'}
           </span>
         )}
+        {notice?.kind === 'all_bouts' && (
+          <span style={{ color: theme.subtext }}>
+            {notice.directory
+              ? `Saved ${notice.videos.length} videos to ${notice.directory}`
+              : `Downloaded ${notice.count} videos`}
+            {(notice.skipped?.length || notice.skippedCount) > 0 &&
+              ` · ${notice.skipped?.length ?? notice.skippedCount} bouts skipped (see server log)`}
+          </span>
+        )}
         {notice?.kind === 'bout' && (
           <span style={{ color: theme.subtext }}>
-            {notice.current ? 'Current' : 'Next'} sleep bout: frames {notice.start_frame}–{notice.end_frame}
+            {notice.label ?? `${notice.current ? 'Current' : 'Next'} sleep bout`}: frames {notice.start_frame}–{notice.end_frame}
             {' '}({(notice.duration / 60).toFixed(1)} min)
           </span>
         )}
