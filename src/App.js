@@ -1,26 +1,22 @@
 // App.js  —  Frontend of the flyhostel viewer
 
 import React, { useState, useRef, useEffect, useCallback, Suspense, lazy } from 'react';
-import axios from 'axios';
 import FrameWithSquare from './FrameWithSquare';
 import Buttons from './buttons';
 import Slider from './slider';
 import Tab from './Tab';
 import InteractiveText from './interactiveText';
-import { RequestQueue } from './queue';
+import FramePlayer from './framePlayer';
 import { BlobsTable } from './blobs_table';
 import SelectComponent, { postLoad } from './selectComponent';
 
-import { FIRST_FRAME, PLACEHOLDER_IMAGE, LABEL_FIELD } from './constants';
+import { FIRST_FRAME, PLACEHOLDER_IMAGE, LABEL_FIELD, PRINT_CONTOUR } from './constants';
 import PEValidator from './PEValidator';
 import api from './api';
-import MessageConsole, { useConsoleState, consoleHeight } from './MessageConsole';
+import MessageConsole, { useConsole, useConsoleState, consoleHeight } from './MessageConsole';
 
 // Plotly is ~1.5 MB gzipped: load it in its own chunk, off the viewer's critical path.
 const EthogramViewer = lazy(() => import('./EthogramViewer'));
-
-const MAX_SIMULTANEOUS_REQUESTS = 1;
-const requestQueue = new RequestQueue(MAX_SIMULTANEOUS_REQUESTS);
 
 // ── Theme tokens ──────────────────────────────────────────────────────────
 // Only the colors App.js itself controls live here. Child components
@@ -46,24 +42,11 @@ const THEMES = {
   },
 };
 
-// Uses the shared `api` instance so the request inherits its baseURL
-// (same-origin in production). `axios` is still imported only for
-// CancelToken and isCancel, which live on the default export, not on instances.
-function queuedAxiosGet(url) {
-  const source = axios.CancelToken.source();
-  const request = () =>
-    api
-      .get(url, { responseType: 'blob', cancelToken: source.token })
-      .finally(() => {
-        const index = requestQueue.pendingRequests.indexOf(request);
-        if (index !== -1) requestQueue.pendingRequests.splice(index, 1);
-      });
-  request.cancel = () => source.cancel('Operation canceled by user.');
-  return requestQueue.add(request);
-}
-
 // 120px budget for header + tabs + padding; cap width to 46% so the right
 // panel always has at least half the viewport for controls.
+// Frames shown per second during playback (at most; the server may be slower).
+const PLAYBACK_FPS = 10;
+
 const FRAME_SIZE = Math.min(
   window.innerHeight - 120,
   Math.floor(window.innerWidth * 0.46),
@@ -223,31 +206,6 @@ function App() {
     return () => window.removeEventListener('keydown', onKey);
   }, [flies, activeTab]);
 
-  const updateFrame = (blobData) => {
-    setFrame(URL.createObjectURL(blobData));
-    if (!nativeSize) {
-      // Read the dimensions from the blob rather than from the object URL:
-      // the URL is revoked as soon as the next frame arrives, which can race
-      // an <img> that has not finished decoding.
-      createImageBitmap(blobData)
-        .then((bmp) => {
-          setNativeSize({ width: bmp.width, height: bmp.height });
-          bmp.close();
-        })
-        .catch(() => {});
-    }
-  };
-
-  // Release the previous object URL once React has committed the next one.
-  // Without this, every frame during playback leaks a blob.
-  useEffect(() => {
-    return () => {
-      if (typeof frame === 'string' && frame.startsWith('blob:')) {
-        URL.revokeObjectURL(frame);
-      }
-    };
-  }, [frame]);
-
   // Light validation: drop rows with missing fields, round to integers.
   // Coordinates are kept in NATIVE space — scaling happens at draw time.
   const validateData = (dataArray) => {
@@ -271,48 +229,56 @@ function App() {
   // Placeholder: pose data is passed through unchanged for now.
   const validatePoseData = (dataArray) => dataArray;
 
-  // Monotonic counter so a slow response for an older frame cannot overwrite
-  // the state belonging to a newer one.
-  const fetchSeqRef = useRef(0);
+  // ── Frame player: loads image + tracking + contours per frame, latest seek wins ──
+  const showPoseRef = useRef(showPose);
+  showPoseRef.current = showPose;
+  const nativeSizeRef = useRef(nativeSize);
+  nativeSizeRef.current = nativeSize;
+  const { log } = useConsole();
 
-  const fetchFrame = async (fn) => {
-    const seq = ++fetchSeqRef.current;
-    try {
-      const n = parseInt(fn, 10);
-      const frameUrl = `/api/frame/${n}`;
-      const trackingUrl = `/api/tracking/${n}?pose=${showPose ? 1 : 0}`;
-      const preprocessUrl = `/api/preprocess/${n}`;
-
-      const [frameResponse, trackingResponse, preprocessResponse] = await Promise.all([
-        queuedAxiosGet(frameUrl),
-        api.get(trackingUrl),
-        api.get(preprocessUrl),
-      ]);
-
-      // A newer frame was requested while these were in flight. Applying this
-      // response would leave the overlay describing a different frame than the
-      // image on screen.
-      if (seq !== fetchSeqRef.current) return;
-
-      const tracking =
-        typeof trackingResponse.data === 'string'
-          ? JSON.parse(trackingResponse.data)
-          : trackingResponse.data;
-      const preprocess =
-        typeof preprocessResponse.data === 'string'
-          ? JSON.parse(preprocessResponse.data)
-          : preprocessResponse.data;
-
-      updateFrame(frameResponse.data);
-      setTrackingData(validateData(tracking.tracking_data || []));
-      setTrackingPoseData(validatePoseData(tracking.pose || {}));
-      setNumberOfAnimals(tracking.number_of_animals || 0);
-      setContoursData(preprocess.contours || []);
-    } catch (error) {
-      if (axios.isCancel(error)) return;   // expected when scrubbing fast
-      console.error('Error fetching data: ', error);
-    }
-  };
+  const playerRef = useRef(null);
+  if (playerRef.current === null) {
+    playerRef.current = new FramePlayer({
+      load: async (n) => {
+        const image = await api.get(`/api/frame/${n}`, { responseType: 'blob' });
+        // Segmentation is costly: only ask for contours when they are drawn.
+        const [tracking, preprocess] = await Promise.all([
+          api.get(`/api/tracking/${n}?pose=${showPoseRef.current ? 1 : 0}`),
+          PRINT_CONTOUR
+            ? api.get(`/api/preprocess/${n}`).catch(() => ({ data: { contours: [] } }))
+            : { data: { contours: [] } },
+        ]);
+        const unwrap = (data) => (typeof data === 'string' ? JSON.parse(data) : data);
+        return {
+          frameNumber: n,
+          url: URL.createObjectURL(image.data),
+          blob: image.data,
+          tracking: unwrap(tracking.data),
+          contours: unwrap(preprocess.data).contours || [],
+        };
+      },
+      onDisplay: (bundle) => {
+        setFrame(bundle.url);
+        setTrackingData(validateData(bundle.tracking.tracking_data || []));
+        setTrackingPoseData(validatePoseData(bundle.tracking.pose || {}));
+        setNumberOfAnimals(bundle.tracking.number_of_animals || 0);
+        setContoursData(bundle.contours);
+        if (!nativeSizeRef.current) {
+          createImageBitmap(bundle.blob)
+            .then((bmp) => {
+              setNativeSize({ width: bmp.width, height: bmp.height });
+              bmp.close();
+            })
+            .catch(() => {});
+        }
+      },
+      onError: (n, error) => {
+        console.error(`Error loading frame ${n}:`, error);
+        log('error', `Could not load frame ${n}: ${error.response?.data?.error || error.message}`);
+      },
+    });
+  }
+  const player = playerRef.current;
 
   const [frameRange, setFrameRange] = useState(null); // { min, max }
 
@@ -345,7 +311,7 @@ function App() {
       const { data } = await api.post('/api/use_val', { use_val: checked });
       setUseVal(Boolean(data.use_val));
       fetchFrameRange();                 // bounds differ between the two tables
-      fetchFrame(frameNumber);           // reload tracking from the new source
+      player.invalidate();               // reload tracking from the new source
     } catch (e) {
       console.error('Could not switch validation source:', e);
     }
@@ -353,24 +319,34 @@ function App() {
 
   useEffect(() => { fetchFrameRange(); }, [fetchFrameRange]);
 
-  // fetchFrame is recreated on every render, so it cannot go in the dep array:
-  // including it would refetch continuously.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { fetchFrame(frameNumber); }, [frameNumber, showPose]);
+  useEffect(() => { player.seek(frameNumber); }, [player, frameNumber]);
 
-  // Playback wraps at the real end of the experiment once /api/frame_range
-  // has answered; before that it just advances.
+  // Tracking rows include pose or not: cached frames are stale when it changes.
+  const firstShowPose = useRef(true);
   useEffect(() => {
-    if (!isPlaying || !videoFrameRate) return;
-    const id = setInterval(() => {
-      setFrameNumber((p) => {
-        const next = p + videoFrameRate;
-        if (frameRange && next > frameRange.max) return frameRange.min;
-        return next;
-      });
-    }, 500);
-    return () => clearInterval(id);
-  }, [isPlaying, videoFrameRate, frameRange]);
+    if (firstShowPose.current) { firstShowPose.current = false; return; }
+    player.invalidate();
+  }, [player, showPose]);
+
+  // Playback: the player only advances once the next frame is loaded, so it never
+  // runs ahead of the server. Speed = 2 x "Playback Framerate" recording frames per
+  // second, as before; shown at up to PLAYBACK_FPS frames per second.
+  const frameNumberRef = useRef(frameNumber);
+  frameNumberRef.current = frameNumber;
+  useEffect(() => {
+    if (!isPlaying || !videoFrameRate) return undefined;
+    const speed = 2 * Number(videoFrameRate);                    // recording frames / s
+    const step = Math.max(1, Math.round(speed / PLAYBACK_FPS));
+    player.play({
+      from: frameNumberRef.current,
+      step,
+      intervalMs: (1000 * step) / speed,
+      min: frameRange?.min,
+      max: frameRange?.max,
+      onAdvance: setFrameNumber,
+    });
+    return () => player.stop();
+  }, [player, isPlaying, videoFrameRate, frameRange]);
 
   // Shared style for the two native <select> controls so they follow the theme.
   const selectStyle = {
@@ -395,14 +371,14 @@ function App() {
       // PEValidator's fly ids are flat (FlyHostel4_2X_2025-06-28_16-00-00);
       // /api/load expects the slash form, as typed in SelectComponent.
       const data = await postLoad(flatToSlash(experiment));
-      requestQueue.cancelAll();
+      player.invalidate();
       fetchFramerate(); fetchFrameRange(); setNativeSize(null);
       setFrameNumber(data.first_frame ?? FIRST_FRAME);
       await fetchFlies();
       fetchEthogramFlies();
     }
     setSelectedFly(flyId);
-  }, [selectedFly, fetchFlies, fetchFramerate, fetchFrameRange, fetchEthogramFlies]);
+  }, [selectedFly, fetchFlies, fetchFramerate, fetchFrameRange, fetchEthogramFlies, player]);
   
 
   return (
@@ -484,7 +460,7 @@ function App() {
         <SelectComponent
           key={selectedFly?.split('__')[0]}
           onExperimentChange={(firstFrame) => {
-            requestQueue.cancelAll();
+            player.invalidate();
             fetchFramerate();
             fetchFrameRange();
             fetchFlies();
@@ -508,6 +484,8 @@ function App() {
               contoursData={contoursData}
               frameNumber={frameNumber}
               setFrameNumber={setFrameNumber}
+              isPlaying={isPlaying}
+              setIsPlaying={setIsPlaying}
               number_of_animals={number_of_animals}
               poseData={trackingPoseData}
               ref={FrameWithSquareRef}
@@ -528,7 +506,7 @@ function App() {
             <SelectComponent
               key={selectedFly?.split('__')[0]}
               onExperimentChange={(firstFrame) => {
-                requestQueue.cancelAll();
+                player.invalidate();
                 fetchFramerate();
                 fetchFrameRange();
                 fetchAnimalMetadata();
@@ -568,7 +546,6 @@ function App() {
                 setFrameNumber={setFrameNumber}
                 isPlaying={isPlaying}
                 setIsPlaying={setIsPlaying}
-                requestQueue={requestQueue}
                 recordingFramerate={recordingFramerate}
               />
             </div>

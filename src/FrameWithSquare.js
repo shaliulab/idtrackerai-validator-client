@@ -59,6 +59,9 @@ function formatLabel(value) {
   return String(value);
 }
 
+// Scroll distance (px) that moves the viewer by one step: one mouse-wheel notch.
+const WHEEL_NOTCH_PX = 100;
+
 const FrameWithSquare = React.forwardRef(
   (
     {
@@ -68,6 +71,8 @@ const FrameWithSquare = React.forwardRef(
       contoursData,
       frameNumber,
       setFrameNumber,
+      isPlaying = false,
+      setIsPlaying,
       number_of_animals,
       poseData,
       displayWidth = 1000,
@@ -82,6 +87,9 @@ const FrameWithSquare = React.forwardRef(
   ) => {
     const canvasRef = useRef(null);
     const imgRef = useRef(null);
+    const isPlayingRef = useRef(isPlaying);
+    isPlayingRef.current = isPlaying;
+    const wheelAccumRef = useRef(0);
     const [hoverPos, setHoverPos] = useState(null);
 
     // Which fields the current tracking rows actually carry. Derived from the
@@ -163,16 +171,30 @@ const FrameWithSquare = React.forwardRef(
       const canvas = canvasRef.current;
       if (!canvas) return;
 
+      // Trackpads send many small deltas, mouse wheels ~100 px per notch: step
+      // once per notch-worth of scrolling, not once per event.
       const handleWheel = (e) => {
         e.preventDefault();
+        if (isPlayingRef.current) setIsPlaying?.(false);   // scrubbing pauses playback
+        const px = e.deltaMode === 1 ? e.deltaY * 33 : e.deltaMode === 2 ? e.deltaY * 400 : e.deltaY;
+        wheelAccumRef.current += px;
+        const notches = Math.trunc(wheelAccumRef.current / WHEEL_NOTCH_PX);
+        if (!notches) return;
+        wheelAccumRef.current -= notches * WHEEL_NOTCH_PX;
         const step = videoFrameRate || 1;
-        const direction = e.deltaY > 0 ? 1 : -1;
-        setFrameNumber((prev) => Math.max(0, prev + direction * step));
+        setFrameNumber((prev) => Math.max(0, prev + notches * step));
       };
 
       canvas.addEventListener('wheel', handleWheel, { passive: false });
       return () => canvas.removeEventListener('wheel', handleWheel);
-    }, [videoFrameRate, setFrameNumber]);
+    }, [videoFrameRate, setFrameNumber, setIsPlaying]);
+
+    // Middle click toggles play / pause (left click selects animals).
+    const handleMouseDown = (e) => {
+      if (e.button !== 1 || !setIsPlaying) return;
+      e.preventDefault();               // no autoscroll cursor
+      setIsPlaying((playing) => !playing);
+    };
 
     useEffect(() => {
       const canvas = canvasRef.current;
@@ -418,6 +440,7 @@ const FrameWithSquare = React.forwardRef(
           <canvas
             ref={canvasRef}
             onClick={handleClick}
+            onMouseDown={handleMouseDown}
             onMouseMove={handleMouseMove}
             onMouseLeave={handleMouseLeave}
             style={{ width: displayWidth, height: displayHeight, display: 'block' }}

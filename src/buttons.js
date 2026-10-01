@@ -25,7 +25,7 @@ import {
   TogglePlayButton 
 } from './icons';
 
-const Buttons = ({ frameNumber, setFrameNumber, isPlaying, setIsPlaying, requestQueue, recordingFramerate }) => {
+const Buttons = ({ frameNumber, setFrameNumber, isPlaying, setIsPlaying, recordingFramerate }) => {
   const frameRate = recordingFramerate;
 
   const play = () => {
@@ -35,7 +35,6 @@ const Buttons = ({ frameNumber, setFrameNumber, isPlaying, setIsPlaying, request
     
   const pause = () => {
     setIsPlaying(false);
-    requestQueue.cancelAll();
   };
   
   const prev_chunk = () => {
