@@ -479,6 +479,21 @@ function App() {
         <Tab id="ethogram"          activeTab={activeTab} setActiveTab={setActiveTab}>Ethograms</Tab>
       </div>
 
+      {/* ── Experiment selector (shared across tabs) ── */}
+      <div style={{ padding: '0 12px 8px' }}>
+        <SelectComponent
+          key={selectedFly?.split('__')[0]}
+          onExperimentChange={(firstFrame) => {
+            requestQueue.cancelAll();
+            fetchFramerate();
+            fetchFrameRange();
+            fetchFlies();
+            setNativeSize(null);
+            setFrameNumber(firstFrame);
+          }}
+        />
+      </div>
+
       {/* ── Two-column body ── */}
       <div style={{
         display: activeTab === 'idtrackerai_viewer' ? 'flex' : 'none',

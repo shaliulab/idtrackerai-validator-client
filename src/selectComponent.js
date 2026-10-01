@@ -79,7 +79,7 @@ const SelectComponent = ({ onExperimentChange }) => {
   };
 
   return (
-    <div style={{ marginBottom: 16 }}>
+    <div style={{ marginBottom: 16 }} onKeyDown={e => e.stopPropagation()}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
         <input
           type="text"
