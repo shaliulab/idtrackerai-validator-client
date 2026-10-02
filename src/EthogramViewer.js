@@ -54,7 +54,8 @@ export default function EthogramViewer({ flies, request, active, theme, selectSt
   const [capturing, setCapturing] = useState(false);
   const { log, trackJob } = useConsole();
   const [capturingAll, setCapturingAll] = useState(false);
-  const [saveOnServer, setSaveOnServer] = useState(false);  // all-bouts export: save vs download
+  const [saveOnServer, setSaveOnServer] = useState(false);
+  const [savedVideos, setSavedVideos] = useState(null);   // { directory, videos: [{name, t0, t1, duration, movie_time}] }  // all-bouts export: save vs download
 
   const plotRef = useRef(null);
   const videoRef = useRef(null);
@@ -341,6 +342,28 @@ export default function EthogramViewer({ flies, request, active, theme, selectSt
     }
   }, [fly, gotoMode, gotoValue, centerOn, hasMovie, log, reportError]);
 
+  // ── Sleep bout videos saved on the server (<basedir>/flyhostel/videos/<fly>/) ──
+  const fetchSavedVideos = useCallback(async () => {
+    if (!fly) { setSavedVideos(null); return; }
+    try {
+      const { data } = await api.get(`${API}/${fly}/saved_videos`);
+      setSavedVideos(unwrap(data));
+    } catch (err) {
+      setSavedVideos(null);
+      log('warning', `${fly}: could not list saved videos (${await errorMessage(err)})`);
+    }
+  }, [fly, log]);
+
+  useEffect(() => {
+    if (active) fetchSavedVideos();
+  }, [active, fetchSavedVideos]);
+
+  const jumpToSavedVideo = useCallback((video) => {
+    if (video.movie_time == null) return;
+    centerOn(video.movie_time);
+    if (videoRef.current && hasMovie) videoRef.current.currentTime = Math.max(0, video.movie_time);
+  }, [centerOn, hasMovie]);
+
   // ── Jump to the start of the previous / next sleep bout (an ongoing one is skipped) ──
   const navigateSleepBout = useCallback(async (direction) => {
     if (!fly || cursorFrame == null) return;
@@ -367,12 +390,13 @@ export default function EthogramViewer({ flies, request, active, theme, selectSt
       const { data } = await api.post(`${API}/${fly}/sleep_bouts/videos`, { ...body, save: saveOnServer });
       const job = await trackJob(unwrap(data));
       if (job.status === 'failed') setActionError(job.error);
+      if (job.directory) fetchSavedVideos();      // new videos were saved on the server
     } catch (err) {
       reportError(await errorMessage(err));
     } finally {
       setBusy(false);
     }
-  }, [fly, saveOnServer, trackJob, reportError]);
+  }, [fly, saveOnServer, trackJob, reportError, fetchSavedVideos]);
 
   const captureSleepBout = useCallback(async () => {
     if (!fly || cursorFrame == null) return;
@@ -519,6 +543,38 @@ export default function EthogramViewer({ flies, request, active, theme, selectSt
           </span>
         )}
       </div>
+
+      {savedVideos?.videos.length > 0 && (
+        <div style={{ paddingBottom: 8 }}>
+          <div style={{ color: theme.subtext, paddingBottom: 4 }} title={savedVideos.directory}>
+            Saved sleep bout videos ({savedVideos.videos.length}) — click to jump to the bout:
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, maxHeight: 76, overflowY: 'auto' }}>
+            {savedVideos.videos.map((video) => {
+              // 1 s tolerance: t0 is rounded to seconds and the movie seeks to the nearest frame
+              const current = cursorT != null && video.movie_time != null
+                && cursorT >= video.movie_time - 1 && cursorT < video.movie_time + video.duration;
+              return (
+                <button
+                  key={video.name}
+                  onClick={() => jumpToSavedVideo(video)}
+                  disabled={video.movie_time == null}
+                  title={video.name}
+                  style={{
+                    ...buttonStyle,
+                    padding: '2px 8px',
+                    fontSize: '0.85em',
+                    fontFamily: 'monospace',
+                    ...(current ? { background: '#1f77b4', color: '#fff', borderColor: '#1f77b4' } : {}),
+                  }}
+                >
+                  ZT {formatZT(video.t0)} · {(video.duration / 60).toFixed(1)} min
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {!flies.length && <div style={{ color: theme.subtext }}>No experiment loaded.</div>}
       {error && <div style={{ color: '#d62728', padding: '4px 0' }}>{error}</div>}
