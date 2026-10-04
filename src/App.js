@@ -580,7 +580,8 @@ function App() {
 
       <PEValidator
             fly={selectedFly}
-            active={activeTab === 'pe_validator'}
+            animalMetadata={animalMetadata}
+            theme={theme}
             onRequestFly={switchToFly}
         />
       </div>
@@ -590,6 +591,7 @@ function App() {
           <EthogramViewer
             flies={ethogramFlies}
             request={ethogramRequest}
+            animalMetadata={animalMetadata}
             active={activeTab === 'ethogram'}
             theme={theme}
             selectStyle={selectStyle}
