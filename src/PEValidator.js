@@ -13,6 +13,7 @@ import BurstTrace from './BurstTrace';
 import BurstVideo from './BurstVideo';
 import ConfidenceTrace from './ConfidenceTrace';
 import { recordBurst } from './recordBurst';
+import { FlyRow } from './blobs_table';
 
 // Relative: axios resolves it against the instance baseURL, media URLs go
 // through apiUrl() because element src attributes don't see that baseURL.
@@ -21,6 +22,13 @@ const API = '/api/pe';
 // Axios can hand back a raw string when a payload contains NaN; parse defensively.
 const unwrap = (data) => (typeof data === 'string' ? JSON.parse(data) : data);
 
+// seconds since ZT0 -> "hh:mm:ss" (hours keep counting past 24 on later days)
+const formatZT = (zt) => {
+  const s = Math.round(zt);
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${pad(Math.floor(s / 3600))}:${pad(Math.floor((s % 3600) / 60))}:${pad(s % 60)}`;
+};
+
 
 // API points needed
 // /pe/bouts            GET
@@ -28,7 +36,7 @@ const unwrap = (data) => (typeof data === 'string' ? JSON.parse(data) : data);
 // /pe/trace            GET
 // /pe/media/videos     GET
 
-export default function PEValidator({ fly, active, onRequestFly }) {
+export default function PEValidator({ fly, active, onRequestFly, animalMetadata, theme }) {
 
   const [auditMode, setAuditMode] = useState(false);
   const [auditIds, setAuditIds] = useState([]);
