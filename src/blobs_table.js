@@ -1,5 +1,5 @@
 import './TableStyles.css';
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import api from './api';
 
 // Column definitions: key used only for React keys; w = width in px
@@ -46,9 +46,14 @@ const NAV_BTN_DISABLED = {
   opacity: 0.45,
 };
 
+// Columns that act on the viewer (sleep / ethogram navigation): hidden when read-only.
+const NAVIGATION_COLUMNS = new Set(['sleep', 'ethogram']);
+
 // ethogramIdentities: identities with an ethogram in the loaded experiment. Identity 0 is
 // an unidentified blob in groups, but the only fly in single-animal (1X) experiments.
-const BlobsTable = ({ Data, setFrameNumber, number_of_animals, animalMetadata = {}, onOpenEthogram, ethogramIdentities }) => {
+// readOnly: plain cells, no navigation (for the row shown in the PE / Ethograms tabs).
+const BlobsTable = ({ Data, setFrameNumber, number_of_animals, animalMetadata = {}, onOpenEthogram, ethogramIdentities, readOnly = false }) => {
+  const columns = readOnly ? COLUMNS.filter(c => !NAVIGATION_COLUMNS.has(c.key)) : COLUMNS;
   const [draft, setDraft] = useState('');
   const [editingRow, setEditingRow] = useState(null);
 
@@ -96,11 +101,11 @@ const BlobsTable = ({ Data, setFrameNumber, number_of_animals, animalMetadata = 
   return (
     <table className="data-table">
       <colgroup>
-        {COLUMNS.map(c => <col key={c.key} style={{ width: c.w }} />)}
+        {columns.map(c => <col key={c.key} style={{ width: c.w }} />)}
       </colgroup>
       <thead>
         <tr>
-          {COLUMNS.map(c => <th key={c.key} title={c.label}>{c.label}</th>)}
+          {columns.map(c => <th key={c.key} title={c.label}>{c.label}</th>)}
         </tr>
       </thead>
       <tbody>
@@ -110,7 +115,7 @@ const BlobsTable = ({ Data, setFrameNumber, number_of_animals, animalMetadata = 
               <tr key={`pad-${index}`} style={{ visibility: 'hidden' }}>
                 <td><input type="number" readOnly value="" /></td>
                 <td><input type="number" readOnly value="" /></td>
-                {COLUMNS.slice(2).map(c => <td key={c.key}>&nbsp;</td>)}
+                {columns.slice(2).map(c => <td key={c.key}>&nbsp;</td>)}
               </tr>
             );
           }
@@ -122,8 +127,11 @@ const BlobsTable = ({ Data, setFrameNumber, number_of_animals, animalMetadata = 
 
           return (
             <tr key={`row-${index}`}>
+              {readOnly && <TC value={row.frame_number} />}
+              {readOnly && <TC value={Math.floor(row.frame_number / row.chunksize)} />}
+
               {/* Frame Number — editable, navigates to that frame */}
-              <td>
+              {!readOnly && <td>
                 <input
                   type="number"
                   value={editingRow === index ? draft : (row.frame_number ?? '')}
@@ -136,10 +144,10 @@ const BlobsTable = ({ Data, setFrameNumber, number_of_animals, animalMetadata = 
                   }}
                   onWheel={e => e.target.blur()}
                 />
-              </td>
+              </td>}
 
               {/* Chunk — editable, jumps to chunk × chunksize */}
-              <td>
+              {!readOnly && <td>
                 <input
                   type="number"
                   value={editingChunkRow === index ? chunkDraft : Math.floor(row.frame_number / row.chunksize)}
@@ -152,7 +160,7 @@ const BlobsTable = ({ Data, setFrameNumber, number_of_animals, animalMetadata = 
                   }}
                   onWheel={e => e.target.blur()}
                 />
-              </td>
+              </td>}
 
               <TC value={row.frame_number % row.chunksize} />
               <TC value={row.x} />
@@ -162,7 +170,7 @@ const BlobsTable = ({ Data, setFrameNumber, number_of_animals, animalMetadata = 
               <TC value={meta.genotype || '—'} title={meta.genotype || ''} />
 
               {/* Sleep navigation */}
-              <td style={{ whiteSpace: 'nowrap' }}>
+              {!readOnly && <td style={{ whiteSpace: 'nowrap' }}>
                 <button
                   style={sleepLoading[prevKey] ? NAV_BTN_DISABLED : NAV_BTN}
                   disabled={!!sleepLoading[prevKey]}
@@ -176,10 +184,10 @@ const BlobsTable = ({ Data, setFrameNumber, number_of_animals, animalMetadata = 
                   title={`Start of the next sleep bout of fly ${row.identity} (after the current one, if asleep)`}
                   onClick={() => navSleep('next', row.identity, row.frame_number)}
                 >z →</button>
-              </td>
+              </td>}
 
               {/* Ethogram of this fly at this frame */}
-              <td>
+              {!readOnly && <td>
                 <button
                   style={hasEthogram ? NAV_BTN : NAV_BTN_DISABLED}
                   disabled={!hasEthogram}
@@ -188,7 +196,7 @@ const BlobsTable = ({ Data, setFrameNumber, number_of_animals, animalMetadata = 
                     : `No ethogram for identity ${row.identity} in this experiment`}
                   onClick={() => onOpenEthogram(row.identity, row.frame_number)}
                 >etho</button>
-              </td>
+              </td>}
 
               <TC value={row.local_identity} />
               <TC value={row.in_frame_index} />
@@ -204,4 +212,51 @@ const BlobsTable = ({ Data, setFrameNumber, number_of_animals, animalMetadata = 
   );
 };
 
-export { BlobsTable };
+// The blobs table row of one fly (`<experiment>__<NN>`) at `frameNumber`, read-only:
+// shows the PE / Ethograms tabs which fly is being inspected and its metadata.
+const FlyRow = ({ fly, frameNumber, animalMetadata = {}, theme }) => {
+  const [row, setRow] = useState(null);
+  const [status, setStatus] = useState(null);
+  const identity = fly ? Number(fly.split('__')[1]) : null;
+
+  useEffect(() => {
+    if (!fly || frameNumber == null || !Number.isFinite(Number(frameNumber))) {
+      setRow(null);
+      setStatus(null);
+      return undefined;
+    }
+    let cancelled = false;
+    // debounced: the Ethograms cursor moves every second during playback
+    const timer = setTimeout(async () => {
+      try {
+        const { data } = await api.get(`/api/tracking/${Math.round(frameNumber)}?pose=0`);
+        if (cancelled) return;
+        const tracking = typeof data === 'string' ? JSON.parse(data) : data;
+        const found = (tracking.tracking_data || []).find(r => Number(r.identity) === identity);
+        setRow(found ? { ...found, x: Math.round(found.x), y: Math.round(found.y) } : null);
+        setStatus(found ? null : `fly ${identity} not detected at frame ${Math.round(frameNumber)}`);
+      } catch (e) {
+        if (!cancelled) { setRow(null); setStatus(`tracking unavailable: ${e.response?.data?.error || e.message}`); }
+      }
+    }, 300);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [fly, frameNumber, identity]);
+
+  if (!fly) return null;
+  const meta = animalMetadata[String(identity)] ?? {};
+  return (
+    <div style={{ padding: '4px 0 8px' }}>
+      <div style={{ overflowX: 'auto', border: `1px solid ${theme?.border ?? '#ccc'}`, background: theme?.panelBg }}>
+        <BlobsTable Data={row ? [row] : []} number_of_animals={row ? 1 : 0}
+                    animalMetadata={animalMetadata} readOnly />
+      </div>
+      {status && (
+        <div style={{ fontSize: '0.85em', color: theme?.subtext ?? '#777', paddingTop: 2 }}>
+          {status}{meta.sex || meta.genotype ? ` · ${[meta.sex, meta.genotype].filter(Boolean).join(' · ')}` : ''}
+        </div>
+      )}
+    </div>
+  );
+};
+
+export { BlobsTable, FlyRow };

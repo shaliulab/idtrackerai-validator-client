@@ -46,6 +46,20 @@ export default function PEValidator({ fly, active, onRequestFly }) {
   const [jumpValue, setJumpValue] = useState('');
   const [jumpBidValue, setJumpBidValue] = useState('');
 
+  // PE browser: find the PE bout closest to a ZT time or a frame number
+  const [findMode, setFindMode] = useState('zt');          // 'zt' | 'frame_number'
+  const [findValue, setFindValue] = useState('');
+  // burst (and bout) to show once the burst order has caught up: { burst_id, bout_uid? }
+  const [pendingTarget, setPendingTarget] = useState(null);
+
+  // burst order: by score (default) or by time
+  const [chronological, setChronological] = useState(() => {
+    try { return localStorage.getItem('fh-pe-chronological') === 'true'; } catch { return false; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem('fh-pe-chronological', String(chronological)); } catch { /* ignore */ }
+  }, [chronological]);
+
   const overlayCanvasRef = useRef(null);
   const plainCanvasRef = useRef(null);
   const distSvgRef = useRef(null);
@@ -135,16 +149,26 @@ export default function PEValidator({ fly, active, onRequestFly }) {
     return out;
   }, [bouts]);
 
-  // bursts sorted by that score, high first. missing scores sink to the bottom.
-  // swap a/b in the comparator for low-first.
+  // first frame of each burst, for chronological order
+  const burstStart = useMemo(() => {
+    const out = {};
+    for (const b of bouts) {
+      if (out[b.burst_id] == null || b.start_fn < out[b.burst_id]) out[b.burst_id] = b.start_fn;
+    }
+    return out;
+  }, [bouts]);
+
+  // bursts sorted by that score, high first (missing scores sink to the bottom),
+  // or by time when `chronological`. Audit mode keeps the audit list's order.
   const burstIds = useMemo(() => {
     const all = [...new Set(bouts.map(b => b.burst_id))];
     if (auditMode && auditIds.length) {
       const present = new Set(all);
       return auditIds.filter(id => present.has(id));
     }
+    if (chronological) return all.sort((x, y) => burstStart[x] - burstStart[y]);
     return all.sort((x, y) => (burstScore[y] ?? -Infinity) - (burstScore[x] ?? -Infinity));
-  }, [bouts, auditMode, auditIds, burstScore]);
+  }, [bouts, auditMode, auditIds, burstScore, burstStart, chronological]);
 
   const burstId = burstIds[burstIdx];
   const burstBouts = bouts
@@ -306,6 +330,60 @@ const downloadBurstVideo = useCallback(async () => {
 
 
   useEffect(() => { setSelectedBoutIdx(0); }, [burstId]);
+
+  // Show `pendingTarget` once it is in the burst order. Declared after the effect
+  // above so that, when the burst changes, the bout selected here wins.
+  useEffect(() => {
+    if (!pendingTarget) return;
+    const idx = burstIds.indexOf(pendingTarget.burst_id);
+    if (idx === -1) return;                              // e.g. audit mode still switching off
+    if (burstId !== pendingTarget.burst_id) { setBurstIdx(idx); return; }   // re-runs once burstId updates
+    if (pendingTarget.bout_uid != null) {
+      const inBurst = bouts
+        .filter(b => b.burst_id === pendingTarget.burst_id)
+        .sort((a, b) => a.bout_uid - b.bout_uid);
+      setSelectedBoutIdx(Math.max(0, inBurst.findIndex(b => b.bout_uid === pendingTarget.bout_uid)));
+    }
+    setPendingTarget(null);
+  }, [pendingTarget, burstIds, burstId, bouts]);
+
+  // Re-sorting keeps the burst on screen.
+  const toggleChronological = (checked) => {
+    if (burstId != null) setPendingTarget({ burst_id: burstId });
+    setChronological(checked);
+  };
+
+  // ── PE browser: the PE bout closest in time to a ZT (s since ZT0) or frame number ──
+  const findNearestPE = useCallback(async () => {
+    const value = Number(findValue);
+    if (!fly || findValue.trim() === '' || !Number.isFinite(value)) {
+      setNotice('enter a ZT (s) or a frame number');
+      return;
+    }
+    const pool = bouts.filter(b => b.is_pe);
+    if (!pool.length) { setNotice(`no PE bouts for ${fly}`); return; }
+    try {
+      const { data } = await api.get(`/api/ethogram/${fly}/locate`, { params: { [findMode]: value } });
+      const target = unwrap(data);                       // { frame_number, zt }
+      const fn = target.frame_number;
+      const distance = (b) => (fn < b.start_fn ? b.start_fn - fn : fn > b.end_fn ? fn - b.end_fn : 0);
+      const best = pool.reduce((a, b) => (distance(b) < distance(a) ? b : a));
+
+      if (auditMode && !burstIds.includes(best.burst_id)) setAuditMode(false);
+      setPendingTarget({ burst_id: best.burst_id, bout_uid: best.bout_uid });
+
+      const { data: at } = await api.get(`/api/ethogram/${fly}/locate`, { params: { frame_number: best.start_fn } });
+      const peZT = unwrap(at).zt;
+      const delta = distance(best) === 0 ? 0 : peZT - target.zt;
+      setNotice(
+        `nearest PE to ZT ${formatZT(target.zt)} (frame ${fn}): burst ${best.burst_id}, bout ${best.bout_uid}, `
+        + `frames ${best.start_fn}–${best.end_fn}, ZT ${formatZT(peZT)} (${peZT.toFixed(1)} s)`
+        + (delta === 0 ? ' — contains the requested time' : `, ${delta > 0 ? '+' : ''}${delta.toFixed(1)} s`)
+      );
+    } catch (e) {
+      setNotice(e.response?.data?.error || e.message);
+    }
+  }, [fly, findValue, findMode, bouts, auditMode, burstIds]);
 
   
   useEffect(() => {
@@ -638,6 +716,34 @@ const downloadBurstVideo = useCallback(async () => {
               {recording ? 'recording…' : '⤓ video'}
             </button>
         </span>
+      </div>
+
+      {/* the inspected fly's row of the viewer's table, at the selected bout's start */}
+      <FlyRow fly={fly} frameNumber={selectedBout?.start_fn} animalMetadata={animalMetadata} theme={theme} />
+
+      <div style={{ display: 'flex', gap: 6, alignItems: 'center', padding: '6px 0' }}>
+        <span>Find PE near</span>
+        <select value={findMode} onChange={e => setFindMode(e.target.value)}>
+          <option value="zt">ZT (s since ZT0 of day 1)</option>
+          <option value="frame_number">frame number (since chunk 0)</option>
+        </select>
+        <input
+          type="number"
+          value={findValue}
+          onChange={e => setFindValue(e.target.value)}
+          onKeyDown={e => {
+            if (e.key === 'Enter') findNearestPE();
+            e.stopPropagation();          // keep digits out of the global shortcuts
+          }}
+          placeholder={findMode === 'zt' ? 'e.g. 72000' : 'e.g. 3300000'}
+          style={{ width: 110, padding: '2px 6px' }}
+        />
+        <button onClick={findNearestPE} disabled={!bouts.length}>find</button>
+        <label style={{ marginLeft: 12 }} title="Order bursts by time instead of by score (not in audit mode)">
+          <input type="checkbox" checked={chronological} disabled={auditMode}
+                 onChange={e => toggleChronological(e.target.checked)} />
+          {' '}sort chronologically
+        </label>
       </div>
 
       <label style={{ marginLeft: 12 }}>

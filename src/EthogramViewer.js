@@ -10,6 +10,7 @@ import Plotly from 'plotly.js-dist-min';
 import Hls from 'hls.js';
 import api, { apiUrl } from './api';
 import { useConsole } from './MessageConsole';
+import { FlyRow } from './blobs_table';
 
 const API = '/api/ethogram';
 
@@ -41,7 +42,7 @@ const errorMessage = async (err) => {
   return data?.error || err.message;
 };
 
-export default function EthogramViewer({ flies, request, active, theme, selectStyle, onOpenInViewer }) {
+export default function EthogramViewer({ flies, request, animalMetadata, active, theme, selectStyle, onOpenInViewer }) {
   const [fly, setFly] = useState(null);
   const [properties, setProperties] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -333,6 +334,7 @@ export default function EthogramViewer({ flies, request, active, theme, selectSt
     try {
       const { data } = await api.get(`${API}/${fly}/locate`, { params: { [gotoMode]: value } });
       const position = unwrap(data);
+      if (position.movie_time == null) throw new Error(`Frame ${position.frame_number} cannot be placed in ${fly}'s ethogram (no feather file)`);
       centerOn(position.movie_time);
       if (videoRef.current && hasMovie) videoRef.current.currentTime = Math.max(0, position.movie_time);
       setNotice({ kind: 'goto', ...position });
@@ -458,6 +460,9 @@ export default function EthogramViewer({ flies, request, active, theme, selectSt
         )}
         {loading && <span style={{ color: theme.subtext }}>Loading ethogram…</span>}
       </div>
+
+      {/* the inspected fly's row of the viewer's table, at the cursor */}
+      <FlyRow fly={fly} frameNumber={cursorFrame} animalMetadata={animalMetadata} theme={theme} />
 
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', paddingBottom: 8 }}>
         <form
