@@ -4,8 +4,8 @@
 // clip, and a pe / not_pe / unsure control per bout. Matches App.js conventions:
 // same-origin requests through the shared `api` instance, experiment held server-side.
 //
-// Wire-up (see chat): import it in App.js, add a <Tab id="pe_validator">, and render
-// <PEValidator identity={...} /> when activeTab === 'pe_validator'.
+// Wire-up (see chat): import it in App.js, add a <Tab id="proboscis_extension">, and render
+// <PEValidator identity={...} /> when activeTab === 'proboscis_extension'.
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import api, { apiUrl } from './api';

@@ -102,7 +102,7 @@ function App() {
 
   const FrameWithSquareRef = useRef(null);
   const [number_of_animals, setNumberOfAnimals] = useState(6);
-  const [activeTab, setActiveTab] = useState('idtrackerai_viewer');
+  const [activeTab, setActiveTab] = useState('group_viewer');
   const consoleState = useConsoleState();
   const { log } = useConsole();
 
@@ -200,8 +200,8 @@ function App() {
   useEffect(() => {
     const onKey = (e) => {
       if (!e.ctrlKey || e.metaKey || e.altKey) return;   // Ctrl only, not Cmd/Alt combos
-      if (e.key === '1') { e.preventDefault(); setActiveTab('idtrackerai_viewer'); }
-      else if (e.key === '2') { e.preventDefault(); setActiveTab('pe_validator'); }
+      if (e.key === '1') { e.preventDefault(); setActiveTab('group_viewer'); }
+      else if (e.key === '2') { e.preventDefault(); setActiveTab('proboscis_extension'); }
       else if (e.key === '3') { e.preventDefault(); setActiveTab('ethogram'); }
     };
     window.addEventListener('keydown', onKey);
@@ -212,7 +212,7 @@ function App() {
   useEffect(() => {
     const onKey = (e) => {
       if (!e.ctrlKey || !e.shiftKey || e.metaKey || e.altKey) return;
-      if (activeTab !== 'pe_validator') return;
+      if (activeTab !== 'proboscis_extension') return;
       const m = /^Digit([1-9])$/.exec(e.code);        // physical digit, Shift-proof
       if (!m) return;
       const n = parseInt(m[1], 10);
@@ -476,8 +476,8 @@ function App() {
 
       {/* ── Tabs ── */}
       <div style={{ padding: '2px 12px 4px' }}>
-        <Tab id="idtrackerai_viewer" activeTab={activeTab} setActiveTab={setActiveTab}>Idtrackerai viewer</Tab>
-        <Tab id="pe_validator"      activeTab={activeTab} setActiveTab={setActiveTab}>PE validation</Tab>
+        <Tab id="group_viewer" activeTab={activeTab} setActiveTab={setActiveTab}>Group viewer</Tab>
+        <Tab id="proboscis_extension"      activeTab={activeTab} setActiveTab={setActiveTab}>Proboscis Extension (PE)</Tab>
         <Tab id="ethogram"          activeTab={activeTab} setActiveTab={setActiveTab}>Ethograms</Tab>
       </div>
 
@@ -491,7 +491,7 @@ function App() {
 
       {/* ── Two-column body ── */}
       <div style={{
-        display: activeTab === 'idtrackerai_viewer' ? 'flex' : 'none',
+        display: activeTab === 'group_viewer' ? 'flex' : 'none',
         flexDirection: 'row', gap: 12, padding: '0 12px 8px', alignItems: 'flex-start',
       }}>
         {/* Left: frame canvas */}
@@ -560,7 +560,7 @@ function App() {
           </div>
         </div>
 
-      <div style={{ display: activeTab === 'pe_validator' ? 'block' : 'none' }}>
+      <div style={{ display: activeTab === 'proboscis_extension' ? 'block' : 'none' }}>
       <div style={{ padding: "12px" }}>
         <label>
           Fly:&nbsp;
@@ -582,6 +582,7 @@ function App() {
             fly={selectedFly}
             animalMetadata={animalMetadata}
             theme={theme}
+            active={activeTab === 'proboscis_extension'}
             onRequestFly={switchToFly}
         />
       </div>
@@ -597,7 +598,7 @@ function App() {
             selectStyle={selectStyle}
             onOpenInViewer={(fn) => {
               setFrameNumber(fn);
-              setActiveTab('idtrackerai_viewer');
+              setActiveTab('group_viewer');
             }}
           />
         </Suspense>
