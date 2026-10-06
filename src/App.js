@@ -329,11 +329,15 @@ function App() {
   // hoisted.
   const [useVal, setUseVal] = useState(false);
 
-  useEffect(() => {
+  // The server picks the source per experiment (validated for groups, raw for
+  // single flies): read it at start-up and after every experiment load.
+  const fetchUseVal = useCallback(() => {
     api.get('/api/use_val')
       .then(r => setUseVal(Boolean(r.data.use_val)))
       .catch(() => {});
   }, []);
+
+  useEffect(() => { fetchUseVal(); }, [fetchUseVal]);
 
   const toggleUseVal = async (checked) => {
     try {
@@ -398,10 +402,11 @@ function App() {
     setFrameNumber(firstFrame);
     fetchFramerate();
     fetchFrameRange();
+    fetchUseVal();
     fetchAnimalMetadata();
     fetchEthogramFlies();
     await fetchFlies();
-  }, [player, fetchFramerate, fetchFrameRange, fetchAnimalMetadata, fetchEthogramFlies, fetchFlies]);
+  }, [player, fetchFramerate, fetchFrameRange, fetchUseVal, fetchAnimalMetadata, fetchEthogramFlies, fetchFlies]);
 
   const switchToFly = useCallback(async (flyId) => {
     const experiment = flyId.split('__')[0];
