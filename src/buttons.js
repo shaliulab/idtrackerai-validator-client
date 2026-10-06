@@ -158,7 +158,7 @@ const Buttons = ({ frameNumber, setFrameNumber, isPlaying, setIsPlaying, recordi
   }, [isPlaying, frameNumber, frameRate]);
 
   return (
-    <div className="button-group">
+    <div className="transport">
       <ChunkBackButton onClick={prev_chunk} />
       <ThirtySecondsBackButton onClick={seconds30_back} />
       <TenSecondsBackButton onClick={seconds10_back} />
@@ -168,6 +168,7 @@ const Buttons = ({ frameNumber, setFrameNumber, isPlaying, setIsPlaying, recordi
       <TenSecondsForthButton onClick={seconds10_forward} />
       <ThirtySecondsForthButton onClick={seconds30_forward} />
       <ChunkForthButton onClick={next_chunk} />
+      <span className="sep" />
       <PreviousRejectionButton onClick={prev_rejection} />
       <NextRejectionButton onClick={next_rejection} />
     </div>

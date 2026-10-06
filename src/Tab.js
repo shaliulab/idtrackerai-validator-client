@@ -1,7 +1,9 @@
-function Tab({ id, activeTab, setActiveTab, children }) {
+function Tab({ id, activeTab, setActiveTab, shortcut, children }) {
   return (
-    <button className={activeTab === id ? "active" : ""} onClick={() => setActiveTab(id)}>
+    <button className={`tab${activeTab === id ? ' active' : ''}`} onClick={() => setActiveTab(id)}
+            title={shortcut ? `Shortcut: ${shortcut}` : undefined}>
       {children}
+      {shortcut && <kbd>{shortcut}</kbd>}
     </button>
   );
 }

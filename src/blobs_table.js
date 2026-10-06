@@ -31,11 +31,12 @@ const TC = ({ value, title }) => {
 
 const NAV_BTN = {
   padding: '1px 5px',
-  fontSize: '0.8em',
+  fontSize: '0.9em',
   cursor: 'pointer',
-  border: '1px solid #94a3b8',
-  borderRadius: 3,
-  background: '#f1f5f9',
+  border: '1px solid var(--border-strong, #94a3b8)',
+  borderRadius: 4,
+  background: 'var(--btn-bg, #f1f5f9)',
+  color: 'inherit',
   lineHeight: 1.4,
   userSelect: 'none',
 };
@@ -99,7 +100,7 @@ const BlobsTable = ({ Data, setFrameNumber, number_of_animals, animalMetadata = 
   }, [Data, number_of_animals]);
 
   return (
-    <table className="data-table">
+    <table className="data-table" style={{ minWidth: columns.reduce((sum, c) => sum + c.w, 0) }}>
       <colgroup>
         {columns.map(c => <col key={c.key} style={{ width: c.w }} />)}
       </colgroup>

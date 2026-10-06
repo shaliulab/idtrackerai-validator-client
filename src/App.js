@@ -1,7 +1,7 @@
 // App.js  —  Frontend of the flyhostel viewer
 
-import React, { useState, useRef, useEffect, useCallback, useMemo, Suspense, lazy } from 'react';
-import FrameWithSquare from './FrameWithSquare';
+import React, { useState, useRef, useEffect, useLayoutEffect, useCallback, useMemo, Suspense, lazy } from 'react';
+import FrameWithSquare, { FrameDisplayOptions } from './FrameWithSquare';
 import Buttons from './buttons';
 import Slider from './slider';
 import Tab from './Tab';
@@ -19,38 +19,36 @@ import MessageConsole, { useConsole, useConsoleState, consoleHeight } from './Me
 const EthogramViewer = lazy(() => import('./EthogramViewer'));
 
 // ── Theme tokens ──────────────────────────────────────────────────────────
-// Only the colors App.js itself controls live here. Child components
-// (FrameWithSquare, BlobsTable, Buttons, …) keep their own styling; to make
-// them follow the theme you'd pass `theme` down as a prop and swap their
-// hard-coded colors for these tokens.
+// Most styling reads the CSS variables in index.css (switched by
+// <html data-theme>); these mirror them for the components that still take a
+// `theme` prop (PEValidator, EthogramViewer, MessageConsole, FlyRow).
 const THEMES = {
   light: {
-    bg: '#ffffff',
-    text: '#000000',
-    subtext: '#555555',
-    border: '#cccccc',
+    bg: '#f4f6f9',
+    text: '#1f2937',
+    subtext: '#64748b',
+    border: '#dbe1e8',
     panelBg: '#ffffff',
-    buttonBg: '#f0f0f0',
+    buttonBg: '#ffffff',
   },
   dark: {
-    bg: '#1e1e1e',
-    text: '#e0e0e0',
-    subtext: '#a0a0a0',
-    border: '#444444',
-    panelBg: '#2a2a2a',
-    buttonBg: '#333333',
+    bg: '#16181d',
+    text: '#e2e8f0',
+    subtext: '#94a3b8',
+    border: '#323843',
+    panelBg: '#1f232a',
+    buttonBg: '#2a2f38',
   },
 };
 
-// 120px budget for header + tabs + padding; cap width to 46% so the right
-// panel always has at least half the viewport for controls.
 // Frames shown per second during playback (at most; the server may be slower).
 const PLAYBACK_FPS = 10;
 
-const FRAME_SIZE = Math.min(
-  window.innerHeight - 120,
-  Math.floor(window.innerWidth * 0.46),
-);
+// The frame fills the height left between the tab bar and the console, but
+// never more than this share of the window width (the side panel needs room).
+const FRAME_MAX_WIDTH_SHARE = 0.5;
+const FRAME_MIN_SIZE = 320;
+const PAGE_BOTTOM_GAP = 12;
 
 function App() {
   const [frame, setFrame] = useState(PLACEHOLDER_IMAGE);
@@ -86,11 +84,10 @@ function App() {
     try { localStorage.setItem('fh-label-field', labelField); } catch { /* ignore */ }
   }, [labelField]);
 
-  // Paint the page background too, not just the app container.
+  // index.css switches its color variables on this attribute.
   useEffect(() => {
-    document.body.style.backgroundColor = theme.bg;
-    document.body.style.color = theme.text;
-  }, [theme]);
+    document.documentElement.dataset.theme = themeName;
+  }, [themeName]);
 
   const toggleTheme = useCallback(
     () => setThemeName((t) => (t === 'light' ? 'dark' : 'light')),
@@ -104,7 +101,28 @@ function App() {
   const [number_of_animals, setNumberOfAnimals] = useState(6);
   const [activeTab, setActiveTab] = useState('group_viewer');
   const consoleState = useConsoleState();
+  const consoleOpen = consoleState?.open ?? true;
   const { log } = useConsole();
+
+  // Display size of the frame: as large as the window allows without scrolling,
+  // keeping the native aspect ratio.
+  const viewerRef = useRef(null);
+  const [frameSize, setFrameSize] = useState({ width: 600, height: 600 });
+  const aspect = nativeSize ? nativeSize.height / nativeSize.width : 1;
+  useLayoutEffect(() => {
+    const fit = () => {
+      const el = viewerRef.current;
+      if (!el || el.offsetParent === null) return;    // hidden tab: keep the last size
+      const top = el.getBoundingClientRect().top + window.scrollY;
+      const maxHeight = window.innerHeight - top - consoleHeight(consoleOpen) - PAGE_BOTTOM_GAP - 2;
+      const maxWidth = window.innerWidth * FRAME_MAX_WIDTH_SHARE;
+      const width = Math.floor(Math.max(FRAME_MIN_SIZE, Math.min(maxWidth, maxHeight / aspect)));
+      setFrameSize({ width, height: Math.round(width * aspect) });
+    };
+    fit();
+    window.addEventListener('resize', fit);
+    return () => window.removeEventListener('resize', fit);
+  }, [aspect, consoleOpen, activeTab]);
 
   const [animalMetadata, setAnimalMetadata] = useState({});
 
@@ -366,14 +384,12 @@ function App() {
     return () => player.stop();
   }, [player, isPlaying, videoFrameRate, frameRange]);
 
-  // Shared style for the two native <select> controls so they follow the theme.
-  const selectStyle = {
-    background: theme.panelBg,
-    color: theme.text,
-    border: `1px solid ${theme.border}`,
-    borderRadius: 4,
-    padding: '2px 6px',
-  };
+  // Native <select>s are themed by index.css; kept as a prop for EthogramViewer.
+  const selectStyle = {};
+
+  // Readout above the slider: position of the displayed frame.
+  const firstRow = trackingData[0];
+  const chunksize = firstRow?.chunksize;
 
   const flatToSlash = (exp) => {
     const parts = exp.split('_');
@@ -409,93 +425,52 @@ function App() {
 
   return (
     <div style={{
-      fontFamily: 'Arial, sans-serif',
-      background: theme.bg,
-      color: theme.text,
       minHeight: '100vh',
       // leave room for the console docked at the bottom
-      paddingBottom: consoleHeight(consoleState?.open ?? true),
+      paddingBottom: consoleHeight(consoleOpen),
       boxSizing: 'border-box',
     }}>
-      {/* ── Header ── */}
-     <div style={{
-        display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between',
-        padding: '4px 12px 0',
-      }}>
-        <div>
-          <h1 style={{ margin: 0, fontSize: '1.3em' }}>FlyHostel Viewer</h1>
-          <h3 style={{ margin: 0, fontSize: '0.8em', fontWeight: 'normal', color: theme.subtext }}>
-            Developed at Liu Lab @ VIB-KU Leuven Center for Neuroscience
-          </h3>
+      {/* ── App bar: title, experiment (shared across tabs), global toggles ── */}
+      <header className="app-bar">
+        <div className="app-title">
+          <h1>FlyHostel Viewer</h1>
+          <p>Liu Lab @ VIB-KU Leuven Center for Neuroscience</p>
         </div>
 
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-
-
-          <label
-            title="Read tracking from IDENTITY_VAL (validated) instead of IDENTITY"
-            style={{
-              display: 'flex', alignItems: 'center', gap: 6,
-              padding: '6px 12px',
-              borderRadius: 6,
-              border: `1px solid ${theme.border}`,
-              background: theme.buttonBg,
-              color: theme.text,
-              cursor: 'pointer',
-              fontSize: '0.85em',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            <input
-              type="checkbox"
-              checked={useVal}
-              onChange={(e) => toggleUseVal(e.target.checked)}
-              style={{ cursor: 'pointer' }}
-            />
-            Validated tracking
-          </label>
-
-          <button
-            onClick={toggleTheme}
-            title="Toggle light/dark theme"
-            style={{
-              padding: '6px 12px',
-              borderRadius: 6,
-              border: `1px solid ${theme.border}`,
-              background: theme.buttonBg,
-              color: theme.text,
-              cursor: 'pointer',
-              fontSize: '0.85em',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            {themeName === 'light' ? 'Dark mode' : 'Light mode'}
-          </button>
-        </div>
-      </div>
-
-      {/* ── Tabs ── */}
-      <div style={{ padding: '2px 12px 4px' }}>
-        <Tab id="group_viewer" activeTab={activeTab} setActiveTab={setActiveTab}>Group viewer</Tab>
-        <Tab id="proboscis_extension"      activeTab={activeTab} setActiveTab={setActiveTab}>Proboscis Extension (PE)</Tab>
-        <Tab id="ethogram"          activeTab={activeTab} setActiveTab={setActiveTab}>Ethograms</Tab>
-      </div>
-
-      {/* ── Experiment selector (shared across tabs) ── */}
-      <div style={{ padding: '0 12px 8px' }}>
         <SelectComponent
           key={selectedFly?.split('__')[0]}
           onExperimentChange={onExperimentLoaded}
         />
-      </div>
 
-      {/* ── Two-column body ── */}
-      <div style={{
-        display: activeTab === 'group_viewer' ? 'flex' : 'none',
-        flexDirection: 'row', gap: 12, padding: '0 12px 8px', alignItems: 'flex-start',
-      }}>
-        {/* Left: frame canvas */}
-        <div style={{ flexShrink: 0 }}>
+        <span className="spacer" />
+
+        <div className="app-actions">
+          <label className="chip check" title="Read tracking from IDENTITY_VAL (validated) instead of IDENTITY">
+            <input
+              type="checkbox"
+              checked={useVal}
+              onChange={(e) => toggleUseVal(e.target.checked)}
+            />
+            Validated tracking
+          </label>
+          <button onClick={toggleTheme} title="Toggle light/dark theme">
+            <i className={`fa ${themeName === 'light' ? 'fa-moon-o' : 'fa-sun-o'}`} style={{ marginRight: 6 }} />
+            {themeName === 'light' ? 'Dark' : 'Light'}
+          </button>
+        </div>
+      </header>
+
+      {/* ── Tabs ── */}
+      <nav className="tabs">
+        <Tab id="group_viewer" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+1">Group viewer</Tab>
+        <Tab id="proboscis_extension" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+2">Proboscis extension (PE)</Tab>
+        <Tab id="ethogram" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+3">Ethograms</Tab>
+      </nav>
+
+      {/* ── Group viewer: frame | tracking table + navigation ── */}
+      <div className="tab-panel" style={{ display: activeTab === 'group_viewer' ? 'block' : 'none' }}>
+        <div className="viewer" ref={viewerRef}>
+          <div className="card viewer-frame">
             <FrameWithSquare
               imageURL={frame}
               videoFrameRate={videoFrameRate}
@@ -508,66 +483,87 @@ function App() {
               number_of_animals={number_of_animals}
               poseData={trackingPoseData}
               ref={FrameWithSquareRef}
-              displayWidth={FRAME_SIZE}
-              displayHeight={FRAME_SIZE}
+              displayWidth={frameSize.width}
+              displayHeight={frameSize.height}
               nativeSize={nativeSize}
-              showPose={showPose}          // ← controlled
-              setShowPose={setShowPose}     // ← controlled
-              labelField={labelField}       // ← controlled
-              setLabelField={setLabelField} // ← controlled
+              showPose={showPose}
+              labelField={labelField}
             />
-        </div>
+          </div>
 
+          <div className="viewer-side" style={{ height: frameSize.height + 2 }}>
+            <section className="card viewer-table">
+              <div className="card-header">
+                Tracking
+                <span className="spacer" />
+                <span style={{ textTransform: 'none', letterSpacing: 0, fontWeight: 400 }}>
+                  {trackingData.length} / {number_of_animals} animals detected
+                </span>
+              </div>
+              <div className="scroll">
+                <BlobsTable Data={trackingData} setFrameNumber={setFrameNumber}
+                            number_of_animals={number_of_animals}
+                            animalMetadata={animalMetadata}
+                            onOpenEthogram={openEthogram}
+                            ethogramIdentities={ethogramIdentities} />
+              </div>
+            </section>
 
-          {/* Right: controls */}
-          <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
-
-            <div style={{ maxHeight: 220, overflowY: 'auto', overflowX: 'auto', border: `1px solid ${theme.border}`, background: theme.panelBg, boxSizing: 'border-box' }}>
-              <BlobsTable Data={trackingData} setFrameNumber={setFrameNumber}
-                          number_of_animals={number_of_animals}
-                          animalMetadata={animalMetadata}
-                          onOpenEthogram={openEthogram}
-                          ethogramIdentities={ethogramIdentities} />
-
-            </div>
-
-            <InteractiveText
-              value={videoFrameRate}
-              setValue={setVideoFrameRate}
-              id="playback_framerate"
-              labelText="Playback Framerate"
-            />
-
-            <Slider
-              isPlaying={isPlaying}
-              recordingFramerate={recordingFramerate}
-              frameNumber={frameNumber}
-              setFrameNumber={setFrameNumber}
-              minFrame={frameRange?.min}
-              maxFrame={frameRange?.max}
-            />
-
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, justifyContent: 'center' }}>
-              <Buttons
-                frameNumber={frameNumber}
-                setFrameNumber={setFrameNumber}
-                isPlaying={isPlaying}
-                setIsPlaying={setIsPlaying}
-                recordingFramerate={recordingFramerate}
-              />
-            </div>
-
+            <section className="card">
+              <div className="card-header">
+                Navigation
+                <span className="spacer" />
+                <div className="readout" style={{ textTransform: 'none', letterSpacing: 0, fontWeight: 400 }}>
+                  <span>Frame <b>{frameNumber}</b></span>
+                  {chunksize > 0 && <span>Chunk <b>{Math.floor(frameNumber / chunksize)}</b></span>}
+                  {firstRow?.ZT && <span>ZT <b>{firstRow.ZT}</b></span>}
+                </div>
+              </div>
+              <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <Slider
+                  isPlaying={isPlaying}
+                  recordingFramerate={recordingFramerate}
+                  frameNumber={frameNumber}
+                  setFrameNumber={setFrameNumber}
+                  minFrame={frameRange?.min}
+                  maxFrame={frameRange?.max}
+                />
+                <Buttons
+                  frameNumber={frameNumber}
+                  setFrameNumber={setFrameNumber}
+                  isPlaying={isPlaying}
+                  setIsPlaying={setIsPlaying}
+                  recordingFramerate={recordingFramerate}
+                />
+                <div className="toolbar" style={{ justifyContent: 'center' }}>
+                  <InteractiveText
+                    value={videoFrameRate}
+                    setValue={setVideoFrameRate}
+                    id="playback_framerate"
+                    labelText="Playback framerate"
+                    title="Playback speed (2× this many recording frames per second) and frames skipped per mouse-wheel notch"
+                  />
+                  <FrameDisplayOptions
+                    trackingData={trackingData}
+                    showPose={showPose}
+                    setShowPose={setShowPose}
+                    labelField={labelField}
+                    setLabelField={setLabelField}
+                  />
+                </div>
+              </div>
+            </section>
           </div>
         </div>
+      </div>
 
       <div style={{ display: activeTab === 'proboscis_extension' ? 'block' : 'none' }}>
-      <div style={{ padding: "12px" }}>
-        <label>
-          Fly:&nbsp;
+      <div style={{ padding: '12px 12px 0' }}>
+        <label className="field">
+          Fly
           <select
             value={selectedFly || ""}
             onChange={e => setSelectedFly(e.target.value)}
-            style={selectStyle}
           >
             {flies.map(fly => (
               <option key={fly} value={fly}>

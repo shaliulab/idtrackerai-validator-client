@@ -79,9 +79,7 @@ const FrameWithSquare = React.forwardRef(
       displayHeight = 1000,
       nativeSize,
       showPose,
-      setShowPose,
       labelField = LABEL_FIELD,
-      setLabelField,
     },
     ref,
   ) => {
@@ -91,18 +89,6 @@ const FrameWithSquare = React.forwardRef(
     isPlayingRef.current = isPlaying;
     const wheelAccumRef = useRef(0);
     const [hoverPos, setHoverPos] = useState(null);
-
-    // Which fields the current tracking rows actually carry. Derived from the
-    // data rather than hard-coded, so a backend that stops sending `fragment`
-    // does not leave a dead option in the menu.
-    const labelOptions = useMemo(() => {
-      const row = trackingData?.[0];
-      if (!row) return [labelField];
-      const present = LABEL_FIELD_CANDIDATES.filter((f) => f in row);
-      // Always offer whatever is currently selected, even if this frame's rows
-      // happen not to include it.
-      return present.includes(labelField) ? present : [labelField, ...present];
-    }, [trackingData, labelField]);
 
     // Click log. Nothing renders from it, so a ref is the right container:
     // as state it was being mutated in place and returned by identity, which
@@ -399,59 +385,57 @@ const FrameWithSquare = React.forwardRef(
     ]);
 
     return (
-      <div>
-        <div style={{
-          display: 'flex',
-          gap: '10px',
-          alignItems: 'center',
-          marginBottom: '10px',
-          padding: '5px 10px',
-          backgroundColor: '#f0f0f0',
-          borderRadius: '4px',
-        }}>
-          <label style={{ display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer' }}>
-            <input
-              type="checkbox"
-              checked={showPose}
-              onChange={(e) => setShowPose(e.target.checked)}
-              style={{ cursor: 'pointer' }}
-            />
-            <span style={{ fontWeight: 'bold' }}>Show Pose</span>
-          </label>
-
-          <label
-            style={{ display: 'flex', alignItems: 'center', gap: '5px' }}
-            title="Which field to draw next to each animal"
-          >
-            <span style={{ fontWeight: 'bold' }}>Label:</span>
-            <select
-              value={labelField}
-              onChange={(e) => setLabelField?.(e.target.value)}
-              disabled={!setLabelField}
-              style={{ padding: '2px 6px', borderRadius: 4, cursor: 'pointer' }}
-            >
-              {labelOptions.map((f) => (
-                <option key={f} value={f}>{f}</option>
-              ))}
-            </select>
-          </label>
-        </div>
-        <div style={{ width: displayWidth }}>
-          <canvas
-            ref={canvasRef}
-            onClick={handleClick}
-            onMouseDown={handleMouseDown}
-            onMouseMove={handleMouseMove}
-            onMouseLeave={handleMouseLeave}
-            style={{ width: displayWidth, height: displayHeight, display: 'block' }}
-          />
-          <img ref={imgRef} style={{ display: 'none' }} alt="" />
-        </div>
+      <div style={{ width: displayWidth }}>
+        <canvas
+          ref={canvasRef}
+          onClick={handleClick}
+          onMouseDown={handleMouseDown}
+          onMouseMove={handleMouseMove}
+          onMouseLeave={handleMouseLeave}
+          style={{ width: displayWidth, height: displayHeight, display: 'block' }}
+        />
+        <img ref={imgRef} style={{ display: 'none' }} alt="" />
       </div>
     );
   },
 );
 
 FrameWithSquare.displayName = 'FrameWithSquare';
+
+// What is drawn over the frame: pose skeletons and the field labelling each animal.
+export function FrameDisplayOptions({ trackingData, showPose, setShowPose, labelField, setLabelField }) {
+  // Which fields the current tracking rows actually carry. Derived from the
+  // data rather than hard-coded, so a backend that stops sending `fragment`
+  // does not leave a dead option in the menu.
+  const labelOptions = useMemo(() => {
+    const row = trackingData?.[0];
+    if (!row) return [labelField];
+    const present = LABEL_FIELD_CANDIDATES.filter((f) => f in row);
+    // Always offer whatever is currently selected, even if this frame's rows
+    // happen not to include it.
+    return present.includes(labelField) ? present : [labelField, ...present];
+  }, [trackingData, labelField]);
+
+  return (
+    <>
+      <label className="field check">
+        <input
+          type="checkbox"
+          checked={showPose}
+          onChange={(e) => setShowPose(e.target.checked)}
+        />
+        Show pose
+      </label>
+      <label className="field" title="Which field to draw next to each animal">
+        Label
+        <select value={labelField} onChange={(e) => setLabelField(e.target.value)}>
+          {labelOptions.map((f) => (
+            <option key={f} value={f}>{f}</option>
+          ))}
+        </select>
+      </label>
+    </>
+  );
+}
 
 export default FrameWithSquare;

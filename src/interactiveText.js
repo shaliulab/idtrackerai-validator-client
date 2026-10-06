@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 
-const InteractiveText = React.forwardRef(({ value, setValue, id, labelText }, ref) => {
+const InteractiveText = React.forwardRef(({ value, setValue, id, labelText, title }, ref) => {
     // Local draft so the field can be empty or mid-edit without the parent
     // rejecting it and snapping the value back.
     const [draft, setDraft] = useState(String(value ?? ''));
@@ -25,11 +25,10 @@ const InteractiveText = React.forwardRef(({ value, setValue, id, labelText }, re
     };
 
     return (
-        <div>
-            <label htmlFor={id}>{labelText}</label>
+        <label className="field" htmlFor={id} title={title}>
+            {labelText}
             <input
                 ref={ref}
-                style={{ width: 100 }}
                 type="number"
                 step="1"
                 min="1"
@@ -39,7 +38,7 @@ const InteractiveText = React.forwardRef(({ value, setValue, id, labelText }, re
                 onBlur={handleBlur}
                 onKeyDown={(e) => e.stopPropagation()}
             />
-        </div>
+        </label>
     );
 });
 

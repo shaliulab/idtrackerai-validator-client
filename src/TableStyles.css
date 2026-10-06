@@ -1,9 +1,10 @@
 .data-table {
   border-collapse: collapse;
   font-family: 'Consolas', 'SF Mono', 'Liberation Mono', monospace;
-  font-size: 0.75em;
+  font-size: 12px;
   table-layout: fixed;
-  /* no width: 100% — fixed columns determine the width; container scrolls */
+  /* stretch to the container; below the columns' total width it scrolls */
+  width: 100%;
 }
 
 /* ── Header ─────────────────────────────────────────────── */
@@ -11,30 +12,27 @@
   position: sticky;
   top: 0;
   z-index: 1;
-  background: #334155;
-  color: #f1f5f9;
-  padding: 5px 4px;
+  background: var(--surface-2, #f8fafc);
+  color: var(--subtext, #64748b);
+  padding: 6px 4px;
   text-align: center;
   font-weight: 600;
-  font-size: 0.72em;
+  font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  border-right: 1px solid #4a5568;
+  border-bottom: 1px solid var(--border, #e2e8f0);
   cursor: default;
   user-select: none;
 }
 
-.data-table thead th:last-child {
-  border-right: none;
-}
 
 /* ── Body cells ─────────────────────────────────────────── */
 .data-table tbody td {
-  padding: 3px 4px;
-  border-bottom: 1px solid #e2e8f0;
+  padding: 4px;
+  border-bottom: 1px solid var(--border, #e2e8f0);
   text-align: center;
   white-space: nowrap;
   overflow: hidden;
@@ -42,11 +40,11 @@
 }
 
 .data-table tbody tr:nth-child(even) td {
-  background-color: #f8fafc;
+  background-color: var(--surface-2, #f8fafc);
 }
 
 .data-table tbody tr:hover td {
-  background-color: #dbeafe;
+  background-color: var(--accent-soft, #dbeafe);
 }
 
 /* ── Sleep nav buttons ──────────────────────────────────── */
@@ -55,8 +53,8 @@
 }
 
 .data-table td button:hover:not(:disabled) {
-  background: #e2e8f0;
-  border-color: #64748b;
+  background: var(--btn-hover, #e2e8f0) !important;
+  border-color: var(--accent, #64748b) !important;
 }
 
 /* ── Editable number inputs ─────────────────────────────── */
@@ -79,7 +77,14 @@
 }
 
 .data-table input[type="number"]:focus {
-  outline: 1px solid #3b82f6;
+  outline: 1px solid var(--accent, #3b82f6);
   border-radius: 2px;
-  background: rgba(255, 255, 255, 0.9);
+  background: var(--surface, #ffffff);
+}
+
+/* Frame / chunk inputs navigate: hint that they are editable. */
+.data-table input[type="number"] {
+  color: var(--accent, #2563eb);
+  font-weight: 600;
+  cursor: text;
 }

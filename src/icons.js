@@ -16,87 +16,37 @@ import { ReactComponent as PreviousRejectionIcon } from './assets/icons/previous
 import { ReactComponent as NextRejectionIcon } from './assets/icons/nextRejection.svg';
 
 
-const OneSecondBackButton = ({ onClick }) => (
-    <button className="btn" onClick={onClick}>
-      <OneBackIcon />
+// One icon button of the transport bar; `title` names the action and its key.
+const iconButton = (Icon, title) => {
+  const IconButton = ({ onClick }) => (
+    <button className="icon-btn" onClick={onClick} title={title}>
+      <Icon />
     </button>
   );
-  
-  const ThirtySecondsBackButton = ({ onClick }) => (
-    <button className="btn" onClick={onClick}>
-      <ThirtyBackIcon/>
-    </button>
-  );
-  
-  const TenSecondsBackButton = ({ onClick }) => (
-    <button className="btn" onClick={onClick}>
-      <TenBackIcon/>
-    </button>
-  );
-  
-  const ChunkBackButton = ({ onClick }) => (
-  <button className="btn" onClick={onClick}>
-    <ChunkBackIcon />
+  IconButton.displayName = `IconButton(${title})`;
+  return IconButton;
+};
+
+const ChunkBackButton = iconButton(ChunkBackIcon, 'Previous chunk (1)');
+const ThirtySecondsBackButton = iconButton(ThirtyBackIcon, 'Back 30 s');
+const TenSecondsBackButton = iconButton(TenBackIcon, 'Back 10 s (2)');
+const OneSecondBackButton = iconButton(OneBackIcon, 'Back 1 s (3)');
+const OneSecondForthButton = iconButton(OneForthIcon, 'Forward 1 s (5)');
+const TenSecondsForthButton = iconButton(TenForthIcon, 'Forward 10 s (6)');
+const ThirtySecondsForthButton = iconButton(ThirtyForthIcon, 'Forward 30 s');
+const ChunkForthButton = iconButton(ChunkForthIcon, 'Next chunk (7)');
+const PreviousRejectionButton = iconButton(PreviousRejectionIcon, 'Previous rejection (8)');
+const NextRejectionButton = iconButton(NextRejectionIcon, 'Next rejection (9)');
+
+const TogglePlayButton = ({ isPlaying, play, pause }) => (
+  <button
+    className="icon-btn primary"
+    onClick={isPlaying ? pause : play}
+    title={`${isPlaying ? 'Pause' : 'Play'} (4 or middle click on the frame)`}
+  >
+    <i className={`fa ${isPlaying ? 'fa-pause' : 'fa-play'}`} />
   </button>
 );
-
-
-const OneSecondForthButton = ({ onClick }) => (
-    <button className="btn" onClick={onClick}>
-      <OneForthIcon />
-    </button>
-  );
-  
-  
-  const TenSecondsForthButton = ({ onClick }) => (
-    <button className="btn" onClick={onClick}>
-      <TenForthIcon />
-    </button>
-  );
-
-  const ThirtySecondsForthButton = ({ onClick }) => (
-    <button className="btn" onClick={onClick}>
-      <ThirtyForthIcon />
-    </button>
-  );
-  
-  const ChunkForthButton = ({ onClick }) => (
-  <button className="btn" onClick={onClick}>
-    <ChunkForthIcon />
-  </button>
-);
-
-const PreviousRejectionButton = ({ onClick }) => (
-  <button className="btn" onClick={onClick}>
-    <PreviousRejectionIcon />
-  </button>
-);
-
-
-const NextRejectionButton = ({ onClick }) => (
-  <button className="btn" onClick={onClick}>
-    <NextRejectionIcon />
-  </button>
-);
-
-  const TogglePlayButton = ({ isPlaying, play, pause }) => {
-    const togglePlay = () => {
-      if (isPlaying) {
-        pause();
-      } else {
-        play();
-      }
-    };
-  
-    return (
-      <button className="btn" onClick={togglePlay}>
-        <i
-          className={`fa ${isPlaying ? 'fa-pause' : 'fa-play'}`}
-          style={{ fontSize: '72px', width: '72px', height: '72px' }}
-        ></i>
-      </button>
-    );
-  };
 
 export { 
     OneSecondBackButton,TenSecondsBackButton, ThirtySecondsBackButton, ChunkBackButton,
