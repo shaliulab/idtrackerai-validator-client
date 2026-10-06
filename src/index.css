@@ -15,6 +15,7 @@
   --btn-bg: #ffffff;
   --btn-hover: #f1f5f9;
   --danger: #dc2626;
+  --danger-soft: #fef2f2;
   --icon-filter: none;
   --radius: 6px;
   --shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
@@ -35,6 +36,7 @@
   --btn-bg: #2a2f38;
   --btn-hover: #343a45;
   --danger: #f87171;
+  --danger-soft: #3a1d1f;
   --icon-filter: invert(0.9);
   --shadow: none;
   color-scheme: dark;
@@ -254,4 +256,37 @@ input[type="checkbox"] { accent-color: var(--accent); }
   background: var(--btn-bg);
   font-size: 13px;
   white-space: nowrap;
+}
+
+/* ── Destructive actions ── */
+.btn-danger {
+  color: var(--danger);
+  border-color: var(--danger);
+}
+.btn-danger.solid {
+  background: var(--danger);
+  color: #ffffff;
+}
+.btn-danger.solid:hover:not(:disabled) { background: var(--danger); filter: brightness(1.1); }
+
+.banner-danger {
+  flex-basis: 100%;                 /* own line when placed in a wrapping toolbar */
+  display: flex;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--danger);
+  border-left-width: 4px;
+  border-radius: 8px;
+  background: var(--danger-soft);
+  color: var(--text);
+  line-height: 1.5;
+}
+.banner-danger > .fa { color: var(--danger); }
+.banner-danger ul { margin: 4px 0; padding-left: 20px; }
+.banner-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin-top: 10px;
 }

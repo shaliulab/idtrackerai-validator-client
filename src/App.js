@@ -12,6 +12,7 @@ import SelectComponent, { postLoad } from './selectComponent';
 
 import { FIRST_FRAME, PLACEHOLDER_IMAGE, LABEL_FIELD, PRINT_CONTOUR } from './constants';
 import PEValidator from './PEValidator';
+import DeletePEAnnotations from './DeletePEAnnotations';
 import api from './api';
 import MessageConsole, { useConsole, useConsoleState, consoleHeight } from './MessageConsole';
 
@@ -100,6 +101,8 @@ function App() {
   const FrameWithSquareRef = useRef(null);
   const [number_of_animals, setNumberOfAnimals] = useState(6);
   const [activeTab, setActiveTab] = useState('group_viewer');
+  // Bumped after the PE annotations are wiped: remounts PEValidator so it reloads.
+  const [peReloadKey, setPeReloadKey] = useState(0);
   const consoleState = useConsoleState();
   const consoleOpen = consoleState?.open ?? true;
   const { log } = useConsole();
@@ -558,7 +561,7 @@ function App() {
       </div>
 
       <div style={{ display: activeTab === 'proboscis_extension' ? 'block' : 'none' }}>
-      <div style={{ padding: '12px 12px 0' }}>
+      <div className="toolbar" style={{ padding: '12px 12px 0' }}>
         <label className="field">
           Fly
           <select
@@ -572,9 +575,12 @@ function App() {
             ))}
           </select>
         </label>
+        <span style={{ flex: 1 }} />
+        <DeletePEAnnotations onDeleted={() => setPeReloadKey((k) => k + 1)} />
       </div>
 
       <PEValidator
+            key={peReloadKey}
             fly={selectedFly}
             animalMetadata={animalMetadata}
             theme={theme}
