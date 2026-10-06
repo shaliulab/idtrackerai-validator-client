@@ -95,7 +95,7 @@ function App() {
     [],
   );
 
-  // Native frame dimensions, read from the first decoded image.
+  // Native frame dimensions, reported by FrameWithSquare from each drawn image.
   const [nativeSize, setNativeSize] = useState(null); // { width, height }
 
   const FrameWithSquareRef = useRef(null);
@@ -272,8 +272,6 @@ function App() {
   // ── Frame player: loads image + tracking + contours per frame, latest seek wins ──
   const showPoseRef = useRef(showPose);
   showPoseRef.current = showPose;
-  const nativeSizeRef = useRef(nativeSize);
-  nativeSizeRef.current = nativeSize;
 
   const playerRef = useRef(null);
   if (playerRef.current === null) {
@@ -302,14 +300,6 @@ function App() {
         setTrackingPoseData(validatePoseData(bundle.tracking.pose || {}));
         setNumberOfAnimals(bundle.tracking.number_of_animals || 0);
         setContoursData(bundle.contours);
-        if (!nativeSizeRef.current) {
-          createImageBitmap(bundle.blob)
-            .then((bmp) => {
-              setNativeSize({ width: bmp.width, height: bmp.height });
-              bmp.close();
-            })
-            .catch(() => {});
-        }
       },
       onError: (n, error) => {
         console.error(`Error loading frame ${n}:`, error);
@@ -403,8 +393,8 @@ function App() {
 
   // Everything that depends on the loaded experiment, refreshed after /api/load.
   const onExperimentLoaded = useCallback(async (firstFrame) => {
-    player.invalidate();
-    setNativeSize(null);
+    // Load the new experiment's first frame, not the old frame number again.
+    player.invalidate(firstFrame);
     setFrameNumber(firstFrame);
     fetchFramerate();
     fetchFrameRange();
@@ -489,6 +479,7 @@ function App() {
               displayWidth={frameSize.width}
               displayHeight={frameSize.height}
               nativeSize={nativeSize}
+              onNativeSize={setNativeSize}
               showPose={showPose}
               labelField={labelField}
             />

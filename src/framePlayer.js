@@ -191,13 +191,16 @@ export default class FramePlayer {
 
   // ── cache ──
 
-  invalidate() {
+  // `target`: frame to load next instead of reloading the current one (e.g. the
+  // first frame of a newly loaded experiment).
+  invalidate(target = this.target) {
     this.generation += 1;
     for (const [frameNumber, entry] of this.cache) {
       if (entry.bundle?.url && frameNumber !== this.displayed) URL.revokeObjectURL(entry.bundle.url);
     }
     this.cache.clear();
     this.displayed = null;
+    this.target = target;
     if (this.target !== null) this.pump();
   }
 }

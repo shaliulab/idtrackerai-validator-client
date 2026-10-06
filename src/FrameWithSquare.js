@@ -78,6 +78,7 @@ const FrameWithSquare = React.forwardRef(
       displayWidth = 1000,
       displayHeight = 1000,
       nativeSize,
+      onNativeSize,
       showPose,
       labelField = LABEL_FIELD,
     },
@@ -243,6 +244,16 @@ const FrameWithSquare = React.forwardRef(
       };
 
       const draw = () => {
+        // Scale from the image actually drawn, never from a size measured on an
+        // earlier frame: after an experiment switch the resolution may differ, and
+        // a stale size projects the tracking labels to the wrong place.
+        const native = { width: img.naturalWidth, height: img.naturalHeight };
+        const sx = displayWidth / native.width;
+        const sy = displayHeight / native.height;
+        if (native.width !== nativeSize?.width || native.height !== nativeSize?.height) {
+          onNativeSize?.(native);
+        }
+
         canvas.width = displayWidth;
         canvas.height = displayHeight;
 
@@ -299,15 +310,15 @@ const FrameWithSquare = React.forwardRef(
         }
 
         // --- MAGNIFIER OVERLAY ---
-        if (hoverPos && nativeSize && img.naturalWidth > 0) {
+        if (hoverPos && img.naturalWidth > 0) {
           const nx = hoverPos.x / sx;
           const ny = hoverPos.y / sy;
 
           // Clamp the sampled region to the image. Math.max(0, …) second so a
           // frame narrower than the inset still yields a non-negative origin.
           const half = INSET_NATIVE_SIZE / 2;
-          const srcX = Math.max(0, Math.min(nx - half, nativeSize.width - INSET_NATIVE_SIZE));
-          const srcY = Math.max(0, Math.min(ny - half, nativeSize.height - INSET_NATIVE_SIZE));
+          const srcX = Math.max(0, Math.min(nx - half, native.width - INSET_NATIVE_SIZE));
+          const srcY = Math.max(0, Math.min(ny - half, native.height - INSET_NATIVE_SIZE));
 
           const halfDisp = INSET_DISPLAY_SIZE / 2;
           const dstX = Math.max(0, Math.min(hoverPos.x - halfDisp, displayWidth - INSET_DISPLAY_SIZE));
@@ -375,11 +386,10 @@ const FrameWithSquare = React.forwardRef(
       number_of_animals,
       displayWidth,
       displayHeight,
-      sx,
-      sy,
       frameNumber,
       hoverPos,
       nativeSize,
+      onNativeSize,
       showPose,
       labelField,
     ]);
