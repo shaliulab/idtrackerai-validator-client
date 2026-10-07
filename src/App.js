@@ -55,6 +55,50 @@ const SIDE_MIN_WIDTH = 320;
 const SPLITTER_WIDTH = 12;
 const PAGE_BOTTOM_GAP = 12;
 
+// Logos shown right of the lab name. Drop the image files in
+// idtrackerai-validator-client/public/logos/ under these names; a missing file
+// is simply not shown.
+const LOGOS = [
+  { src: `${process.env.PUBLIC_URL}/logos/logo1.png`, alt: 'Logo 1' },
+  { src: `${process.env.PUBLIC_URL}/logos/logo2.png`, alt: 'Logo 2' },
+];
+
+// Commit of the root repository the server runs from (/api/version).
+function VersionTag() {
+  const [version, setVersion] = useState(null);
+  useEffect(() => {
+    api.get('/api/version').then((r) => setVersion(r.data)).catch(() => {});
+  }, []);
+  if (!version?.commit) return null;
+  return (
+    <span
+      className="app-version"
+      title={`idtrackerai-validator-server commit ${version.commit} (${version.date})`
+        + (version.dirty ? ', with uncommitted changes' : '')}
+    >
+      {version.commit}{version.dirty ? '*' : ''}
+    </span>
+  );
+}
+
+function Logos() {
+  const [failed, setFailed] = useState({});
+  const shown = LOGOS.filter((l) => !failed[l.src]);
+  if (!shown.length) return null;
+  return (
+    <div className="app-logos">
+      {shown.map((l) => (
+        <img
+          key={l.src}
+          src={l.src}
+          alt={l.alt}
+          onError={() => setFailed((f) => ({ ...f, [l.src]: true }))}
+        />
+      ))}
+    </div>
+  );
+}
+
 function App() {
   const [frame, setFrame] = useState(PLACEHOLDER_IMAGE);
   const [frameNumber, setFrameNumber] = useState(FIRST_FRAME);
@@ -460,10 +504,13 @@ function App() {
     }}>
       {/* ── App bar: title, experiment (shared across tabs), global toggles ── */}
       <header className="app-bar">
+        <VersionTag />
         <div className="app-title">
           <h1>FlyHostel Viewer</h1>
           <p>Liu Lab @ VIB-KU Leuven Center for Neuroscience</p>
         </div>
+
+        <Logos />
 
         <SelectComponent
           key={selectedFly?.split('__')[0]}
