@@ -14,6 +14,7 @@ import Splitter from './Splitter';
 import { FIRST_FRAME, PLACEHOLDER_IMAGE, LABEL_FIELD, PRINT_CONTOUR } from './constants';
 import PEValidator from './PEValidator';
 import DeletePEAnnotations from './DeletePEAnnotations';
+import HelpTab from './HelpTab';
 import api from './api';
 import MessageConsole, { useConsole, useConsoleState, consoleHeight } from './MessageConsole';
 
@@ -291,13 +292,14 @@ function App() {
 
   useEffect(() => { fetchFlies(); }, [fetchFlies]);
 
-  // Ctrl+1 / Ctrl+2 / Ctrl+3 switch tabs
+  // Ctrl+1 … Ctrl+4 switch tabs
   useEffect(() => {
     const onKey = (e) => {
       if (!e.ctrlKey || e.metaKey || e.altKey) return;   // Ctrl only, not Cmd/Alt combos
       if (e.key === '1') { e.preventDefault(); setActiveTab('group_viewer'); }
       else if (e.key === '2') { e.preventDefault(); setActiveTab('proboscis_extension'); }
       else if (e.key === '3') { e.preventDefault(); setActiveTab('ethogram'); }
+      else if (e.key === '4') { e.preventDefault(); setActiveTab('help'); }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -540,6 +542,9 @@ function App() {
         <Tab id="group_viewer" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+1">Group viewer</Tab>
         <Tab id="proboscis_extension" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+2">Proboscis extension (PE)</Tab>
         <Tab id="ethogram" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+3">Ethograms</Tab>
+        <Tab id="help" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+4">
+          <i className="fa fa-question-circle-o" style={{ marginRight: 6 }} />How to use
+        </Tab>
       </nav>
 
       {/* ── Group viewer: frame | tracking table + navigation ── */}
@@ -685,6 +690,10 @@ function App() {
             }}
           />
         </Suspense>
+      </div>
+
+      <div className="tab-panel" style={{ display: activeTab === 'help' ? 'block' : 'none' }}>
+        <HelpTab />
       </div>
 
       <MessageConsole theme={theme} />

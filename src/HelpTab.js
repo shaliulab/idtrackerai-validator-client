@@ -1,0 +1,313 @@
+// HelpTab.js  —  "How to use" tab: a guide to the app, with a table of contents.
+//
+// Static text. When a feature, button or shortcut changes, update it here too.
+
+import React from 'react';
+
+const Key = ({ children }) => <kbd className="help-kbd">{children}</kbd>;
+
+const SECTIONS = [
+  { id: 'help-overview', title: 'What this app is for' },
+  { id: 'help-start', title: 'Getting started' },
+  { id: 'help-viewer', title: 'Group viewer' },
+  { id: 'help-pe', title: 'Proboscis extension (PE)' },
+  { id: 'help-ethogram', title: 'Ethograms' },
+  { id: 'help-keys', title: 'Keyboard & mouse' },
+  { id: 'help-glossary', title: 'Glossary' },
+];
+
+function Section({ id, title, children }) {
+  return (
+    <section id={id} className="card help-section">
+      <h2>{title}</h2>
+      {children}
+    </section>
+  );
+}
+
+const SHORTCUTS = [
+  ['Anywhere', [
+    [<><Key>Ctrl</Key>+<Key>1</Key> / <Key>2</Key> / <Key>3</Key> / <Key>4</Key></>, 'Switch to Group viewer / PE / Ethograms / How to use'],
+  ]],
+  ['Group viewer', [
+    [<><Key>1</Key> / <Key>7</Key></>, 'Previous / next chunk'],
+    [<><Key>2</Key> / <Key>6</Key></>, 'Back / forward 10 s'],
+    [<><Key>3</Key> / <Key>5</Key></>, 'Back / forward 1 s'],
+    [<Key>4</Key>, 'Play / pause'],
+    [<><Key>8</Key> / <Key>9</Key></>, 'Previous / next rejection'],
+    ['Mouse wheel on the frame', 'Scrub (one notch = "Playback framerate" frames); pauses playback'],
+    ['Middle click on the frame', 'Play / pause'],
+    ['Hover over the frame', 'Magnifying glass'],
+  ]],
+  ['PE', [
+    [<><Key>1</Key>–<Key>7</Key></>, 'Verdict for the selected bout: pe, feed, groom, walk, other, merge, unsure (same key again removes it)'],
+    [<><Key>Shift</Key>+<Key>1</Key>–<Key>7</Key></>, 'Same verdict for every bout of the burst'],
+    [<><Key>0</Key> / <Key>Backspace</Key></>, 'Clear the selected bout\'s verdict'],
+    [<><Key>←</Key> / <Key>→</Key></>, 'Previous / next burst'],
+    [<><Key>↑</Key> / <Key>↓</Key></>, 'Previous / next bout'],
+    [<Key>n</Key>, 'Next burst with an unlabeled bout'],
+    [<><Key>k</Key> / <Key>j</Key></>, 'Next / previous unreviewed burst (audit mode)'],
+    [<><Key>Ctrl</Key>+<Key>Shift</Key>+<Key>1</Key>–<Key>9</Key></>, 'Select the Nth fly'],
+    ['Drag on a trace', 'Scrub the burst video'],
+    [<><Key>Shift</Key>+drag on the distance trace</>, 'Draw a ground-truth event'],
+  ]],
+  ['Ethograms', [
+    [<><Key>↑</Key> / <Key>↓</Key></>, 'Previous / next fly'],
+    [<><Key>←</Key> / <Key>→</Key></>, 'Move the cursor 1 s (with Shift: 10 s, Ctrl: 60 s, Ctrl+Alt: 10 min)'],
+  ]],
+];
+
+export default function HelpTab() {
+  const jump = (id) => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+  return (
+    <div className="help">
+      <nav className="help-toc card">
+        <div className="card-header">Contents</div>
+        <ul>
+          {SECTIONS.map((s) => (
+            <li key={s.id}><button onClick={() => jump(s.id)}>{s.title}</button></li>
+          ))}
+        </ul>
+      </nav>
+
+      <div className="help-body">
+        <Section id="help-overview" title="What this app is for">
+          <p>
+            The FlyHostel Viewer is used to review the results of tracking flies in
+            FlyHostel experiments. In each experiment several flies share an arena
+            and are filmed for days. <b>YOLOv7</b> finds the flies in every frame,
+            and <b>idtrackerai</b> assigns each fly an <i>identity</i> that it keeps
+            for the whole recording.
+          </p>
+          <p>The app lets you:</p>
+          <ul>
+            <li><b>check identities</b> frame by frame, and find the frames where tracking failed or was corrected (Group viewer);</li>
+            <li><b>annotate proboscis extension</b> events picked up by the pose pipeline (PE tab);</li>
+            <li><b>browse each fly's behaviour</b> over the whole experiment and export sleep bout videos (Ethograms).</li>
+          </ul>
+          <p className="help-note">
+            Each tab name shows its shortcut (<Key>Ctrl</Key>+<Key>1</Key>…<Key>4</Key>).
+            Hover over a button to see what it does.
+          </p>
+        </Section>
+
+        <Section id="help-start" title="Getting started">
+          <ol>
+            <li>
+              <b>Load an experiment.</b> Choose one in <i>Browse available experiments…</i>
+              in the top bar. All tabs follow the loaded experiment.
+            </li>
+            <li>
+              <b>Choose the tracking source.</b> Ticking <i>Validated tracking</i> reads
+              identities from the validated tables (<code>IDENTITY_VAL</code>,{' '}
+              <code>ROI_0_VAL</code>) instead of the raw tracking. Each experiment starts on
+              the validated tables when it has more than one fly and they exist. Your
+              choice lasts until the next experiment is loaded.
+            </li>
+            <li>
+              <b>Watch the console.</b> The panel at the bottom shows messages, errors and the
+              progress of long jobs, such as video exports. Click its title to fold it and
+              drag its top edge to resize it.
+            </li>
+          </ol>
+          <p className="help-note">
+            The top bar also switches between light and dark theme. The small code in the
+            top right corner is the version (git commit) of the running server; a{' '}
+            <code>*</code> means it ran with uncommitted changes. Include it when you report a problem.
+          </p>
+        </Section>
+
+        <Section id="help-viewer" title="Group viewer">
+          <p>
+            The frame is on the left and the tracking table and navigation on the right.
+            Drag the bar between them to resize the frame; double click it to fit the
+            frame to the window again.
+          </p>
+
+          <h3>The frame</h3>
+          <ul>
+            <li>
+              Each fly is labelled at its centroid in its <b>identity colour</b>. Black means
+              identity <b>0</b>: a detection that was not assigned to any fly. Use{' '}
+              <i>Label</i> to show another field instead of the identity (area, fragment, …);
+              the colour still follows the identity.
+            </li>
+            <li>
+              <b>Hover</b> to open a magnifying glass. Its border takes the colour of the fly
+              nearest to the cursor, and that fly's identity is shown in its top-left corner.
+            </li>
+            <li>
+              <b>Scroll</b> over the frame to move through the video, and <b>middle click</b>{' '}
+              to play or pause.
+            </li>
+            <li><i>Show pose</i> draws the pose skeletons when the experiment has them.</li>
+          </ul>
+
+          <h3>Tracking table</h3>
+          <p>
+            One row per detected fly in the current frame: position, identity, sex and
+            genotype, idtrackerai details (local identity, fragment, area) and the ZT time.
+            You can type a frame number or chunk into the first columns to jump there.
+          </p>
+          <ul>
+            <li><b>← z / z →</b> jump to the start of the previous / next sleep bout of that fly.</li>
+            <li><b>etho</b> opens that fly's ethogram at the current frame.</li>
+          </ul>
+
+          <h3>Navigation</h3>
+          <ul>
+            <li>The <b>slider</b> covers the whole recording. The current frame, chunk and ZT are shown above it.</li>
+            <li>
+              The <b>transport buttons</b> step by chunk, 30 s, 10 s and 1 s, and play or pause.
+              The last two jump to the previous / next <b>rejection</b>, a frame flagged for review.
+            </li>
+            <li>
+              <i>Playback framerate</i> sets the playback speed and the number of frames
+              skipped per scroll notch.
+            </li>
+          </ul>
+        </Section>
+
+        <Section id="help-pe" title="Proboscis extension (PE)">
+          <p>
+            The pose pipeline finds candidate <b>bouts</b> where a fly may extend its
+            proboscis. Bouts close in time are grouped into <b>bursts</b>. Here you watch
+            each burst and say what each bout really is.
+          </p>
+
+          <h3>Layout</h3>
+          <ul>
+            <li>
+              <b>Top card:</b> pick a burst. It has previous / next burst, jumps to the next
+              unlabeled burst, and lets you go to a burst id or position. <i>Find PE near</i>{' '}
+              selects the PE bout closest to a ZT time or frame number. <i>⤓ video</i>{' '}
+              records the burst view to a file.
+            </li>
+            <li>
+              <b>Media:</b> the burst clip with the pose drawn on top (untick <i>pose</i> to
+              hide it), the pose alone on white, and two traces: proboscis distance and pose
+              confidence. A vertical line follows the video.
+              Drag on a trace to scrub the video.
+            </li>
+            <li>
+              <b>Bouts table:</b> one row per bout of the burst. Click a row (or use{' '}
+              <Key>↑</Key>/<Key>↓</Key>) to select it.
+            </li>
+            <li>
+              <b>Current media</b> (right): the files loaded for this burst, useful when a
+              video or trace is missing.
+            </li>
+          </ul>
+          <p className="help-note">
+            Drag the bar under the media to give it more or less height, and the bar left
+            of <i>Current media</i> to resize that panel. Double click either bar to reset it.
+          </p>
+
+          <h3>Giving verdicts</h3>
+          <p>
+            Each bout gets one of <b>pe, feed, groom, walk, other, merge, unsure</b>. Verdicts
+            are saved as soon as you click.
+          </p>
+          <ul>
+            <li>
+              <b>★</b> marks the pipeline's prediction. Until you choose, that button is
+              shown in <span className="help-pending">yellow italics</span>: it is the
+              default, but not confirmed by a person.
+            </li>
+            <li>Clicking the selected verdict again removes it.</li>
+            <li>The dashed buttons of the first row give the same verdict to every bout of the burst.</li>
+            <li><i>pred:</i> shows the raw pipeline label, even after you annotate.</li>
+          </ul>
+
+          <h3>Ground-truth segmentation</h3>
+          <p>
+            To mark the true start and end of events, <Key>Shift</Key>+drag on the distance
+            trace. Click a green bar to delete it. <i>seg: hidden</i> hides the automatic
+            segmentation so it does not bias you. When the window is complete, tick{' '}
+            <i>segmentation done</i>.
+          </p>
+
+          <h3>Audit mode</h3>
+          <p>
+            Goes through the bursts listed in the audit file (<code>PE_AUDIT_CSV</code> on
+            the server, all flies), in its order, switching fly as needed. It shows how
+            many are done, and <Key>k</Key>/<Key>j</Key> jump to the next / previous one
+            still to review. Without audit mode, bursts are sorted by score or, with{' '}
+            <i>sort chronologically</i>, by time.
+          </p>
+
+          <h3>Starting over</h3>
+          <p>
+            <i>Delete human annotations…</i> (top right of the tab) removes every verdict and
+            ground-truth segment entered for the loaded experiment. You must type the
+            experiment name to confirm. The rows are first saved to a backup file next to the
+            database. The automatic segmentation is kept.
+          </p>
+        </Section>
+
+        <Section id="help-ethogram" title="Ethograms">
+          <p>
+            Shows one fly's behaviour over the whole experiment, next to a movie of the fly.
+            The cursor, the movie and the fly's row of the tracking table stay in sync.
+          </p>
+          <ul>
+            <li>Choose the fly in the list, with ◀ ▶, or with <Key>↑</Key>/<Key>↓</Key>. Flies without an ethogram are marked.</li>
+            <li>Click the plot or use <Key>←</Key>/<Key>→</Key> to move the cursor.</li>
+            <li><i>Go to</i> jumps to a frame number or a ZT time.</li>
+            <li><i>Open frame in viewer</i> shows the cursor's frame in the Group viewer.</li>
+            <li><b>← sleep bout / sleep bout →</b> jump between sleep bouts.</li>
+          </ul>
+
+          <h3>Sleep bout videos</h3>
+          <ul>
+            <li><i>Capture sleep bout video</i> downloads the bout under the cursor, or the next one if the fly is awake.</li>
+            <li><i>Capture all sleep bouts</i> makes one video per bout of the fly. Progress shows in the console.</li>
+            <li>
+              With <i>save on server</i>, videos are written to{' '}
+              <code>&lt;experiment&gt;/flyhostel/videos/&lt;fly&gt;/</code> instead of being
+              downloaded. Saved videos appear as buttons that jump to each bout.
+            </li>
+          </ul>
+        </Section>
+
+        <Section id="help-keys" title="Keyboard & mouse">
+          <p className="help-note">Shortcuts are ignored while you type in a text box.</p>
+          <div className="help-keys-grid">
+            {SHORTCUTS.map(([group, rows]) => (
+              <table key={group} className="help-keys">
+                <caption>{group}</caption>
+                <tbody>
+                  {rows.map(([keys, what], i) => (
+                    <tr key={i}><td>{keys}</td><td>{what}</td></tr>
+                  ))}
+                </tbody>
+              </table>
+            ))}
+          </div>
+        </Section>
+
+        <Section id="help-glossary" title="Glossary">
+          <dl className="help-glossary">
+            <dt>Frame number</dt>
+            <dd>Frames counted from the start of the recording (chunk 0).</dd>
+            <dt>Chunk</dt>
+            <dd>The recording is stored in chunks of fixed length (usually 5 min); <i>Frm idx</i> is the frame within its chunk.</dd>
+            <dt>ZT</dt>
+            <dd>Zeitgeber time: time since lights-on (ZT0) of the first day. ZT seconds keep counting on later days.</dd>
+            <dt>Identity</dt>
+            <dd>The fly number idtrackerai assigns for the whole experiment. 0 means not identified.</dd>
+            <dt>Local identity / fragment</dt>
+            <dd>idtrackerai's identity within one chunk, and the stretch of frames where a fly was followed without ambiguity.</dd>
+            <dt>Rejection</dt>
+            <dd>A frame flagged for review by the interaction analysis.</dd>
+            <dt>Validated tracking</dt>
+            <dd>Tables corrected after review (<code>_VAL</code> suffix), as opposed to the raw tracking.</dd>
+            <dt>Bout / burst</dt>
+            <dd>A candidate proboscis extension, and a group of bouts close in time.</dd>
+          </dl>
+        </Section>
+      </div>
+    </div>
+  );
+}
