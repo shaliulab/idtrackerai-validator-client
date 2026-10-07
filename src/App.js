@@ -9,6 +9,7 @@ import InteractiveText from './interactiveText';
 import FramePlayer from './framePlayer';
 import { BlobsTable } from './blobs_table';
 import SelectComponent, { postLoad } from './selectComponent';
+import Splitter from './Splitter';
 
 import { FIRST_FRAME, PLACEHOLDER_IMAGE, LABEL_FIELD, PRINT_CONTOUR } from './constants';
 import PEValidator from './PEValidator';
@@ -45,10 +46,13 @@ const THEMES = {
 // Frames shown per second during playback (at most; the server may be slower).
 const PLAYBACK_FPS = 10;
 
-// The frame fills the height left between the tab bar and the console, but
-// never more than this share of the window width (the side panel needs room).
+// By default the frame fills the height left between the tab bar and the
+// console, but never more than this share of the window width (the side panel
+// needs room). Dragging the splitter next to it sets its width instead.
 const FRAME_MAX_WIDTH_SHARE = 0.5;
 const FRAME_MIN_SIZE = 320;
+const SIDE_MIN_WIDTH = 320;
+const SPLITTER_WIDTH = 12;
 const PAGE_BOTTOM_GAP = 12;
 
 function App() {
@@ -105,27 +109,53 @@ function App() {
   const [peReloadKey, setPeReloadKey] = useState(0);
   const consoleState = useConsoleState();
   const consoleOpen = consoleState?.open ?? true;
+  const consoleBodyHeight = consoleState?.height;
   const { log } = useConsole();
 
-  // Display size of the frame: as large as the window allows without scrolling,
-  // keeping the native aspect ratio.
+  // Display size of the frame. Auto (null share): as large as the window allows
+  // without scrolling, keeping the native aspect ratio. Once the splitter is
+  // dragged, its width is that share of the window width (persisted).
   const viewerRef = useRef(null);
-  const [frameSize, setFrameSize] = useState({ width: 600, height: 600 });
+  const [frameSize, setFrameSize] = useState({ width: 600, height: 600, available: 600 });
+  const [frameWidthShare, setFrameWidthShare] = useState(() => {
+    try { return Number(localStorage.getItem('fh-frame-width-share')) || null; }
+    catch { return null; }
+  });
+  useEffect(() => {
+    try {
+      if (frameWidthShare) localStorage.setItem('fh-frame-width-share', String(frameWidthShare));
+      else localStorage.removeItem('fh-frame-width-share');
+    } catch { /* ignore */ }
+  }, [frameWidthShare]);
+
   const aspect = nativeSize ? nativeSize.height / nativeSize.width : 1;
+  const frameMaxWidth = () => {
+    const el = viewerRef.current;
+    const room = (el ? el.clientWidth : window.innerWidth) - SPLITTER_WIDTH - SIDE_MIN_WIDTH - 2;
+    return Math.max(FRAME_MIN_SIZE, room);
+  };
   useLayoutEffect(() => {
     const fit = () => {
       const el = viewerRef.current;
       if (!el || el.offsetParent === null) return;    // hidden tab: keep the last size
       const top = el.getBoundingClientRect().top + window.scrollY;
-      const maxHeight = window.innerHeight - top - consoleHeight(consoleOpen) - PAGE_BOTTOM_GAP - 2;
-      const maxWidth = window.innerWidth * FRAME_MAX_WIDTH_SHARE;
-      const width = Math.floor(Math.max(FRAME_MIN_SIZE, Math.min(maxWidth, maxHeight / aspect)));
-      setFrameSize({ width, height: Math.round(width * aspect) });
+      const maxHeight = window.innerHeight - top - consoleHeight(consoleOpen, consoleBodyHeight) - PAGE_BOTTOM_GAP - 2;
+      const wanted = frameWidthShare
+        ? frameWidthShare * window.innerWidth
+        : Math.min(window.innerWidth * FRAME_MAX_WIDTH_SHARE, maxHeight / aspect);
+      const width = Math.floor(Math.min(frameMaxWidth(), Math.max(FRAME_MIN_SIZE, wanted)));
+      setFrameSize({ width, height: Math.round(width * aspect), available: Math.max(0, maxHeight) });
     };
     fit();
     window.addEventListener('resize', fit);
     return () => window.removeEventListener('resize', fit);
-  }, [aspect, consoleOpen, activeTab]);
+  }, [aspect, consoleOpen, consoleBodyHeight, activeTab, frameWidthShare]);
+
+  const dragStartWidth = useRef(0);
+  const onFrameSplitterDrag = (dx) => {
+    const width = Math.min(frameMaxWidth(), Math.max(FRAME_MIN_SIZE, dragStartWidth.current + dx));
+    setFrameWidthShare(width / window.innerWidth);
+  };
 
   const [animalMetadata, setAnimalMetadata] = useState({});
 
@@ -425,7 +455,7 @@ function App() {
     <div style={{
       minHeight: '100vh',
       // leave room for the console docked at the bottom
-      paddingBottom: consoleHeight(consoleOpen),
+      paddingBottom: consoleHeight(consoleOpen, consoleBodyHeight),
       boxSizing: 'border-box',
     }}>
       {/* ── App bar: title, experiment (shared across tabs), global toggles ── */}
@@ -490,7 +520,15 @@ function App() {
             />
           </div>
 
-          <div className="viewer-side" style={{ height: frameSize.height + 2 }}>
+          <Splitter
+            direction="vertical"
+            title="Drag to resize the frame · double click to fit the window"
+            onDragStart={() => { dragStartWidth.current = frameSize.width; }}
+            onDrag={onFrameSplitterDrag}
+            onReset={() => setFrameWidthShare(null)}
+          />
+
+          <div className="viewer-side" style={{ height: Math.max(frameSize.height + 2, frameSize.available) }}>
             <section className="card viewer-table">
               <div className="card-header">
                 Tracking

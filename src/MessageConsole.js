@@ -8,9 +8,11 @@
 
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import api from './api';
+import Splitter from './Splitter';
 
 const POLL_INTERVAL_MS = 500;
-const HEIGHT = 180;
+const DEFAULT_HEIGHT = 180;     // body height (px); the user can drag it
+const MIN_HEIGHT = 60;
 export const CONSOLE_HEADER_HEIGHT = 26;
 
 const LEVEL_COLORS = {
@@ -57,11 +59,19 @@ export function ConsoleProvider({ children }) {
   const [open, setOpen] = useState(() => {
     try { return localStorage.getItem('fh-console-open') !== 'false'; } catch { return true; }
   });
+  const [height, setHeight] = useState(() => {
+    try { return Number(localStorage.getItem('fh-console-height')) || DEFAULT_HEIGHT; }
+    catch { return DEFAULT_HEIGHT; }
+  });
   const nextId = useRef(1);
 
   useEffect(() => {
     try { localStorage.setItem('fh-console-open', String(open)); } catch { /* ignore */ }
   }, [open]);
+
+  useEffect(() => {
+    try { localStorage.setItem('fh-console-height', String(height)); } catch { /* ignore */ }
+  }, [height]);
 
   const append = useCallback((entry) => {
     const id = nextId.current++;
@@ -112,7 +122,10 @@ export function ConsoleProvider({ children }) {
   }, [append, log]);
 
   const api_ = useMemo(() => ({ log, trackJob }), [log, trackJob]);
-  const state = useMemo(() => ({ entries, setEntries, open, setOpen }), [entries, open]);
+  const state = useMemo(
+    () => ({ entries, setEntries, open, setOpen, height, setHeight }),
+    [entries, open, height],
+  );
 
   return (
     <ConsoleContext.Provider value={api_}>
@@ -150,6 +163,7 @@ function ProgressBar({ item, theme }) {
 export default function MessageConsole({ theme }) {
   const state = useConsoleState();
   const bodyRef = useRef(null);
+  const dragStartHeight = useRef(0);
 
   // Keep the newest message in view.
   useEffect(() => {
@@ -157,7 +171,8 @@ export default function MessageConsole({ theme }) {
   }, [state?.entries, state?.open]);
 
   if (!state) return null;
-  const { entries, open } = state;
+  const { entries, open, height, setHeight } = state;
+  const maxHeight = () => Math.max(MIN_HEIGHT, window.innerHeight * 0.8);
   const running = entries.filter((e) => e.job?.status === 'running').length;
 
   const headerButton = {
@@ -172,6 +187,18 @@ export default function MessageConsole({ theme }) {
       fontFamily: 'monospace', fontSize: 12,
       boxShadow: '0 -2px 6px rgba(0,0,0,0.15)',
     }}>
+      {open && (
+        <Splitter
+          direction="horizontal"
+          title="Drag to resize the console · double click to reset"
+          style={{ position: 'absolute', left: 0, right: 0, top: -3 }}
+          onDragStart={() => { dragStartHeight.current = height; }}
+          onDrag={(dx, dy) => setHeight(Math.round(
+            Math.min(maxHeight(), Math.max(MIN_HEIGHT, dragStartHeight.current - dy)),
+          ))}
+          onReset={() => setHeight(DEFAULT_HEIGHT)}
+        />
+      )}
       <div style={{
         height: CONSOLE_HEADER_HEIGHT, display: 'flex', alignItems: 'center', gap: 12,
         padding: '0 12px', borderBottom: open ? `1px solid ${theme.border}` : 'none',
@@ -195,7 +222,7 @@ export default function MessageConsole({ theme }) {
       </div>
 
       {open && (
-        <div ref={bodyRef} style={{ height: HEIGHT, overflowY: 'auto', padding: '4px 12px' }}>
+        <div ref={bodyRef} style={{ height, overflowY: 'auto', padding: '4px 12px' }}>
           {entries.length === 0 && <div style={{ color: theme.subtext }}>No messages.</div>}
           {entries.map((entry) => (
             <div key={entry.id} style={{ padding: '1px 0' }}>
@@ -223,4 +250,5 @@ export default function MessageConsole({ theme }) {
 }
 
 // Space the page must leave at the bottom so the console does not hide content.
-export const consoleHeight = (open) => CONSOLE_HEADER_HEIGHT + (open ? HEIGHT + 9 : 0);
+export const consoleHeight = (open, height = DEFAULT_HEIGHT) =>
+  CONSOLE_HEADER_HEIGHT + (open ? height + 9 : 0);

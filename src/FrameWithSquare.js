@@ -29,7 +29,8 @@ const SKELETON = [
 const INSET_NATIVE_SIZE = 200;
 const INSET_DISPLAY_SIZE = 250;
 const INSET_BORDER_COLOR = '#ffffff';
-const INSET_BORDER_WIDTH = 2;
+const INSET_BORDER_WIDTH = 4;
+const INSET_LABEL_SIZE = 16;
 
 function generateColorPalette(numColors) {
   const colors = [];
@@ -250,6 +251,8 @@ const FrameWithSquare = React.forwardRef(
         const native = { width: img.naturalWidth, height: img.naturalHeight };
         const sx = displayWidth / native.width;
         const sy = displayHeight / native.height;
+        const identityColor = (identity) =>
+          identity != null && identity !== 0 ? colorFor(colors, identity) : '#000000';
         if (native.width !== nativeSize?.width || native.height !== nativeSize?.height) {
           onNativeSize?.(native);
         }
@@ -265,11 +268,7 @@ const FrameWithSquare = React.forwardRef(
         // label switches to area or fragment.
         context.font = `${TEXT_SIZE}px ${TEXT_FAMILY}`;
         trackingData.forEach((animal) => {
-          const color =
-            animal.identity != null && animal.identity !== 0
-              ? colorFor(colors, animal.identity)
-              : '#000000';
-          context.fillStyle = color;
+          context.fillStyle = identityColor(animal.identity);
           const v = animal?.[labelField] ?? animal?.identity ?? '';
           context.fillText(formatLabel(v), animal.x * sx, animal.y * sy);
         });
@@ -354,11 +353,45 @@ const FrameWithSquare = React.forwardRef(
             context.globalAlpha = 1.0;
           }
 
-          // Border and crosshair
-          context.strokeStyle = INSET_BORDER_COLOR;
-          context.lineWidth = INSET_BORDER_WIDTH;
-          context.strokeRect(dstX, dstY, INSET_DISPLAY_SIZE, INSET_DISPLAY_SIZE);
+          // The fly closest to the cursor, among those inside the inset, names
+          // the inset: its identity colour on the border, its number in the corner.
+          let centerFly = null;
+          let bestDist = Infinity;
+          trackingData.forEach((animal) => {
+            if (animal.x < srcX || animal.x >= srcX + INSET_NATIVE_SIZE ||
+                animal.y < srcY || animal.y >= srcY + INSET_NATIVE_SIZE) return;
+            const d = (animal.x - nx) ** 2 + (animal.y - ny) ** 2;
+            if (d < bestDist) { bestDist = d; centerFly = animal; }
+          });
+          const borderColor = centerFly ? identityColor(centerFly.identity) : INSET_BORDER_COLOR;
 
+          // Border (inside the inset, so it is not clipped at the canvas edge)
+          context.strokeStyle = borderColor;
+          context.lineWidth = INSET_BORDER_WIDTH;
+          const b = INSET_BORDER_WIDTH / 2;
+          context.strokeRect(dstX + b, dstY + b, INSET_DISPLAY_SIZE - 2 * b, INSET_DISPLAY_SIZE - 2 * b);
+
+          if (centerFly) {
+            const text = formatLabel(centerFly.identity);
+            context.font = `bold ${INSET_LABEL_SIZE}px ${TEXT_FAMILY}`;
+            context.textBaseline = 'top';
+            const pad = 4;
+            const w = context.measureText(text).width + 2 * pad;
+            const h = INSET_LABEL_SIZE + 2 * pad;
+            context.fillStyle = borderColor;
+            context.fillRect(dstX, dstY, w, h);
+            // White with a dark outline: legible on every hue of the palette.
+            context.lineWidth = 3;
+            context.lineJoin = 'round';
+            context.strokeStyle = 'rgba(0, 0, 0, 0.8)';
+            context.strokeText(text, dstX + pad, dstY + pad + 1);
+            context.fillStyle = '#ffffff';
+            context.fillText(text, dstX + pad, dstY + pad + 1);
+            context.textBaseline = 'alphabetic';
+          }
+
+          // Crosshair
+          context.strokeStyle = INSET_BORDER_COLOR;
           context.lineWidth = 1;
           context.beginPath();
           context.moveTo(hoverPos.x - 6, hoverPos.y);

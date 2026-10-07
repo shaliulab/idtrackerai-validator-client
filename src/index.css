@@ -157,7 +157,6 @@ input[type="checkbox"] { accent-color: var(--accent); }
 /* ── Group viewer layout ── */
 .viewer {
   display: flex;
-  gap: 12px;
   align-items: stretch;
 }
 .viewer-frame { flex-shrink: 0; overflow: hidden; line-height: 0; }
@@ -170,6 +169,24 @@ input[type="checkbox"] { accent-color: var(--accent); }
 }
 .viewer-table { flex: 1; min-height: 120px; display: flex; flex-direction: column; }
 .viewer-table .scroll { flex: 1; overflow: auto; }
+
+/* ── Splitters (Splitter.js): drag to resize the neighbouring panels ── */
+.splitter { flex-shrink: 0; position: relative; touch-action: none; user-select: none; }
+.splitter-vertical { width: 12px; cursor: col-resize; }
+.splitter-horizontal { height: 6px; cursor: row-resize; }
+.splitter::after {
+  content: '';
+  position: absolute;
+  border-radius: 2px;
+  background: transparent;
+  transition: background 0.15s;
+}
+.splitter-vertical::after { top: 0; bottom: 0; left: 4px; width: 4px; }
+.splitter-horizontal::after { left: 0; right: 0; top: 1px; height: 4px; }
+.splitter:hover::after, .splitter:active::after { background: var(--accent); }
+/* Keep the resize cursor and stop text selection while dragging. */
+body.resizing-col, body.resizing-col * { cursor: col-resize !important; user-select: none !important; }
+body.resizing-row, body.resizing-row * { cursor: row-resize !important; user-select: none !important; }
 
 /* ── Small form pieces ── */
 .toolbar {
