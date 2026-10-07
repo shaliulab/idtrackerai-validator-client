@@ -14,6 +14,8 @@ import BurstVideo from './BurstVideo';
 import ConfidenceTrace from './ConfidenceTrace';
 import { recordBurst } from './recordBurst';
 import { FlyRow } from './blobs_table';
+import Splitter from './Splitter';
+import { useFillHeight, useElementSize, useStoredNumber } from './layout';
 
 // Relative: axios resolves it against the instance baseURL, media URLs go
 // through apiUrl() because element src attributes don't see that baseURL.
@@ -29,6 +31,22 @@ const formatZT = (zt) => {
   return `${pad(Math.floor(s / 3600))}:${pad(Math.floor((s % 3600) / 60))}:${pad(s % 60)}`;
 };
 
+
+// ── Layout ──
+// The tab fills the window down to the console: controls on top, then the
+// media row (video | pose | traces), then the bouts table; the "Current media"
+// panel sits on the right. Both splitters are draggable and remembered.
+const GAP = 12;
+const SPLITTER = 12;               // .splitter-vertical width / horizontal row
+const MEDIA_PAD = 8;               // media card padding
+const MEDIA_MIN = 200;             // media card height bounds (px)
+const MEDIA_MAX_SIDE = 560;        // video / pose panels never grow past this
+const TABLE_MIN = 150;             // keep the header + a few bouts visible
+const MEDIA_WIDTH_SHARE = 0.6;     // the two square panels use at most this share of the row
+const SIDE_DEFAULT = 300;
+const SIDE_MIN = 200;
+const SIDE_MAX = 640;
+const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 
 // API points needed
 // /pe/bouts            GET
@@ -645,6 +663,32 @@ const downloadBurstVideo = useCallback(async () => {
     [burstBouts, trace]
   );
 
+  // ── Layout sizes (hooks: before the early returns) ──
+  const [layoutEl, setLayoutEl] = useState(null);
+  const [mainEl, setMainEl] = useState(null);
+  const [controlsEl, setControlsEl] = useState(null);
+  const layoutH = useFillHeight(layoutEl, [active]);
+  const mainSize = useElementSize(mainEl);
+  const controlsSize = useElementSize(controlsEl);
+  const [mediaHStored, setMediaHStored] = useStoredNumber('fh-pe-media-height');
+  const [sideW, setSideW] = useStoredNumber('fh-pe-side-width', SIDE_DEFAULT);
+  const dragStart = useRef(0);
+
+  // Room left for media + table once the controls card is placed.
+  const controlsH = controlsSize.height ? controlsSize.height + 2 : 0;   // + border
+  const room = Math.max(0, mainSize.height - controlsH - GAP - SPLITTER);
+  const mediaMax = Math.max(MEDIA_MIN, room - TABLE_MIN);
+  // Auto: ~60% of the room, but never wider than the row allows for two squares.
+  const widthCap = (mainSize.width * MEDIA_WIDTH_SHARE - MEDIA_PAD) / 2 + 2 * MEDIA_PAD + 2;
+  const mediaAuto = Math.min(room * 0.6, widthCap, MEDIA_MAX_SIDE + 2 * MEDIA_PAD + 2);
+  const mediaH = Math.round(clamp(mediaHStored ?? mediaAuto, MEDIA_MIN, mediaMax));
+  // Square video / pose panels: as tall as the card, unless the row is too narrow.
+  const panelSide = Math.floor(Math.max(120, Math.min(
+    mediaH - 2 * MEDIA_PAD - 2,
+    (mainSize.width * MEDIA_WIDTH_SHARE - MEDIA_PAD) / 2,
+    MEDIA_MAX_SIDE,
+  )));
+
   // Early returns, in priority order. `error` only takes over the whole panel when
   // there's nothing to show; otherwise it renders as a dismissible banner below.
   if (!fly)    return <div style={{ padding: 12 }}>Select a fly…</div>;
@@ -670,330 +714,340 @@ const downloadBurstVideo = useCallback(async () => {
   // burst-level pose: one file per burst, aligned to the burst clip. Covers every bout.
   const burstPose  = traceStem && apiUrl(`${API}/media/videos/${traceStem}.pose.json`);
 
+  // A plain function, not a component: a component defined in render would
+  // remount on every render and drop the focus while typing.
+  const numberInput = ({ width, ...rest }) => (
+    <input type="number" style={{ width, padding: '2px 6px' }} {...rest} />
+  );
+
   return (
-    <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start', padding: '0 12px' }}>
-    <div style={{ flex: 1, minWidth: 0, maxWidth: 1200 }}>
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <button disabled={burstIdx === 0} onClick={() => setBurstIdx(i => i - 1)}>← prev</button>
-        <span style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-          burst {burstId} · score {burstScore[burstId]?.toFixed(2) ?? '—'} · best {burstBest[burstId]?.toFixed(2) ?? '—'} · {burstIdx + 1}/{burstIds.length} · reviewed bouts {nReviewed}/{bouts.length}
-          <input
-            type="number"
-            value={jumpBidValue}
-            onChange={e => setJumpBidValue(e.target.value)}
-            onKeyDown={e => {
-              if (e.key === 'Enter') {
-                const bid = parseInt(jumpBidValue, 10);
-                if (Number.isInteger(bid)) jumpToBurstId(bid);
-              }
-              e.stopPropagation();          // keep digits out of the global 1-7 / arrow handler
-            }}
-            placeholder="burst_id"
-            style={{ width: 90, padding: '2px 6px' }}
-          />
+    <div className="pe-layout" ref={setLayoutEl} style={{ height: layoutH ?? undefined }}>
+      <div className="pe-main" ref={setMainEl}>
 
-          <input
-            type="number"
-            min={1}
-            max={burstIds.length}
-            value={jumpValue}
-            onChange={e => setJumpValue(e.target.value)}
-            onKeyDown={e => {
-              if (e.key === 'Enter') {
-                const n = parseInt(jumpValue, 10);
-                if (Number.isInteger(n)) jumpToBurst(n);
-              }
-              e.stopPropagation();          // keep typing out of the global 1-5 / arrow handler
-            }}
-            placeholder="go to #"
-            style={{ width: 70, padding: '2px 6px' }}
-          />
-        </span>
-        <span style={{ display: 'flex', gap: 6 }}>
-          <button disabled={burstIdx >= burstIds.length - 1} onClick={() => setBurstIdx(i => i + 1)}>next →</button>
-          <button onClick={gotoNextUnlabeled}
-                  title="jump to the next burst that still has an unlabeled bout (n)">
-            next unlabeled ⏭
-          </button>
-          <button onClick={gotoNextUnlabeledPE}
-                  title="jump to the next burst that still has an unlabeled PE bout">
-            next unlabeled PE ⏭
-          </button>
-          <button onClick={downloadBurstVideo} disabled={recording}
-                    title="record this burst's visualization to a .webm">
-              {recording ? 'recording…' : '⤓ video'}
-            </button>
-        </span>
-      </div>
-
-      {/* the inspected fly's row of the viewer's table, at the selected bout's start */}
-      <FlyRow fly={fly} frameNumber={selectedBout?.start_fn} animalMetadata={animalMetadata} theme={theme} />
-
-      <div style={{ display: 'flex', gap: 6, alignItems: 'center', padding: '6px 0' }}>
-        <span>Find PE near</span>
-        <select value={findMode} onChange={e => setFindMode(e.target.value)}>
-          <option value="zt">ZT (s since ZT0 of day 1)</option>
-          <option value="frame_number">frame number (since chunk 0)</option>
-        </select>
-        <input
-          type="number"
-          value={findValue}
-          onChange={e => setFindValue(e.target.value)}
-          onKeyDown={e => {
-            if (e.key === 'Enter') findNearestPE();
-            e.stopPropagation();          // keep digits out of the global shortcuts
-          }}
-          placeholder={findMode === 'zt' ? 'e.g. 72000' : 'e.g. 3300000'}
-          style={{ width: 110, padding: '2px 6px' }}
-        />
-        <button onClick={findNearestPE} disabled={!bouts.length}>find</button>
-        <label style={{ marginLeft: 12 }} title="Order bursts by time instead of by score (not in audit mode)">
-          <input type="checkbox" checked={chronological} disabled={auditMode}
-                 onChange={e => toggleChronological(e.target.checked)} />
-          {' '}sort chronologically
-        </label>
-      </div>
-
-      <label style={{ marginLeft: 12 }}>
-        <input type="checkbox" checked={auditMode}
-               onChange={e => { setAuditMode(e.target.checked); setBurstIdx(0);
-                               pendingAuditTarget.current = null; }} /> 
-        {' '}audit mode
-      </label>
-      {auditMode && (
-        <>
-          <span style={{ marginLeft: 8, fontSize: '0.85em', color: '#777' }}>
-            {burstIds.filter(burstDone).length}/{burstIds.length} done
-          </span>
-          <button onClick={() => gotoNextIncomplete(-1)} style={{ marginLeft: 8 }}>◀ prev</button>
-          <button onClick={() => gotoNextIncomplete(1)}>next unreviewed ▸</button>
-        </>
-      )}
-
-      <select value={segMethod} onChange={e => setSegMethod(e.target.value)}
-              style={{ marginLeft: 12 }}>
-        <option value="none">seg: hidden (annotate blind)</option>
-        <option value="visible">seg: visible</option>
-      </select>
-      <label style={{ marginLeft: 8 }}>
-        <input type="checkbox" checked={!!segs?.done}
-               onChange={e => setWindowDone(e.target.checked)} />
-        {' '}segmentation done ({segs?.gt?.length ?? 0} GT events)
-      </label>
-
-
-      {notice && (
-        <div style={{ marginTop: 6, padding: '4px 8px', background: '#fff3cd',
-                      border: '1px solid #ffe08a', borderRadius: 4, fontSize: '0.85em',
-                      display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span>{notice}</span>
-          <button onClick={() => setNotice(null)} style={{ marginLeft: 8 }}>dismiss</button>
-        </div>
-      )}
-
-
-      {(() => {
-        const PANEL_H = 280;
-        const PANEL_W = 280;
-        return (
-          <div style={{ display: 'flex', gap: 12, marginTop: 8, alignItems: 'stretch',
-                        height: PANEL_H }}>
-            <BurstVideo
-              src={burstClip}
-              poseUrl={burstPose}
-              videoRef={videoRef}
-              width={PANEL_W}
-              height={PANEL_H}
-              clipStart={clipStart}
-              traceFps={trace?.fps}
-              overlayExportRef={overlayCanvasRef}
-              plainExportRef={plainCanvasRef}
-              onError={e => { e.target.style.display = 'none'; }}
-            />
-            <div style={{ flex: 1, minWidth: 0, height: '100%',
-                          display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <div style={{ flex: 1, minHeight: 0 }}>
-                {trace && <BurstTrace trace={trace} playT={playT}
-                                      onScrub={seekToTraceTime} scrubbingRef={scrubbingRef}
-                                      svgExportRef={distSvgRef}
-                                      segments={segs} onAddGt={addGt} onDeleteGt={deleteGt}
-                                      />}
-              </div>
-              <div style={{ flex: 1, minHeight: 0 }}>
-                {trace && <ConfidenceTrace trace={trace} playT={playT}
-                                          onScrub={seekToTraceTime} scrubbingRef={scrubbingRef}
-                                          svgExportRef={confSvgRef} />}
-              </div>
+        {/* ── Burst controls ── */}
+        <section className="card" ref={setControlsEl}>
+          <div className="card-header">
+            Burst {burstId}
+            <span className="spacer" />
+            <div className="readout" style={{ textTransform: 'none', letterSpacing: 0, fontWeight: 400 }}>
+              <span>score <b>{burstScore[burstId]?.toFixed(2) ?? '—'}</b></span>
+              <span>best <b>{burstBest[burstId]?.toFixed(2) ?? '—'}</b></span>
+              <span><b>{burstIdx + 1}</b> / {burstIds.length}</span>
+              <span>reviewed bouts <b>{nReviewed}</b> / {bouts.length}</span>
             </div>
           </div>
-        );
-      })()}
 
-
-      <div
-        style={{
-          marginTop: 12,
-          maxHeight: 350,      // choose whatever fits your layout
-          overflowY: 'auto',
-          border: '1px solid #ddd',
-        }}
-      >
-        <table
-          style={{
-            width: '100%',
-            borderCollapse: 'collapse',
-          }}
-        >
-      <caption style={{ captionSide: 'top', textAlign: 'left', padding: '4px 6px',
-                        fontSize: '0.85em', color: '#555' }}>
-        fly: <b>{fly}</b>
-      </caption>
-      <thead>
-      <tr style={{ textAlign: 'left', borderBottom: '1px solid #ccc' }}>
-        <th style={{ position: 'sticky', top: 0, background: 'white' }}>bout</th>
-        <th style={{ position: 'sticky', top: 0, background: 'white' }}>frames</th>
-        <th style={{ position: 'sticky', top: 0, background: 'white' }}>frame_idx</th>
-        <th style={{ position: 'sticky', top: 0, background: 'white' }}>dur</th>
-        <th style={{ position: 'sticky', top: 0, background: 'white' }}>score</th>
-        <th style={{ position: 'sticky', top: 0, background: 'white' }}>verdict</th>
-      </tr>
-      </thead>
-
-        <tbody>
-                  <tr style={{ borderBottom: '2px solid #ccc', background: '#fafafa' }}>
-            <td colSpan={5} style={{ textAlign: 'right', paddingRight: 8,
-                                     fontSize: '0.85em', color: '#555' }}>
-              mark all {burstBouts.length} bouts →
-            </td>
-            <td>
-              {OPTIONS.map(opt => (
-                <button key={opt}
-                  onClick={() => {
-                    if (burstBouts.length > 5 &&
-                        !window.confirm(`Mark all ${burstBouts.length} bouts as "${opt}"?`)) return;
-                    setAllInBurst(opt);
-                  }}
-                  style={{
-                    marginRight: 4, padding: '2px 6px', cursor: 'pointer',
-                    border: '1px dashed #888', borderRadius: 4,   // dashed = bulk, distinct from per-bout
-                    background: VERDICT_STYLE[opt].on, color: 'white',
-                    fontWeight: 'bold', opacity: 0.85,
-                  }}>
-                  {opt}
+          <div className="card-body pe-controls">
+            <div className="toolbar">
+              <span className="pe-group">
+                <button disabled={burstIdx === 0} onClick={() => setBurstIdx(i => i - 1)}>← prev</button>
+                <button disabled={burstIdx >= burstIds.length - 1} onClick={() => setBurstIdx(i => i + 1)}>next →</button>
+                <button onClick={gotoNextUnlabeled}
+                        title="jump to the next burst that still has an unlabeled bout (n)">
+                  next unlabeled ⏭
                 </button>
-              ))}
-            </td>
-          </tr>
+                <button onClick={gotoNextUnlabeledPE}
+                        title="jump to the next burst that still has an unlabeled PE bout">
+                  next unlabeled PE ⏭
+                </button>
+              </span>
 
-        {burstBouts.map((b, idx) => {
-                    const isSel = idx === selectedBoutIdx;
-                    return (
-                      <tr key={keyOf(b)}
-                          onClick={() => setSelectedBoutIdx(idx)}
-                          style={{
-                            borderBottom: '1px solid #eee',
-                            background: isSel ? '#eef4ff' : 'transparent',
-                            outline: isSel ? '2px solid #1f77b4' : 'none',
-                            cursor: 'pointer',
-                          }}>
-                <td>{b.bout_uid}{b.is_solitary ? ' (solo)' : ''}</td>
-                <td>{b.start_fn}–{b.end_fn}</td>
-                <td>{b.start_fidx}–{b.end_fidx}</td>
-                <td>{b.dur_s?.toFixed(2)}s</td>
-                <td>{b.pe_score?.toFixed(2)}</td>
-                <td>
-                  {(() => {
-                    const userAnnotated = verdicts[keyOf(b)] != null;
-                    const pipelineVerdict = labelToVerdict(b.label);   // pipeline's mapped verdict
-                    return (
-                      <>
-                        {OPTIONS.map(opt => {
-                          const chosen = effectiveVerdict(b) === opt;         // currently active
-                          const isPipeline = opt === pipelineVerdict;          // pipeline's prediction (always marked)
-                          const isUnconfirmedDefault = !userAnnotated && isPipeline;
+              <span className="pe-group">
+                Go to
+                {numberInput({
+                  width: 90,
+                  value: jumpBidValue,
+                  onChange: e => setJumpBidValue(e.target.value),
+                  onKeyDown: e => {
+                    if (e.key === 'Enter') {
+                      const bid = parseInt(jumpBidValue, 10);
+                      if (Number.isInteger(bid)) jumpToBurstId(bid);
+                    }
+                    e.stopPropagation();          // keep digits out of the global 1-7 / arrow handler
+                  },
+                  placeholder: 'burst_id',
+                  title: 'burst id (Enter)',
+                })}
+                {numberInput({
+                  width: 70,
+                  min: 1,
+                  max: burstIds.length,
+                  value: jumpValue,
+                  onChange: e => setJumpValue(e.target.value),
+                  onKeyDown: e => {
+                    if (e.key === 'Enter') {
+                      const n = parseInt(jumpValue, 10);
+                      if (Number.isInteger(n)) jumpToBurst(n);
+                    }
+                    e.stopPropagation();          // keep typing out of the global 1-5 / arrow handler
+                  },
+                  placeholder: '#',
+                  title: 'position in the burst list (Enter)',
+                })}
+              </span>
+
+              <span className="spacer" />
+              <button onClick={downloadBurstVideo} disabled={recording}
+                      title="record this burst's visualization to a .webm">
+                {recording ? 'recording…' : '⤓ video'}
+              </button>
+            </div>
+
+            <div className="toolbar">
+              <span className="pe-group">
+                Find PE near
+                <select value={findMode} onChange={e => setFindMode(e.target.value)}>
+                  <option value="zt">ZT (s since ZT0 of day 1)</option>
+                  <option value="frame_number">frame number (since chunk 0)</option>
+                </select>
+                {numberInput({
+                  width: 110,
+                  value: findValue,
+                  onChange: e => setFindValue(e.target.value),
+                  onKeyDown: e => {
+                    if (e.key === 'Enter') findNearestPE();
+                    e.stopPropagation();          // keep digits out of the global shortcuts
+                  },
+                  placeholder: findMode === 'zt' ? 'e.g. 72000' : 'e.g. 3300000',
+                })}
+                <button onClick={findNearestPE} disabled={!bouts.length}>find</button>
+              </span>
+
+              <label className="field check" title="Order bursts by time instead of by score (not in audit mode)">
+                <input type="checkbox" checked={chronological} disabled={auditMode}
+                       onChange={e => toggleChronological(e.target.checked)} />
+                sort chronologically
+              </label>
+
+              <span className="pe-group">
+                <label className="field check">
+                  <input type="checkbox" checked={auditMode}
+                         onChange={e => { setAuditMode(e.target.checked); setBurstIdx(0);
+                                         pendingAuditTarget.current = null; }} />
+                  audit mode
+                </label>
+                {auditMode && (
+                  <>
+                    <span style={{ fontSize: '0.85em', color: 'var(--subtext)' }}>
+                      {burstIds.filter(burstDone).length}/{burstIds.length} done
+                    </span>
+                    <button onClick={() => gotoNextIncomplete(-1)}>◀ prev</button>
+                    <button onClick={() => gotoNextIncomplete(1)}>next unreviewed ▸</button>
+                  </>
+                )}
+              </span>
+
+              <span className="pe-group">
+                <select value={segMethod} onChange={e => setSegMethod(e.target.value)}>
+                  <option value="none">seg: hidden (annotate blind)</option>
+                  <option value="visible">seg: visible</option>
+                </select>
+                <label className="field check">
+                  <input type="checkbox" checked={!!segs?.done}
+                         onChange={e => setWindowDone(e.target.checked)} />
+                  segmentation done ({segs?.gt?.length ?? 0} GT events)
+                </label>
+              </span>
+            </div>
+
+            {/* the inspected fly's row of the viewer's table, at the selected bout's start */}
+            <FlyRow fly={fly} frameNumber={selectedBout?.start_fn} animalMetadata={animalMetadata} theme={theme} />
+
+            {notice && (
+              <div className="pe-notice">
+                <span>{notice}</span>
+                <button onClick={() => setNotice(null)}>dismiss</button>
+              </div>
+            )}
+          </div>
+        </section>
+
+        {/* ── Media: video | pose | distance + confidence traces ── */}
+        <section className="card pe-media" style={{ height: mediaH, marginTop: GAP }}>
+          <BurstVideo
+            src={burstClip}
+            poseUrl={burstPose}
+            videoRef={videoRef}
+            width={panelSide}
+            height={panelSide}
+            clipStart={clipStart}
+            traceFps={trace?.fps}
+            overlayExportRef={overlayCanvasRef}
+            plainExportRef={plainCanvasRef}
+            onError={e => { e.target.style.display = 'none'; }}
+          />
+          <div className="pe-traces">
+            <div>
+              {trace && <BurstTrace trace={trace} playT={playT}
+                                    onScrub={seekToTraceTime} scrubbingRef={scrubbingRef}
+                                    svgExportRef={distSvgRef}
+                                    segments={segs} onAddGt={addGt} onDeleteGt={deleteGt}
+                                    />}
+            </div>
+            <div>
+              {trace && <ConfidenceTrace trace={trace} playT={playT}
+                                        onScrub={seekToTraceTime} scrubbingRef={scrubbingRef}
+                                        svgExportRef={confSvgRef} />}
+            </div>
+          </div>
+        </section>
+
+        <Splitter
+          direction="horizontal"
+          className="pe-row-splitter"
+          title="Drag to resize the media · double click to fit"
+          onDragStart={() => { dragStart.current = mediaH; }}
+          onDrag={(dx, dy) => setMediaHStored(Math.round(clamp(dragStart.current + dy, MEDIA_MIN, mediaMax)))}
+          onReset={() => setMediaHStored(null)}
+        />
+
+        {/* ── Bouts of this burst ── */}
+        <section className="card pe-bouts">
+          <div className="card-header">
+            Bouts
+            <span className="spacer" />
+            <span style={{ textTransform: 'none', letterSpacing: 0, fontWeight: 400 }}>
+              fly <b>{fly}</b> · {burstBouts.length} bout{burstBouts.length === 1 ? '' : 's'}
+            </span>
+          </div>
+          <div className="scroll">
+            <table className="pe-table">
+              <thead>
+                <tr>
+                  <th>bout</th>
+                  <th>frames</th>
+                  <th>frame_idx</th>
+                  <th>dur</th>
+                  <th>score</th>
+                  <th>verdict</th>
+                </tr>
+              </thead>
+
+              <tbody>
+                <tr className="pe-bulk">
+                  <td colSpan={5} style={{ textAlign: 'right', color: 'var(--subtext)' }}>
+                    mark all {burstBouts.length} bouts →
+                  </td>
+                  <td>
+                    {OPTIONS.map(opt => (
+                      <button key={opt}
+                        onClick={() => {
+                          if (burstBouts.length > 5 &&
+                              !window.confirm(`Mark all ${burstBouts.length} bouts as "${opt}"?`)) return;
+                          setAllInBurst(opt);
+                        }}
+                        style={{
+                          marginRight: 4, padding: '2px 6px', cursor: 'pointer',
+                          border: '1px dashed #888', borderRadius: 4,   // dashed = bulk, distinct from per-bout
+                          background: VERDICT_STYLE[opt].on, color: 'white',
+                          fontWeight: 'bold', opacity: 0.85,
+                        }}>
+                        {opt}
+                      </button>
+                    ))}
+                  </td>
+                </tr>
+
+                {burstBouts.map((b, idx) => {
+                  const isSel = idx === selectedBoutIdx;
+                  return (
+                    <tr key={keyOf(b)}
+                        className={isSel ? 'selected' : undefined}
+                        onClick={() => setSelectedBoutIdx(idx)}>
+                      <td>{b.bout_uid}{b.is_solitary ? ' (solo)' : ''}</td>
+                      <td>{b.start_fn}–{b.end_fn}</td>
+                      <td>{b.start_fidx}–{b.end_fidx}</td>
+                      <td>{b.dur_s?.toFixed(2)}s</td>
+                      <td>{b.pe_score?.toFixed(2)}</td>
+                      <td>
+                        {(() => {
+                          const userAnnotated = verdicts[keyOf(b)] != null;
+                          const pipelineVerdict = labelToVerdict(b.label);   // pipeline's mapped verdict
                           return (
-                            <button key={opt} onClick={
-                              () => {
-                                const saved = verdicts[keyOf(b)];
-                                if (saved === opt) clearVerdict(b);   // click the pressed one -> unpress
-                                else setVerdict(b, opt);
-                            }} title={isPipeline
-                                ? `pipeline predicted: ${b.label}${b.label_reason ? ` (${b.label_reason})` : ''}`
-                                : undefined}
-                              style={{
-                                position: 'relative',
-                                marginRight: 4, padding: '2px 6px', cursor: 'pointer',
-                                border: chosen ? '2px solid #333' : '1px solid #bbb',
-                                borderRadius: 4,
-                                background: chosen
-                                  ? (isUnconfirmedDefault ? '#ffd54f' : VERDICT_STYLE[opt].on)
-                                  : '#f4f4f4',
-                                color: chosen && !isUnconfirmedDefault ? 'white' : '#333',
-                                fontWeight: chosen ? 'bold' : 'normal',
-                                fontStyle: isUnconfirmedDefault ? 'italic' : 'normal',
-                                // pipeline-predicted button gets a persistent accent underline
-                                boxShadow: isPipeline ? 'inset 0 -3px 0 0 #111' : 'none',
-                              }}>
-                              {isPipeline ? '★ ' : ''}{opt}
-                            </button>
+                            <>
+                              {OPTIONS.map(opt => {
+                                const chosen = effectiveVerdict(b) === opt;         // currently active
+                                const isPipeline = opt === pipelineVerdict;          // pipeline's prediction (always marked)
+                                const isUnconfirmedDefault = !userAnnotated && isPipeline;
+                                return (
+                                  <button key={opt} onClick={
+                                    () => {
+                                      const saved = verdicts[keyOf(b)];
+                                      if (saved === opt) clearVerdict(b);   // click the pressed one -> unpress
+                                      else setVerdict(b, opt);
+                                  }} title={isPipeline
+                                      ? `pipeline predicted: ${b.label}${b.label_reason ? ` (${b.label_reason})` : ''}`
+                                      : undefined}
+                                    style={{
+                                      position: 'relative',
+                                      marginRight: 4, padding: '2px 6px', cursor: 'pointer',
+                                      border: chosen ? '2px solid #333' : '1px solid var(--border-strong)',
+                                      borderRadius: 4,
+                                      background: chosen
+                                        ? (isUnconfirmedDefault ? '#ffd54f' : VERDICT_STYLE[opt].on)
+                                        : 'var(--btn-bg)',
+                                      color: chosen ? (isUnconfirmedDefault ? '#333' : 'white') : 'var(--text)',
+                                      fontWeight: chosen ? 'bold' : 'normal',
+                                      fontStyle: isUnconfirmedDefault ? 'italic' : 'normal',
+                                      // pipeline-predicted button gets a persistent accent underline
+                                      boxShadow: isPipeline ? 'inset 0 -3px 0 0 var(--text)' : 'none',
+                                    }}>
+                                    {isPipeline ? '★ ' : ''}{opt}
+                                  </button>
+                                );
+                              })}
+                              {/* the raw pipeline label, always visible even after annotation */}
+                              <span style={{ marginLeft: 6, fontSize: '0.85em', color: 'var(--subtext)',
+                                             whiteSpace: 'nowrap' }}>
+                                pred: <b>{b.label}</b>
+                                {b.label_source === 'override' &&
+                                  <span title={`pipeline said ${b.label_pipeline}`}> (rescued)</span>}
+                              </span>
+                            </>
                           );
-                        })}
-                        {/* the raw pipeline label, always visible even after annotation */}
-                        <span style={{ marginLeft: 6, fontSize: '0.78em', color: '#888',
-                                       whiteSpace: 'nowrap' }}>
-                          pred: <b>{b.label}</b>
-                          {b.label_source === 'override' &&
-                            <span title={`pipeline said ${b.label_pipeline}`}> (rescued)</span>}
-                        </span>
-                      </>
-                    );
-                  })()}
-                </td>
-
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+                        })()}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          <div className="pe-keys">
+            keys: <b>1–7</b> verdict for the selected bout (same key again unpresses) ·{' '}
+            <b>Shift+1–7</b> same verdict for ALL bouts in the burst ·{' '}
+            <b>0</b>/<b>Backspace</b> clear ·{' '}
+            <b>←/→</b> bursts · <b>↑/↓</b> bouts · <b>n</b> next unlabeled ·{' '}
+            <b>k/j</b> next/prev unreviewed · <b>★</b> = pipeline's prediction
+          </div>
+        </section>
       </div>
-      <div style={{ marginTop: 8, fontSize: '0.8em', color: '#777' }}>
-        keys: <b>1–7</b> verdict for the selected bout (same key again unpresses) ·{' '}
-        <b>Shift+1–7</b> same verdict for ALL bouts in the burst ·{' '}
-        <b>0</b>/<b>Backspace</b> clear ·{' '}
-        <b>←/→</b> bursts · <b>↑/↓</b> bouts · <b>n</b> next unlabeled ·{' '}
-        <b>k/j</b> next/prev unreviewed · <b>★</b> = pipeline's prediction
-      </div>
-    </div>
 
-      {/* RIGHT: debug console, alongside all the info */}
-      <div
-        style={{
-          width: 320,
-          flexShrink: 0,
-          marginTop: 8,
-          background: '#111',
-          color: '#0f0',
-          fontFamily: 'monospace',
-          fontSize: 12,
-          padding: 8,
-          border: '1px solid #555',
-          whiteSpace: 'pre-wrap',
-          wordBreak: 'break-all',
-        }}
-      >
-        <div><b>Current media</b></div>
+      <Splitter
+        direction="vertical"
+        title="Drag to resize the panel · double click to reset"
+        onDragStart={() => { dragStart.current = sideW; }}
+        onDrag={(dx) => setSideW(Math.round(clamp(dragStart.current - dx, SIDE_MIN, SIDE_MAX)))}
+        onReset={() => setSideW(SIDE_DEFAULT)}
+      />
 
-        <div>Video: {burstClip || "(none)"}</div>
-        <div>Pose: {burstPose || "(none)"}</div>
-        <div>Trace PNG: {tracePng || "(none)"}</div>
-
-        <br />
-
-        <div>burst_id: {burstId}</div>
-        <div>bout_uid: {selectedBout?.bout_uid}</div>
-        <div>media_stem: {selectedBout?.media_stem}</div>
-        <div>trace_stem: {traceStem}</div>
-      </div>
+      {/* ── Current media: what this burst loads, for debugging ── */}
+      <aside className="card pe-side" style={{ width: sideW }}>
+        <div className="card-header">Current media</div>
+        <div className="card-body pe-media-info">
+          <dl>
+            <dt>Video</dt><dd>{burstClip || '(none)'}</dd>
+            <dt>Pose</dt><dd>{burstPose || '(none)'}</dd>
+            <dt>Trace PNG</dt><dd>{tracePng || '(none)'}</dd>
+          </dl>
+          <dl>
+            <dt>burst_id</dt><dd>{burstId}</dd>
+            <dt>bout_uid</dt><dd>{selectedBout?.bout_uid ?? '—'}</dd>
+            <dt>media_stem</dt><dd>{selectedBout?.media_stem ?? '—'}</dd>
+            <dt>trace_stem</dt><dd>{traceStem ?? '—'}</dd>
+          </dl>
+        </div>
+      </aside>
     </div>
   );
 }

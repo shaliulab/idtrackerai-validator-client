@@ -641,8 +641,8 @@ function App() {
         </div>
       </div>
 
-      <div style={{ display: activeTab === 'proboscis_extension' ? 'block' : 'none' }}>
-      <div className="toolbar" style={{ padding: '12px 12px 0' }}>
+      <div className="tab-panel" style={{ display: activeTab === 'proboscis_extension' ? 'block' : 'none' }}>
+      <div className="toolbar" style={{ marginBottom: 12 }}>
         <label className="field">
           Fly
           <select

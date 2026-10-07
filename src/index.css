@@ -185,6 +185,41 @@ input[type="checkbox"] { accent-color: var(--accent); }
 .viewer-table { flex: 1; min-height: 120px; display: flex; flex-direction: column; }
 .viewer-table .scroll { flex: 1; overflow: auto; }
 
+/* ── PE tab (PEValidator.js) ── */
+.pe-layout { display: flex; align-items: stretch; min-height: 360px; }
+.pe-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.pe-controls { display: flex; flex-direction: column; gap: 8px; padding: 8px 12px; }
+.pe-controls .toolbar { gap: 8px 18px; }
+.pe-group { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--subtext); }
+.pe-notice {
+  display: flex; justify-content: space-between; align-items: center; gap: 8px;
+  padding: 4px 8px; border-radius: 4px; font-size: 0.85em;
+  background: #fff3cd; border: 1px solid #ffe08a; color: #5c4400;
+}
+.pe-media { flex-shrink: 0; display: flex; gap: 8px; padding: 8px; box-sizing: border-box; align-items: center; overflow: hidden; }
+.pe-traces { flex: 1; min-width: 0; height: 100%; display: flex; flex-direction: column; gap: 8px; }
+.pe-traces > div { flex: 1; min-height: 0; }
+.pe-row-splitter { margin: 3px 0; }
+.pe-bouts { flex: 1; min-height: 120px; display: flex; flex-direction: column; }
+.pe-bouts .scroll { flex: 1; min-height: 0; overflow: auto; }
+.pe-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.pe-table th {
+  position: sticky; top: 0; z-index: 1;
+  text-align: left; font-weight: 600; color: var(--subtext);
+  background: var(--surface); border-bottom: 1px solid var(--border-strong);
+}
+.pe-table th, .pe-table td { padding: 5px 8px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.pe-table tbody tr { border-bottom: 1px solid var(--border); cursor: pointer; }
+.pe-table tbody tr.pe-bulk { background: var(--surface-2); cursor: default; border-bottom: 2px solid var(--border-strong); }
+.pe-table tbody tr:hover:not(.pe-bulk) { background: var(--surface-2); }
+.pe-table tbody tr.selected { background: var(--accent-soft); box-shadow: inset 3px 0 0 var(--accent); }
+.pe-keys { padding: 6px 12px; border-top: 1px solid var(--border); font-size: 11px; color: var(--subtext); }
+.pe-side { flex-shrink: 0; display: flex; flex-direction: column; overflow: hidden; }
+.pe-media-info { flex: 1; overflow: auto; font-family: monospace; font-size: 12px; }
+.pe-media-info dl { margin: 0 0 14px; }
+.pe-media-info dt { color: var(--subtext); font-size: 11px; margin-top: 6px; }
+.pe-media-info dd { margin: 1px 0 0; word-break: break-all; }
+
 /* ── Splitters (Splitter.js): drag to resize the neighbouring panels ── */
 .splitter { flex-shrink: 0; position: relative; touch-action: none; user-select: none; }
 .splitter-vertical { width: 12px; cursor: col-resize; }
