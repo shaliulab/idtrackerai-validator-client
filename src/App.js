@@ -15,6 +15,7 @@ import { FIRST_FRAME, PLACEHOLDER_IMAGE, LABEL_FIELD, PRINT_CONTOUR } from './co
 import PEValidator from './PEValidator';
 import DeletePEAnnotations from './DeletePEAnnotations';
 import HelpTab from './HelpTab';
+import OverviewTab from './OverviewTab';
 import api from './api';
 import MessageConsole, { useConsole, useConsoleState, consoleHeight } from './MessageConsole';
 
@@ -150,6 +151,10 @@ function App() {
   const FrameWithSquareRef = useRef(null);
   const [number_of_animals, setNumberOfAnimals] = useState(6);
   const [activeTab, setActiveTab] = useState('group_viewer');
+  // Loaded experiment (slash form), shown in the Overview table; bumped key remounts
+  // the experiment picker after a load from elsewhere so it shows the new one.
+  const [currentExperiment, setCurrentExperiment] = useState(null);
+  const [pickerKey, setPickerKey] = useState(0);
   // Bumped after the PE annotations are wiped: remounts PEValidator so it reloads.
   const [peReloadKey, setPeReloadKey] = useState(0);
   const consoleState = useConsoleState();
@@ -249,6 +254,17 @@ function App() {
 
   useEffect(() => { fetchEthogramFlies(); }, [fetchEthogramFlies]);
 
+  const fetchCurrentExperiment = useCallback(async () => {
+    try {
+      const { data } = await api.get('/api/current_experiment');
+      setCurrentExperiment((typeof data === 'string' ? JSON.parse(data) : data)?.experiment ?? null);
+    } catch {
+      setCurrentExperiment(null);
+    }
+  }, []);
+
+  useEffect(() => { fetchCurrentExperiment(); }, [fetchCurrentExperiment]);
+
   // Blobs table "etho" button: show that fly's ethogram at the displayed frame.
   const [ethogramRequest, setEthogramRequest] = useState(null);   // { fly, frameNumber, nonce }
   const ethogramIdentities = useMemo(
@@ -292,14 +308,15 @@ function App() {
 
   useEffect(() => { fetchFlies(); }, [fetchFlies]);
 
-  // Ctrl+1 … Ctrl+4 switch tabs
+  // Ctrl+1 … Ctrl+5 switch tabs
   useEffect(() => {
     const onKey = (e) => {
       if (!e.ctrlKey || e.metaKey || e.altKey) return;   // Ctrl only, not Cmd/Alt combos
       if (e.key === '1') { e.preventDefault(); setActiveTab('group_viewer'); }
       else if (e.key === '2') { e.preventDefault(); setActiveTab('proboscis_extension'); }
       else if (e.key === '3') { e.preventDefault(); setActiveTab('ethogram'); }
-      else if (e.key === '4') { e.preventDefault(); setActiveTab('help'); }
+      else if (e.key === '4') { e.preventDefault(); setActiveTab('overview'); }
+      else if (e.key === '5') { e.preventDefault(); setActiveTab('help'); }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -481,8 +498,22 @@ function App() {
     fetchUseVal();
     fetchAnimalMetadata();
     fetchEthogramFlies();
+    fetchCurrentExperiment();
     await fetchFlies();
-  }, [player, fetchFramerate, fetchFrameRange, fetchUseVal, fetchAnimalMetadata, fetchEthogramFlies, fetchFlies]);
+  }, [player, fetchCurrentExperiment, fetchFramerate, fetchFrameRange, fetchUseVal, fetchAnimalMetadata, fetchEthogramFlies, fetchFlies]);
+
+  // Overview table "Open": load that experiment and show it in the Group viewer.
+  const openExperiment = useCallback(async (experiment) => {
+    try {
+      const data = await postLoad(experiment);
+      log('info', `Loaded ${experiment}`);
+      setPickerKey((k) => k + 1);
+      await onExperimentLoaded(data.first_frame ?? FIRST_FRAME);
+      setActiveTab('group_viewer');
+    } catch (err) {
+      log('error', `Failed to load ${experiment}: ${err.response?.data?.error ?? err.message}`);
+    }
+  }, [log, onExperimentLoaded]);
 
   const switchToFly = useCallback(async (flyId) => {
     const experiment = flyId.split('__')[0];
@@ -515,7 +546,7 @@ function App() {
         <Logos />
 
         <SelectComponent
-          key={selectedFly?.split('__')[0]}
+          key={`${selectedFly?.split('__')[0]}-${pickerKey}`}
           onExperimentChange={onExperimentLoaded}
         />
 
@@ -542,7 +573,8 @@ function App() {
         <Tab id="group_viewer" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+1">Group viewer</Tab>
         <Tab id="proboscis_extension" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+2">Proboscis extension (PE)</Tab>
         <Tab id="ethogram" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+3">Ethograms</Tab>
-        <Tab id="help" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+4">
+        <Tab id="overview" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+4">Overview</Tab>
+        <Tab id="help" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+5">
           <i className="fa fa-question-circle-o" style={{ marginRight: 6 }} />How to use
         </Tab>
       </nav>
@@ -690,6 +722,14 @@ function App() {
             }}
           />
         </Suspense>
+      </div>
+
+      <div className="tab-panel" style={{ display: activeTab === 'overview' ? 'block' : 'none' }}>
+        <OverviewTab
+          active={activeTab === 'overview'}
+          currentExperiment={currentExperiment}
+          onOpenExperiment={openExperiment}
+        />
       </div>
 
       <div className="tab-panel" style={{ display: activeTab === 'help' ? 'block' : 'none' }}>

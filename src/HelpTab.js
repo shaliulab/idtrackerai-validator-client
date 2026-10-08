@@ -12,6 +12,7 @@ const SECTIONS = [
   { id: 'help-viewer', title: 'Group viewer' },
   { id: 'help-pe', title: 'Proboscis extension (PE)' },
   { id: 'help-ethogram', title: 'Ethograms' },
+  { id: 'help-overview-tab', title: 'Overview' },
   { id: 'help-keys', title: 'Keyboard & mouse' },
   { id: 'help-glossary', title: 'Glossary' },
 ];
@@ -27,7 +28,7 @@ function Section({ id, title, children }) {
 
 const SHORTCUTS = [
   ['Anywhere', [
-    [<><Key>Ctrl</Key>+<Key>1</Key> / <Key>2</Key> / <Key>3</Key> / <Key>4</Key></>, 'Switch to Group viewer / PE / Ethograms / How to use'],
+    [<><Key>Ctrl</Key>+<Key>1</Key> / <Key>2</Key> / <Key>3</Key> / <Key>4</Key> / <Key>5</Key></>, 'Switch to Group viewer / PE / Ethograms / Overview / How to use'],
   ]],
   ['Group viewer', [
     [<><Key>1</Key> / <Key>7</Key></>, 'Previous / next chunk'],
@@ -84,10 +85,11 @@ export default function HelpTab() {
           <ul>
             <li><b>check identities</b> frame by frame, and find the frames where tracking failed or was corrected (Group viewer);</li>
             <li><b>annotate proboscis extension</b> events picked up by the pose pipeline (PE tab);</li>
-            <li><b>browse each fly's behaviour</b> over the whole experiment and export sleep bout videos (Ethograms).</li>
+            <li><b>browse each fly's behaviour</b> over the whole experiment and export sleep bout videos (Ethograms);</li>
+            <li><b>see which experiments exist</b>, by genotype, group size, sex and any other metadata (Overview).</li>
           </ul>
           <p className="help-note">
-            Each tab name shows its shortcut (<Key>Ctrl</Key>+<Key>1</Key>…<Key>4</Key>).
+            Each tab name shows its shortcut (<Key>Ctrl</Key>+<Key>1</Key>…<Key>5</Key>).
             Hover over a button to see what it does.
           </p>
         </Section>
@@ -269,6 +271,45 @@ export default function HelpTab() {
               downloaded. Saved videos appear as buttons that jump to each bout.
             </li>
           </ul>
+        </Section>
+
+        <Section id="help-overview-tab" title="Overview">
+          <p>
+            A dashboard of every experiment listed in <code>index.txt</code>, built from the
+            <code>ethoscope_metadata</code> of each database (one row per fly). It does not
+            depend on the loaded experiment. The first visit reads all databases (a few
+            seconds); <i>Refresh</i> reads them again.
+          </p>
+          <ul>
+            <li><i>Count</i> switches every chart between experiments and flies.</li>
+            <li>
+              <b>Click a bar to filter</b> on that value; click more bars to add values.
+              Filters show as chips above the charts (click one to remove it). A chart
+              ignores its own filter, so the other values of that property stay visible.
+            </li>
+            <li>
+              A fly-level filter keeps the matching flies and the experiments with at least
+              one of them: the table shows <i>(n match)</i> when only some flies of an
+              experiment do.
+            </li>
+            <li><i>Add chart</i> lists every metadata column found, with the share of flies that have a value; × removes a chart.</li>
+            <li><i>Cross-tabulation</i> counts two properties against each other (e.g. genotype × group size).</li>
+            <li><i>Open</i> in the experiments table loads that experiment in the Group viewer.</li>
+            <li><i>CSV</i> downloads one row per matching fly with all metadata columns.</li>
+          </ul>
+          <p className="help-note">
+            Values are shown as written in the metadata sheets: <code>FEM</code> and <code>VFEM</code>,
+            or <code>NO</code> and <code>N</code>, are separate values. Empty cells, <code>NONE</code>
+            and <code>nan</code> count as <i>(missing)</i>.
+          </p>
+          <p>
+            <b>Light cycle.</b> Depending on the metadata sheet, the light cycle (LD, DD, LL) was
+            written in <code>light_cycle</code>, <code>condition</code>, <code>experiment</code> or at the
+            end of <code>vial</code>. <i>Light cycle (merged)</i> gathers them; <i>Light cycle recorded in</i>
+            says from which column. A fly without one takes its group's. Experiments not using
+            <code>light_cycle</code> are listed under <i>Non-standard light cycle encoding</i> and marked ⚠
+            in the experiments table. Only the dashboard is affected: the databases are unchanged.
+          </p>
         </Section>
 
         <Section id="help-keys" title="Keyboard & mouse">
