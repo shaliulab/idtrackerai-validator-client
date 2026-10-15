@@ -6,6 +6,8 @@
 // levels: "genotype = X" keeps the flies of genotype X, and the experiments with
 // at least one such fly. Clicking a bar toggles a filter on that value; each
 // chart ignores its own filter so the other values of that property stay visible.
+// The "Find experiments" panel (QueryPanel) adds a genotype / cohoused genotype /
+// date range query applied before those filters.
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import api from './api';
@@ -26,6 +28,7 @@ const EXPERIMENT_PROPS = {
 const LABELS = {
   ...EXPERIMENT_PROPS,
   genotype: 'Genotype',
+  cohoused_with: 'Cohoused with (other genotypes)',
   sex: 'Sex',
   number_of_animals: 'Number of animals (metadata)',
   age_min: 'Age min (days)',
@@ -41,7 +44,12 @@ const LABELS = {
 };
 const labelOf = (prop) => LABELS[prop] || prop.replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase());
 
-const DEFAULT_CHARTS = ['genotype', 'group_size', 'sex', 'flyhostel', 'month', 'light_cycle',
+// Fly-level properties computed here from the other flies of the experiment.
+const DERIVED_PROPS = ['cohoused_with'];
+const ALONE = '(alone)';
+const SAME_ONLY = '(same genotype only)';
+
+const DEFAULT_CHARTS = ['genotype', 'cohoused_with', 'group_size', 'sex', 'flyhostel', 'month', 'light_cycle',
   'light_cycle_source', 'incubator', 'vial', 'age_min', 'has_val'];
 
 const loadStored = (key, fallback) => {
@@ -82,8 +90,16 @@ function buildRows(experiments) {
       year: e.date ? e.date.slice(0, 4) : undefined,
       has_val: e.has_val ? 'yes' : 'no',
     };
-    if (e.flies.length) e.flies.forEach((fly) => rows.push({ ...fly, ...base }));
-    else rows.push({ ...base, _noFly: true });
+    // _others: genotypes of the other flies of the experiment (missing ones left out).
+    // cohoused_with: those different from the fly's own, or ALONE / SAME_ONLY.
+    e.flies.forEach((fly, i) => {
+      const others = e.flies.filter((_, j) => j !== i).map((f) => f.genotype).filter(Boolean);
+      const different = [...new Set(others)].filter((g) => g !== fly.genotype).sort();
+      const cohousedWith = different.length ? different.join(' + ')
+        : e.flies.length === 1 ? ALONE : fly.genotype && others.length ? SAME_ONLY : undefined;
+      rows.push({ ...fly, ...base, cohoused_with: cohousedWith, _others: others });
+    });
+    if (!e.flies.length) rows.push({ ...base, _noFly: true, _others: [] });
   }
   return rows;
 }
@@ -107,6 +123,104 @@ function applyFilters(rows, filters, except) {
   const active = Object.entries(filters).filter(([p, set]) => p !== except && set.length);
   if (!active.length) return rows;
   return rows.filter((row) => active.every(([p, set]) => set.includes(valueOf(row, p))));
+}
+
+// The "Find experiments" query: flies of `genotype` (any if empty) whose experiment
+// has another fly of `cohoused` (any if empty; SAME_ONLY = no other genotype), in
+// experiments recorded between `from` and `to` (inclusive, YYYY-MM-DD).
+const EMPTY_QUERY = { genotype: '', cohoused: '', from: '', to: '' };
+const queryActive = (q) => Object.values(q).some(Boolean);
+
+function applyQuery(rows, q) {
+  if (!queryActive(q)) return rows;
+  return rows.filter((row) => {
+    const date = row._exp.date;
+    if ((q.from || q.to) && !date) return false;
+    if (q.from && date < q.from) return false;
+    if (q.to && date > q.to) return false;
+    if ((q.genotype || q.cohoused) && row._noFly) return false;
+    if (q.genotype && row.genotype !== q.genotype) return false;
+    if (q.cohoused === SAME_ONLY) return row._others.length > 0 && row._others.every((g) => g === row.genotype);
+    if (q.cohoused && !row._others.includes(q.cohoused)) return false;
+    return true;
+  });
+}
+
+// Genotypes with their number of experiments, the most frequent first.
+function genotypeOptions(rows) {
+  const exps = new Map();
+  for (const r of rows) {
+    if (!r.genotype) continue;
+    if (!exps.has(r.genotype)) exps.set(r.genotype, new Set());
+    exps.get(r.genotype).add(r._exp.experiment);
+  }
+  return [...exps].map(([g, s]) => [g, s.size]).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+}
+
+function QueryPanel({ rows, query, setQuery, stats, dateRange }) {
+  const set = (key) => (e) => setQuery((q) => ({ ...q, [key]: e.target.value }));
+  // Choices of each select narrowed by the other conditions, so every option yields results.
+  const genotypes = useMemo(() => genotypeOptions(applyQuery(rows, { ...query, genotype: '' })), [rows, query]);
+  const companions = useMemo(() => {
+    const base = applyQuery(rows, { ...query, cohoused: '' });
+    const exps = new Map();
+    for (const r of base) {
+      for (const g of new Set(r._others)) {
+        if (!exps.has(g)) exps.set(g, new Set());
+        exps.get(g).add(r._exp.experiment);
+      }
+    }
+    return [...exps].map(([g, s]) => [g, s.size]).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+  }, [rows, query]);
+  const keep = (options, value) => (value && !options.some(([g]) => g === value) ? [...options, [value, 0]] : options);
+
+  const n = (count, one, many) => `${count} ${count === 1 ? one : many}`;
+  const parts = [];
+  if (query.genotype) parts.push(<> with a <b>{query.genotype}</b> fly</>);
+  if (query.cohoused === SAME_ONLY) parts.push(<> housed only with its own genotype</>);
+  else if (query.cohoused) parts.push(<> {query.genotype ? 'living with' : 'with a fly living with'} <b>{query.cohoused}</b></>);
+  if (query.from || query.to) parts.push(<> recorded {query.from ? `from ${query.from}` : ''} {query.to ? `to ${query.to}` : ''}</>);
+
+  return (
+    <div className="card ov-query toolbar">
+      <span className="ov-query-title">Find experiments</span>
+      <label className="field">
+        Genotype
+        <select value={query.genotype} onChange={set('genotype')}>
+          <option value="">any</option>
+          {keep(genotypes, query.genotype).map(([g, c]) => <option key={g} value={g}>{g} ({c})</option>)}
+        </select>
+      </label>
+      <label className="field">
+        living with
+        <select value={query.cohoused} onChange={set('cohoused')}
+                title="Genotype of at least one other fly of the same experiment">
+          <option value="">anyone</option>
+          <option value={SAME_ONLY}>only its own genotype</option>
+          {keep(companions, query.cohoused).map(([g, c]) => <option key={g} value={g}>{g} ({c})</option>)}
+        </select>
+      </label>
+      <label className="field">
+        Recorded from
+        <input type="date" value={query.from} min={dateRange.first} max={dateRange.last}
+               onChange={set('from')} onKeyDown={(e) => e.stopPropagation()} />
+      </label>
+      <label className="field">
+        to
+        <input type="date" value={query.to} min={dateRange.first} max={dateRange.last}
+               onChange={set('to')} onKeyDown={(e) => e.stopPropagation()} />
+      </label>
+      {queryActive(query) && <button className="ov-link" onClick={() => setQuery(EMPTY_QUERY)}>Clear</button>}
+      {queryActive(query) && (
+        <div className="ov-query-result">
+          <b className="ov-query-n">{n(stats.experiments, 'experiment', 'experiments')}</b>
+          {parts}
+          {' · '}{n(stats.flies, 'matching fly', 'matching flies')}
+          <span className="ov-query-hint"> — every chart and the table below are restricted to them</span>
+        </div>
+      )}
+    </div>
+  );
 }
 
 const summarize = (rows) => {
@@ -459,11 +573,13 @@ export default function OverviewTab({ active, currentExperiment, onOpenExperimen
   const [search, setSearch] = useState('');
   const [rowProp, setRowProp] = useState(() => loadStored('fh-overview-rows', 'genotype'));
   const [colProp, setColProp] = useState(() => loadStored('fh-overview-cols', 'group_size'));
+  const [query, setQuery] = useState(() => ({ ...EMPTY_QUERY, ...loadStored('fh-overview-query', {}) }));
 
   useEffect(() => store('fh-overview-unit', unit), [unit]);
   useEffect(() => store('fh-overview-charts', charts), [charts]);
   useEffect(() => store('fh-overview-rows', rowProp), [rowProp]);
   useEffect(() => store('fh-overview-cols', colProp), [colProp]);
+  useEffect(() => store('fh-overview-query', query), [query]);
 
   const fetchData = useCallback((refresh = false) => {
     setLoading(true);
@@ -495,13 +611,15 @@ export default function OverviewTab({ active, currentExperiment, onOpenExperimen
     return allRows.filter((r) => r._exp.experiment.toLowerCase().includes(q)
       || Object.entries(r).some(([k, v]) => !k.startsWith('_') && typeof v === 'string' && v.toLowerCase().includes(q)));
   }, [allRows, search]);
-  const filtered = useMemo(() => applyFilters(searched, filters), [searched, filters]);
+  const queried = useMemo(() => applyQuery(searched, query), [searched, query]);
+  const unqueried = useMemo(() => applyFilters(searched, filters), [searched, filters]);
+  const filtered = useMemo(() => applyFilters(queried, filters), [queried, filters]);
   const stats = useMemo(() => summarize(filtered), [filtered]);
   const totals = useMemo(() => summarize(allRows), [allRows]);
 
   const flyColumns = useMemo(() => (data ? data.fly_columns : []), [data]);
   const allProps = useMemo(
-    () => [...Object.keys(EXPERIMENT_PROPS), ...flyColumns.map((c) => c.name)],
+    () => [...Object.keys(EXPERIMENT_PROPS), ...DERIVED_PROPS, ...flyColumns.map((c) => c.name)],
     [flyColumns],
   );
   const coverage = useMemo(() => Object.fromEntries(flyColumns.map((c) => [c.name, c.count])), [flyColumns]);
@@ -559,7 +677,7 @@ export default function OverviewTab({ active, currentExperiment, onOpenExperimen
         </label>
         <button onClick={() => setCharts(DEFAULT_CHARTS)} title="Back to the default set of charts">Reset charts</button>
         <span className="spacer" style={{ flex: 1 }} />
-        <button onClick={() => downloadCsv(filtered, flyColumns.map((c) => c.name))}
+        <button onClick={() => downloadCsv(filtered, [...DERIVED_PROPS, ...flyColumns.map((c) => c.name)])}
                 title="One row per fly matching the current filters, with every metadata column">
           <i className="fa fa-download" style={{ marginRight: 6 }} />CSV
         </button>
@@ -579,6 +697,9 @@ export default function OverviewTab({ active, currentExperiment, onOpenExperimen
         )}
       </div>
 
+      <QueryPanel rows={unqueried}
+                  query={query} setQuery={setQuery} stats={stats} dateRange={totals} />
+
       <div className="ov-stats">
         <Stat label="Experiments" value={stats.experiments} sub={of(stats.experiments, totals.experiments)} />
         <Stat label="Flies" value={stats.flies} sub={of(stats.flies, totals.flies)} />
@@ -594,7 +715,7 @@ export default function OverviewTab({ active, currentExperiment, onOpenExperimen
           <BarChart
             key={prop}
             prop={prop}
-            rows={applyFilters(searched, filters, prop)}
+            rows={applyFilters(queried, filters, prop)}
             unit={unit}
             selected={filters[prop] || []}
             onToggle={toggle}

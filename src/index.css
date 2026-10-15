@@ -482,3 +482,50 @@ body.resizing-row, body.resizing-row * { cursor: row-resize !important; user-sel
   gap: 8px 12px;
   margin-top: 10px;
 }
+
+/* ── Validation CSV card (ValidationCsvBuilder.js) ── */
+.vcsv { display: flex; flex-direction: column; flex-shrink: 0; }
+.vcsv .card-header { user-select: none; }
+.vcsv-body { overflow: auto; min-height: 0; display: flex; flex-direction: column; gap: 8px; font-size: 13px; }
+.vcsv-badge {
+  text-transform: none; letter-spacing: 0; font-weight: 600;
+  padding: 1px 8px; border-radius: 10px;
+  background: var(--accent-soft); color: var(--accent);
+}
+.vcsv-modes { display: flex; flex-wrap: wrap; gap: 4px; }
+.vcsv-modes button.active { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+.vcsv-help, .vcsv-sub { color: var(--subtext); line-height: 1.4; }
+.vcsv-error { color: var(--danger); }
+.vcsv-form { gap: 6px 14px; }
+.vcsv-form button { padding: 2px 8px; }
+.vcsv-blobs { width: 100%; }
+.vcsv-blobs tr.picked td { background: var(--accent-soft); }
+.vcsv-blobs tbody tr:hover td { background: var(--surface-2); }
+.vcsv-link {
+  border: none; background: none; padding: 0 4px;
+  color: var(--accent); cursor: pointer; font-size: 12px;
+}
+.vcsv-pending { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.vcsv-pending li {
+  display: flex; align-items: baseline; gap: 8px;
+  padding: 4px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface-2);
+}
+.vcsv-pending li > span:first-child { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.vcsv-rows { color: var(--subtext); white-space: nowrap; }
+.vcsv-preview {
+  margin: 0; padding: 6px 8px; max-height: 180px; overflow: auto;
+  font-size: 12px; line-height: 1.4;
+  border: 1px solid var(--border); border-radius: 6px; background: var(--surface-2);
+}
+.vcsv-banner {
+  padding: 10px 12px; line-height: 1.5;
+  border: 1px solid var(--accent); border-left-width: 4px; border-radius: 8px;
+  background: var(--accent-soft); color: var(--text);
+}
+
+.ov-query { padding: 8px 12px; gap: 8px 18px; border-left: 3px solid var(--accent); }
+.ov-query-title { font-weight: 600; }
+.ov-query input[type="date"] { color: var(--text); }
+.ov-query-result { flex-basis: 100%; font-size: 13px; }
+.ov-query-n { font-size: 16px; color: var(--accent); }
+.ov-query-hint { color: var(--subtext); font-size: 12px; }

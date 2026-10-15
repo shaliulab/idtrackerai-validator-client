@@ -281,6 +281,19 @@ export default function HelpTab() {
             seconds); <i>Refresh</i> reads them again.
           </p>
           <ul>
+            <li>
+              <b>Find experiments</b> answers questions like "how many experiments have a fly of
+              genotype A living with flies of genotype B, recorded between two dates?": pick a
+              <i>Genotype</i>, who it is <i>living with</i> (a genotype of at least one other fly of
+              the same experiment, or <i>only its own genotype</i>) and a date range. Any of them can
+              be left empty. The number of matching experiments is shown below, and every chart and
+              the table are restricted to them. Each list shows only the choices that still give
+              results, with their number of experiments.
+            </li>
+            <li>
+              <i>Cohoused with (other genotypes)</i> is the genotypes of the other flies of a fly's
+              experiment, other than its own; cross-tabulate it with <i>Genotype</i> to see every mix.
+            </li>
             <li><i>Count</i> switches every chart between experiments and flies.</li>
             <li>
               <b>Click a bar to filter</b> on that value; click more bars to add values.

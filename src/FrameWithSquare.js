@@ -82,6 +82,7 @@ const FrameWithSquare = React.forwardRef(
       onNativeSize,
       showPose,
       labelField = LABEL_FIELD,
+      onFrameClick,
     },
     ref,
   ) => {
@@ -114,6 +115,8 @@ const FrameWithSquare = React.forwardRef(
       const rect = event.currentTarget.getBoundingClientRect();
       const xDisp = event.clientX - rect.left;
       const yDisp = event.clientY - rect.top;
+      // Native frame coordinates of the click (used by the Validation CSV card).
+      onFrameClick?.({ x: Math.round(xDisp / sx), y: Math.round(yDisp / sy), nonce: Date.now() });
 
       trackingData.forEach((animal) => {
         const ax = animal.x * sx;

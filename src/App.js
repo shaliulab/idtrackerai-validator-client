@@ -16,6 +16,7 @@ import PEValidator from './PEValidator';
 import DeletePEAnnotations from './DeletePEAnnotations';
 import HelpTab from './HelpTab';
 import OverviewTab from './OverviewTab';
+import ValidationCsvBuilder from './ValidationCsvBuilder';
 import api from './api';
 import MessageConsole, { useConsole, useConsoleState, consoleHeight } from './MessageConsole';
 
@@ -113,6 +114,8 @@ function App() {
   const [flies, setFlies] = useState([]);
   const [selectedFly, setSelectedFly] = useState(null);
   const [showPose, setShowPose] = useState(false);   // controls BOTH request + draw
+  // Last left click on the frame, in native pixels (picks blobs / points in the Validation CSV card)
+  const [frameClick, setFrameClick] = useState(null);
 
   // ── Theme state (persisted across sessions) ──
   const [themeName, setThemeName] = useState(() => {
@@ -601,6 +604,7 @@ function App() {
               onNativeSize={setNativeSize}
               showPose={showPose}
               labelField={labelField}
+              onFrameClick={setFrameClick}
             />
           </div>
 
@@ -674,6 +678,14 @@ function App() {
                 </div>
               </div>
             </section>
+
+            <ValidationCsvBuilder
+              frameNumber={frameNumber}
+              isPlaying={isPlaying}
+              numberOfAnimals={number_of_animals}
+              frameClick={frameClick}
+              setFrameNumber={setFrameNumber}
+            />
           </div>
         </div>
       </div>
