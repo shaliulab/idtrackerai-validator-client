@@ -285,8 +285,10 @@ export default function HelpTab() {
               <b>Find experiments</b> answers questions like "how many experiments have a fly of
               genotype A living with flies of genotype B, recorded between two dates?": pick a
               <i>Genotype</i>, who it is <i>living with</i> (a genotype of at least one other fly of
-              the same experiment, or <i>only its own genotype</i>) and a date range. Any of them can
-              be left empty. The number of matching experiments is shown below, and every chart and
+              the same experiment, <i>no one (isolated)</i> for a fly alone in its experiment, or
+              <i>only its own genotype</i>) and a date range. Once a genotype is chosen, a second list
+              next to it narrows to experiments with exactly that many flies of it (e.g. 1
+              iso31xmz19 living with 1 nAChRalpha4rye). Any of them can be left empty. The number of matching experiments is shown below, and every chart and
               the table are restricted to them. Each list shows only the choices that still give
               results, with their number of experiments.
             </li>

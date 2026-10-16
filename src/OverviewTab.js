@@ -96,14 +96,17 @@ function buildRows(experiments) {
     };
     // _others: genotypes of the other flies of the experiment (missing ones left out).
     // cohoused_with: those different from the fly's own, or ALONE / SAME_ONLY.
+    // _counts: number of flies of each genotype in the experiment.
+    const counts = {};
+    e.flies.forEach((f) => { if (f.genotype) counts[f.genotype] = (counts[f.genotype] || 0) + 1; });
     e.flies.forEach((fly, i) => {
       const others = e.flies.filter((_, j) => j !== i).map((f) => f.genotype).filter(Boolean);
       const different = [...new Set(others)].filter((g) => g !== fly.genotype).sort();
       const cohousedWith = different.length ? different.join(' + ')
         : e.flies.length === 1 ? ALONE : fly.genotype && others.length ? SAME_ONLY : undefined;
-      rows.push({ ...fly, ...base, cohoused_with: cohousedWith, _others: others });
+      rows.push({ ...fly, ...base, cohoused_with: cohousedWith, _others: others, _counts: counts, _nFlies: e.flies.length });
     });
-    if (!e.flies.length) rows.push({ ...base, _noFly: true, _others: [] });
+    if (!e.flies.length) rows.push({ ...base, _noFly: true, _others: [], _counts: {}, _nFlies: 0 });
   }
   return rows;
 }
@@ -130,9 +133,11 @@ function applyFilters(rows, filters, except) {
 }
 
 // The "Find experiments" query: flies of `genotype` (any if empty) whose experiment
-// has another fly of `cohoused` (any if empty; SAME_ONLY = no other genotype), in
-// experiments recorded between `from` and `to` (inclusive, YYYY-MM-DD).
-const EMPTY_QUERY = { genotype: '', cohoused: '', from: '', to: '' };
+// has another fly of `cohoused` (any if empty; SAME_ONLY = no other genotype;
+// ALONE = the only fly of the experiment), in experiments recorded between `from`
+// and `to` (inclusive, YYYY-MM-DD). `nGenotype` / `nCohoused`: exact number of
+// flies of each of the two genotypes in the experiment (any if empty).
+const EMPTY_QUERY = { genotype: '', cohoused: '', nGenotype: '', nCohoused: '', from: '', to: '' };
 const queryActive = (q) => Object.values(q).some(Boolean);
 
 function applyQuery(rows, q) {
@@ -144,8 +149,11 @@ function applyQuery(rows, q) {
     if (q.to && date > q.to) return false;
     if ((q.genotype || q.cohoused) && row._noFly) return false;
     if (q.genotype && row.genotype !== q.genotype) return false;
+    if (q.genotype && q.nGenotype && (row._counts[q.genotype] || 0) !== Number(q.nGenotype)) return false;
+    if (q.cohoused === ALONE) return row._nFlies === 1;
     if (q.cohoused === SAME_ONLY) return row._others.length > 0 && row._others.every((g) => g === row.genotype);
     if (q.cohoused && !row._others.includes(q.cohoused)) return false;
+    if (q.cohoused && q.nCohoused && (row._counts[q.cohoused] || 0) !== Number(q.nCohoused)) return false;
     return true;
   });
 }
@@ -161,8 +169,23 @@ function genotypeOptions(rows) {
   return [...exps].map(([g, s]) => [g, s.size]).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
 }
 
+// Number of flies of `genotype` in the experiments of `rows` -> number of experiments.
+function countOptions(rows, genotype) {
+  const exps = new Map();
+  for (const r of rows) {
+    const n = r._counts[genotype];
+    if (!n) continue;
+    if (!exps.has(n)) exps.set(n, new Set());
+    exps.get(n).add(r._exp.experiment);
+  }
+  return [...exps].map(([n, s]) => [String(n), s.size]).sort((a, b) => Number(a[0]) - Number(b[0]));
+}
+
+// A count only means something for a chosen genotype: changing the genotype resets it.
+const RESETS = { genotype: 'nGenotype', cohoused: 'nCohoused' };
+
 function QueryPanel({ rows, query, setQuery, stats, dateRange }) {
-  const set = (key) => (e) => setQuery((q) => ({ ...q, [key]: e.target.value }));
+  const set = (key) => (e) => setQuery((q) => ({ ...q, [key]: e.target.value, ...(RESETS[key] ? { [RESETS[key]]: '' } : {}) }));
   // Choices of each select narrowed by the other conditions, so every option yields results.
   const genotypes = useMemo(() => genotypeOptions(applyQuery(rows, { ...query, genotype: '' })), [rows, query]);
   const companions = useMemo(() => {
@@ -176,13 +199,27 @@ function QueryPanel({ rows, query, setQuery, stats, dateRange }) {
     }
     return [...exps].map(([g, s]) => [g, s.size]).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
   }, [rows, query]);
+  const nGenotypeOptions = useMemo(
+    () => (query.genotype ? countOptions(applyQuery(rows, { ...query, nGenotype: '' }), query.genotype) : []),
+    [rows, query]);
+  const nCohousedOptions = useMemo(
+    () => (query.cohoused && query.cohoused !== SAME_ONLY && query.cohoused !== ALONE
+      ? countOptions(applyQuery(rows, { ...query, nCohoused: '' }), query.cohoused) : []),
+    [rows, query]);
   const keep = (options, value) => (value && !options.some(([g]) => g === value) ? [...options, [value, 0]] : options);
 
   const n = (count, one, many) => `${count} ${count === 1 ? one : many}`;
   const parts = [];
-  if (query.genotype) parts.push(<> with a <b>{query.genotype}</b> fly</>);
-  if (query.cohoused === SAME_ONLY) parts.push(<> housed only with its own genotype</>);
-  else if (query.cohoused) parts.push(<> {query.genotype ? 'living with' : 'with a fly living with'} <b>{query.cohoused}</b></>);
+  if (query.genotype) {
+    parts.push(query.nGenotype ? <> with {n(Number(query.nGenotype), 'fly', 'flies')} of <b>{query.genotype}</b></>
+                               : <> with a <b>{query.genotype}</b> fly</>);
+  }
+  if (query.cohoused === ALONE) parts.push(<> {query.genotype ? 'living' : 'with a fly living'} alone</>);
+  else if (query.cohoused === SAME_ONLY) parts.push(<> housed only with its own genotype</>);
+  else if (query.cohoused) {
+    parts.push(<> {query.genotype ? 'living with' : 'with a fly living with'}{' '}
+      {query.nCohoused ? `${query.nCohoused} ` : ''}<b>{query.cohoused}</b></>);
+  }
   if (query.from || query.to) parts.push(<> recorded {query.from ? `from ${query.from}` : ''} {query.to ? `to ${query.to}` : ''}</>);
 
   return (
@@ -194,15 +231,30 @@ function QueryPanel({ rows, query, setQuery, stats, dateRange }) {
           <option value="">any</option>
           {keep(genotypes, query.genotype).map(([g, c]) => <option key={g} value={g}>{g} ({c})</option>)}
         </select>
+        {query.genotype && (
+          <select value={query.nGenotype} onChange={set('nGenotype')}
+                  title={`Number of ${query.genotype} flies in the experiment (number of experiments in brackets)`}>
+            <option value="">any number</option>
+            {keep(nGenotypeOptions, query.nGenotype).map(([k, c]) => <option key={k} value={k}>{k} fl{k === '1' ? 'y' : 'ies'} ({c})</option>)}
+          </select>
+        )}
       </label>
       <label className="field">
         living with
         <select value={query.cohoused} onChange={set('cohoused')}
                 title="Genotype of at least one other fly of the same experiment">
           <option value="">anyone</option>
+          <option value={ALONE}>no one (isolated)</option>
           <option value={SAME_ONLY}>only its own genotype</option>
           {keep(companions, query.cohoused).map(([g, c]) => <option key={g} value={g}>{g} ({c})</option>)}
         </select>
+        {nCohousedOptions.length > 0 && (
+          <select value={query.nCohoused} onChange={set('nCohoused')}
+                  title={`Number of ${query.cohoused} flies in the experiment (number of experiments in brackets)`}>
+            <option value="">any number</option>
+            {keep(nCohousedOptions, query.nCohoused).map(([k, c]) => <option key={k} value={k}>{k} fl{k === '1' ? 'y' : 'ies'} ({c})</option>)}
+          </select>
+        )}
       </label>
       <label className="field">
         Recorded from
