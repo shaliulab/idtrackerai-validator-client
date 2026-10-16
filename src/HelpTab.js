@@ -168,6 +168,12 @@ export default function HelpTab() {
               <i>Playback framerate</i> sets the playback speed and the number of frames
               skipped per scroll notch.
             </li>
+            <li>
+              <b>CVAT project</b> opens the experiment's CVAT project (named after the
+              experiment) in a new tab. <b>Frame in CVAT</b> opens the displayed frame in its
+              CVAT job; it is grayed out when the frame is not one of the frames selected for
+              CVAT validation. <i className="fa fa-refresh" /> reloads the list after new tasks are uploaded.
+            </li>
           </ul>
         </Section>
 

@@ -17,6 +17,7 @@ import DeletePEAnnotations from './DeletePEAnnotations';
 import HelpTab from './HelpTab';
 import OverviewTab from './OverviewTab';
 import ValidationCsvBuilder from './ValidationCsvBuilder';
+import CvatLinks from './CvatLinks';
 import api from './api';
 import MessageConsole, { useConsole, useConsoleState, consoleHeight } from './MessageConsole';
 
@@ -676,6 +677,7 @@ function App() {
                     setLabelField={setLabelField}
                   />
                 </div>
+                <CvatLinks experiment={currentExperiment} frameNumber={frameNumber} />
               </div>
             </section>
 
