@@ -455,11 +455,35 @@ const TABLE_COLUMNS = [
   ['duration_h', 'Duration (h)'],
   ['light_cycle', 'Light cycle'],
   ['has_val', 'Validated'],
+  ['sheet', 'Sheet'],
 ];
+
+// Status of the predownloaded sheet metadata (metadata_sync.py, _status), most urgent first.
+const SHEET_STATUS = {
+  error: { rank: 5, label: '✗ check failed', cls: 'error' },
+  failed: { rank: 4, label: '✗ download failed', cls: 'error' },
+  changes: { rank: 3, label: 'changes', cls: 'changes' },
+  filled: { rank: 2.5, label: 'fills empty cells', cls: 'minor' },
+  minor: { rank: 2, label: 'minor changes', cls: 'minor' },
+  same: { rank: 1, label: '= same', cls: 'same' },
+};
+const clock = (t) => new Date(t * 1000).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+
+function sheetTitle(st) {
+  if (!st) return 'Not predownloaded: the dialog downloads it (about 10 s)';
+  const lines = [`Sheet metadata downloaded ${clock(st.downloaded_at)}: ${SHEET_STATUS[st.status]?.label}`];
+  if (st.errors?.length) lines.push(...st.errors);
+  if (st.key_changes?.length) lines.push(`Key values changed: ${st.key_changes.join(', ')}`);
+  if (st.key_filled?.length) lines.push(`Key values filled in (empty in the database): ${st.key_filled.join(', ')}`);
+  const other = (st.changed_columns || []).filter((c) => !st.key_changes?.includes(c) && !st.key_filled?.includes(c));
+  if (other.length) lines.push(`Other columns: ${other.join(', ')}`);
+  if (st.warnings) lines.push(`${st.warnings} warning${st.warnings === 1 ? '' : 's'}`);
+  return lines.join('\n');
+}
 
 // Experiments whose light cycle is not (only) in the `light_cycle` column; the
 // server merges it (overview.py, merge_light_cycle) and says how in light_cycle_flags.
-function LightCycleIssues({ rows, onOpen, onUpdateMetadata }) {
+function LightCycleIssues({ rows, onOpen, onUpdateMetadata, sheetStatus }) {
   const flagged = useMemo(() => {
     const seen = new Map();
     for (const r of rows) {
@@ -510,7 +534,7 @@ function LightCycleIssues({ rows, onOpen, onUpdateMetadata }) {
                 <td>{e.cycles}</td>
                 <td className="ov-wrap">{e.light_cycle_flags.join('; ')}</td>
                 <td className="ov-actions">
-                  <SheetButton experiment={e} onClick={onUpdateMetadata} />
+                  <SheetButton experiment={e} onClick={onUpdateMetadata} status={sheetStatus[e.experiment]} />
                   <button onClick={() => onOpen(e.experiment)}>Open</button>
                 </td>
               </tr>
@@ -526,17 +550,18 @@ function LightCycleIssues({ rows, onOpen, onUpdateMetadata }) {
 const sameExperiment = (a, b) => !!a && !!b && a.replace(/\//g, '_') === b.replace(/\//g, '_');
 
 // Re-download the experiment's metadata from the Google sheets into its database.
-function SheetButton({ experiment, onClick }) {
+function SheetButton({ experiment, onClick, status }) {
   if (experiment.analyzed === false || experiment.error) return null;
   return (
-    <button className="ov-sheet" onClick={() => onClick(experiment.experiment)}
-            title="Update the metadata in this experiment's database from the Google sheets (shows the new rows and checks before writing)">
+    <button className={`ov-sheet${status ? ` ov-sheet-${SHEET_STATUS[status.status]?.cls}` : ''}`}
+            onClick={() => onClick(experiment.experiment)}
+            title={`Update the metadata in this experiment's database from the Google sheets (shows the new rows and checks before writing)\n\n${sheetTitle(status)}`}>
       <i className="fa fa-cloud-download" />
     </button>
   );
 }
 
-function ExperimentTable({ rows, onOpen, current, onUpdateMetadata }) {
+function ExperimentTable({ rows, onOpen, current, onUpdateMetadata, sheetStatus, onPredownload, predownloading }) {
   const [sort, setSort] = useState({ key: 'date', desc: true });
   const experiments = useMemo(() => {
     const byExp = new Map();
@@ -555,6 +580,7 @@ function ExperimentTable({ rows, onOpen, current, onUpdateMetadata }) {
     const list = [...byExp.values()].map((x) => ({
       ...x, genotypes: [...x.genotypes].join(', '), sexes: [...x.sexes].join(', '),
       light_cycle: [...x.cycles].join(', '),
+      sheet: SHEET_STATUS[sheetStatus[x.experiment]?.status]?.rank ?? 0,
     }));
     const { key, desc } = sort;
     list.sort((a, b) => {
@@ -565,7 +591,8 @@ function ExperimentTable({ rows, onOpen, current, onUpdateMetadata }) {
       return desc ? -c : c;
     });
     return list;
-  }, [rows, sort]);
+  }, [rows, sort, sheetStatus]);
+  const downloadable = experiments.filter((e) => e.analyzed !== false && !e.error).map((e) => e.experiment);
 
   const header = (key, label) => (
     <th key={key} onClick={() => setSort((s) => ({ key, desc: s.key === key ? !s.desc : key === 'date' }))}>
@@ -578,6 +605,14 @@ function ExperimentTable({ rows, onOpen, current, onUpdateMetadata }) {
       <header className="card-header">
         <span>Experiments</span>
         <span className="ov-count">{experiments.length}</span>
+        <span className="spacer" style={{ flex: 1 }} />
+        <button className="ov-normal" disabled={predownloading || !downloadable.length}
+                onClick={() => onPredownload(downloadable)}
+                title={'Download the Google sheet metadata of every experiment in this table (each sheet once), '
+                  + 'compare it with their databases and fill the Sheet column. The ☁ button then opens instantly. Nothing is written.'}>
+          <i className={`fa ${predownloading ? 'fa-spinner fa-spin' : 'fa-cloud-download'}`} style={{ marginRight: 6 }} />
+          Predownload sheet metadata ({downloadable.length})
+        </button>
       </header>
       <div className="ov-scroll ov-table-scroll">
         <table className="pe-table ov-table">
@@ -605,8 +640,15 @@ function ExperimentTable({ rows, onOpen, current, onUpdateMetadata }) {
                   {e.light_cycle}{e.light_cycle_flags?.length > 0 && <span className="ov-warn"> ⚠</span>}
                 </td>
                 <td>{e.has_val ? '✓' : ''}</td>
+                <td title={sheetStatus[e.experiment] ? sheetTitle(sheetStatus[e.experiment]) : undefined}>
+                  {sheetStatus[e.experiment] && (
+                    <span className={`ov-sheet-status ov-sheet-${SHEET_STATUS[sheetStatus[e.experiment].status]?.cls}`}>
+                      {SHEET_STATUS[sheetStatus[e.experiment].status]?.label}
+                    </span>
+                  )}
+                </td>
                 <td className="ov-actions">
-                  <SheetButton experiment={e} onClick={onUpdateMetadata} />
+                  <SheetButton experiment={e} onClick={onUpdateMetadata} status={sheetStatus[e.experiment]} />
                   <button disabled={!!e.error || e.analyzed === false || sameExperiment(e.experiment, current)}
                           onClick={() => onOpen(e.experiment)}
                           title={e.analyzed === false ? 'Not analyzed: no database to open' : 'Load this experiment and open it in the Group viewer'}>
@@ -650,6 +692,8 @@ export default function OverviewTab({ active, currentExperiment, onOpenExperimen
   const [loading, setLoading] = useState(false);
   const [reindexing, setReindexing] = useState(false);
   const [metadataOf, setMetadataOf] = useState(null);   // experiment whose sheet metadata is being updated
+  const [sheetStatus, setSheetStatus] = useState({});    // experiment -> predownloaded sheet metadata status
+  const [predownloading, setPredownloading] = useState(false);
   const [error, setError] = useState(null);
   const [unit, setUnit] = useState(() => loadStored('fh-overview-unit', 'experiments'));
   const [charts, setCharts] = useState(() => loadStored('fh-overview-charts', DEFAULT_CHARTS));
@@ -697,6 +741,34 @@ export default function OverviewTab({ active, currentExperiment, onOpenExperimen
       .catch((err) => log('error', `Could not rebuild index.txt: ${err.response?.data?.error || err.message}`))
       .finally(() => setReindexing(false));
   }, [trackJob, log, fetchData]);
+
+  // Predownloaded sheet metadata lives in the server's memory: ask what it has.
+  const fetchSheetStatus = useCallback(() => {
+    api.get('/api/metadata/predownloaded')
+      .then((r) => setSheetStatus(unwrap(r.data)))
+      .catch(() => { /* older server: no predownload */ });
+  }, []);
+  useEffect(() => { if (data) fetchSheetStatus(); }, [data, fetchSheetStatus]);
+
+  const predownload = useCallback((experiments) => {
+    setPredownloading(true);
+    api.post('/api/metadata/predownload', { experiments })
+      .then((r) => trackJob(unwrap(r.data)))
+      .then((job) => {
+        if (job?.status !== 'done') return;
+        const summary = job.result.summary;
+        setSheetStatus((s) => ({ ...s, ...summary }));
+        const count = (st) => Object.values(summary).filter((x) => x.status === st).length;
+        log(count('error') + count('failed') ? 'warning' : 'success',
+          `Sheet metadata of ${experiments.length} experiments downloaded: ${count('changes')} with changes, `
+          + `${count('filled')} filling empty cells, ${count('minor')} with minor changes, ${count('same')} unchanged, ${count('error')} failing a check, `
+          + `${count('failed')} not downloaded. Sort the table by "Sheet" to see them.`);
+        Object.entries(summary).filter(([, x]) => x.status === 'error' || x.status === 'failed')
+          .forEach(([e, x]) => log('warning', `  ${e}: ${x.errors.join('; ')}`));
+      })
+      .catch((err) => log('error', `Could not download the sheet metadata: ${err.response?.data?.error || err.message}`))
+      .finally(() => setPredownloading(false));
+  }, [trackJob, log]);
 
   // Scanning every database takes a few seconds: only when the tab is first opened.
   useEffect(() => {
@@ -832,13 +904,16 @@ export default function OverviewTab({ active, currentExperiment, onOpenExperimen
       <CrossTab rows={filtered} unit={unit} rowProp={rowProp} colProp={colProp} props={allProps}
                 setRowProp={setRowProp} setColProp={setColProp} />
 
-      <LightCycleIssues rows={filtered} onOpen={onOpenExperiment} onUpdateMetadata={setMetadataOf} />
+      <LightCycleIssues rows={filtered} onOpen={onOpenExperiment} onUpdateMetadata={setMetadataOf}
+                        sheetStatus={sheetStatus} />
 
       <ExperimentTable rows={filtered} onOpen={onOpenExperiment} current={currentExperiment}
-                       onUpdateMetadata={setMetadataOf} />
+                       onUpdateMetadata={setMetadataOf} sheetStatus={sheetStatus}
+                       onPredownload={predownload} predownloading={predownloading} />
 
       {metadataOf && (
-        <MetadataUpdate experiment={metadataOf} onClose={() => setMetadataOf(null)} onWritten={() => fetchData()} />
+        <MetadataUpdate experiment={metadataOf} onWritten={() => fetchData()}
+                        onClose={() => { setMetadataOf(null); fetchSheetStatus(); }} />
       )}
     </div>
   );

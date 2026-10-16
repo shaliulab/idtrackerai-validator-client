@@ -548,3 +548,9 @@ body.resizing-row, body.resizing-row * { cursor: row-resize !important; user-sel
 .md-table-scroll { max-height: 46vh; }
 .md-table td.md-changed { background: var(--accent-soft); font-weight: 600; }
 .md-footer { display: flex; align-items: center; gap: 12px; padding: 8px 14px; border-top: 1px solid var(--border); flex-wrap: wrap; }
+.ov-sheet-status { font-size: 12px; white-space: nowrap; }
+.ov-sheet-status.ov-sheet-error { color: var(--danger); font-weight: 600; }
+.ov-sheet-status.ov-sheet-changes { color: var(--accent); font-weight: 600; }
+.ov-sheet-status.ov-sheet-minor, .ov-sheet-status.ov-sheet-same { color: var(--subtext); }
+button.ov-sheet.ov-sheet-changes { border-color: var(--accent); color: var(--accent); }
+button.ov-sheet.ov-sheet-error { border-color: var(--danger); color: var(--danger); }

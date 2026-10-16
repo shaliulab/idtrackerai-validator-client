@@ -1,8 +1,10 @@
 // MetadataUpdate.js  —  refresh an experiment's ethoscope_metadata from the Google sheets
 //
 // Dialog opened from the Overview tab. It starts a preview job on the server
-// (POST /api/metadata/preview, runs download_flyhostel_metadata; see
-// idtrackerai_validator_server/metadata_sync.py), shows the checks and the new
+// (POST /api/metadata/preview; see idtrackerai_validator_server/metadata_sync.py),
+// which uses the predownloaded metadata when there is some ("Predownload sheet
+// metadata" in the experiments table), else runs download_flyhostel_metadata
+// (~10 s); "Download again" forces a new download. It shows the checks and the new
 // rows (cells that change are highlighted, hover shows the old value) and also
 // prints them to the console. Nothing is written until "Write to database"
 // (POST /api/metadata/apply); failed checks need "Write anyway".
@@ -21,6 +23,7 @@ export default function MetadataUpdate({ experiment, onClose, onWritten }) {
   const [allColumns, setAllColumns] = useState(false);
   const [confirmForce, setConfirmForce] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [fresh, setFresh] = useState(0);          // > 0: download again instead of the predownloaded copy
 
   useEffect(() => {
     const onKey = (e) => { if (e.key === 'Escape') onClose(); };
@@ -30,7 +33,10 @@ export default function MetadataUpdate({ experiment, onClose, onWritten }) {
 
   useEffect(() => {
     let cancelled = false;
-    api.post('/api/metadata/preview', { experiment })
+    setJob(null);
+    setFailed(null);
+    setConfirmForce(false);
+    api.post('/api/metadata/preview', { experiment, fresh: fresh > 0 })
       .then((r) => trackJob(unwrap(r.data)))
       .then((done) => {
         if (cancelled) return;
@@ -49,7 +55,7 @@ export default function MetadataUpdate({ experiment, onClose, onWritten }) {
         log('error', `Could not download the metadata of ${experiment}: ${msg}`);
       });
     return () => { cancelled = true; };
-  }, [experiment, trackJob, log]);
+  }, [experiment, fresh, trackJob, log]);
 
   const res = job?.result;
   const errors = res ? res.checks.filter((c) => c.level === 'error') : [];
@@ -81,11 +87,19 @@ export default function MetadataUpdate({ experiment, onClose, onWritten }) {
         </header>
 
         <div className="card-body md-body">
-          {!res && !failed && <p className="ov-note">Downloading the rows of this experiment from every sheet (about 10 s)…</p>}
+          {!res && !failed && <p className="ov-note">Loading the rows of this experiment from the sheets (about 10 s unless predownloaded)…</p>}
           {failed && <p className="md-error">Download failed: {failed}</p>}
 
           {res && (
             <>
+              <p className="ov-note">
+                {res.predownloaded ? 'Predownloaded' : 'Downloaded'}{' '}
+                {new Date(res.downloaded_at * 1000).toLocaleString()}.{' '}
+                <button className="ov-link" onClick={() => setFresh((n) => n + 1)}
+                        title="Download this experiment's rows from the sheets now (about 10 s), e.g. after fixing the sheet">
+                  Download again
+                </button>
+              </p>
               <ul className="md-checks">
                 {res.checks.map((c) => (
                   <li key={c.text} className={`md-${c.level}`}><span>{ICONS[c.level]}</span> {c.text}</li>

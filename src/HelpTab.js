@@ -319,6 +319,17 @@ export default function HelpTab() {
               written until <i>Write to database</i>; failed checks (✗) must be confirmed first. The
               old metadata is saved in <code>&lt;experiment&gt;/metadata_backups/</code>.
             </li>
+            <li>
+              <i>Predownload sheet metadata</i> (experiments table) downloads the sheet rows of every
+              experiment in the table at once (about 30 s for all of them) and compares them with each
+              database, without writing anything. The <i>Sheet</i> column then says what would change:
+              <i>✗ check failed</i>, <i>changes</i> (a key value such as genotype, identity or light
+              cycle differs, or the number of rows), <i>fills empty cells</i> (key values only appear
+              where the database had none, e.g. light cycle), <i>minor changes</i> (other columns) or
+              <i>= same</i>; hover for details and sort by it. The ☁ button then opens at once with the
+              predownloaded rows; <i>Download again</i> in the dialog fetches them anew (after editing
+              the sheet). Predownloads are kept until the server restarts.
+            </li>
             <li><i>Count</i> switches every chart between experiments and flies.</li>
             <li>
               <b>Click a bar to filter</b> on that value; click more bars to add values.
