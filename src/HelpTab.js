@@ -294,6 +294,18 @@ export default function HelpTab() {
               <i>Cohoused with (other genotypes)</i> is the genotypes of the other flies of a fly's
               experiment, other than its own; cross-tabulate it with <i>Genotype</i> to see every mix.
             </li>
+            <li>
+              <b>Not analyzed experiments.</b> Experiments in the metadata sheets (the CSV exports in
+              <code>/flyhostel_data/metadata</code> of the sheets listed in the googleapi config) that
+              have a folder in the videos directory but no database yet are shown too, marked
+              <i>not analyzed</i> (they cannot be opened). Use the <i>Analyzed</i> chart to show or
+              hide them; their metadata comes from the sheet instead of the database.
+            </li>
+            <li>
+              <i>Rebuild index</i> rewrites <code>index.txt</code> with every database now in the videos
+              folder (same as <code>find -L -maxdepth 4 -mindepth 4 -regex .*FlyHostel.*db -not -name index.db</code>),
+              in the background, and reloads the dashboard. Progress shows in the console.
+            </li>
             <li><i>Count</i> switches every chart between experiments and flies.</li>
             <li>
               <b>Click a bar to filter</b> on that value; click more bars to add values.

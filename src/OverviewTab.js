@@ -8,6 +8,8 @@
 // chart ignores its own filter so the other values of that property stay visible.
 // The "Find experiments" panel (QueryPanel) adds a genotype / cohoused genotype /
 // date range query applied before those filters.
+// Experiments not analyzed yet (folder but no database) come from the metadata
+// sheets with analyzed: false; "Rebuild index" rewrites index.txt in a server job.
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import api from './api';
@@ -23,6 +25,7 @@ const EXPERIMENT_PROPS = {
   month: 'Month',
   year: 'Year',
   has_val: 'Validated tables (_VAL)',
+  analyzed: 'Analyzed (has a database)',
 };
 
 const LABELS = {
@@ -49,7 +52,7 @@ const DERIVED_PROPS = ['cohoused_with'];
 const ALONE = '(alone)';
 const SAME_ONLY = '(same genotype only)';
 
-const DEFAULT_CHARTS = ['genotype', 'cohoused_with', 'group_size', 'sex', 'flyhostel', 'month', 'light_cycle',
+const DEFAULT_CHARTS = ['analyzed', 'genotype', 'cohoused_with', 'group_size', 'sex', 'flyhostel', 'month', 'light_cycle',
   'light_cycle_source', 'incubator', 'vial', 'age_min', 'has_val'];
 
 const loadStored = (key, fallback) => {
@@ -89,6 +92,7 @@ function buildRows(experiments) {
       month: e.date ? e.date.slice(0, 7) : undefined,
       year: e.date ? e.date.slice(0, 4) : undefined,
       has_val: e.has_val ? 'yes' : 'no',
+      analyzed: e.analyzed === false ? 'no' : 'yes',
     };
     // _others: genotypes of the other flies of the experiment (missing ones left out).
     // cohoused_with: those different from the fly's own, or ALONE / SAME_ONLY.
@@ -229,6 +233,7 @@ const summarize = (rows) => {
   const hostels = new Set();
   let flies = 0;
   const validated = new Set();
+  const notAnalyzed = new Set();
   let first = null;
   let last = null;
   for (const r of rows) {
@@ -238,13 +243,14 @@ const summarize = (rows) => {
     if (r.genotype) genotypes.add(r.genotype);
     if (e.flyhostel) hostels.add(e.flyhostel);
     if (e.has_val) validated.add(e.experiment);
+    if (e.analyzed === false) notAnalyzed.add(e.experiment);
     if (e.date) {
       if (!first || e.date < first) first = e.date;
       if (!last || e.date > last) last = e.date;
     }
   }
   return { experiments: exps.size, flies, genotypes: genotypes.size, hostels: hostels.size,
-    validated: validated.size, first, last };
+    validated: validated.size, notAnalyzed: notAnalyzed.size, first, last };
 };
 
 function Stat({ label, value, sub }) {
@@ -515,7 +521,14 @@ function ExperimentTable({ rows, onOpen, current }) {
             {experiments.map((e) => (
               <tr key={e.experiment} className={sameExperiment(e.experiment, current) ? 'selected' : undefined}
                   title={e.error ? `Could not read: ${e.error}` : undefined}>
-                <td className="mono">{e.experiment}{e.error && <span className="ov-warn"> ⚠</span>}</td>
+                <td className="mono">
+                  {e.experiment}{e.error && <span className="ov-warn"> ⚠</span>}
+                  {e.analyzed === false && (
+                    <span className="ov-badge" title={`No database yet: listed in the metadata sheet${e.sheets?.length === 1 ? '' : 's'} ${e.sheets?.join(', ')}`}>
+                      not analyzed
+                    </span>
+                  )}
+                </td>
                 <td>{e.date} {e.start_time?.slice(0, 5)}</td>
                 <td>{e.group_size}X{e.flies.length > 0 && e.matching !== e.flies.length ? ` (${e.matching} match)` : ''}</td>
                 <td className="ov-wrap">{e.genotypes}</td>
@@ -526,8 +539,9 @@ function ExperimentTable({ rows, onOpen, current }) {
                 </td>
                 <td>{e.has_val ? '✓' : ''}</td>
                 <td>
-                  <button disabled={!!e.error || sameExperiment(e.experiment, current)} onClick={() => onOpen(e.experiment)}
-                          title="Load this experiment and open it in the Group viewer">
+                  <button disabled={!!e.error || e.analyzed === false || sameExperiment(e.experiment, current)}
+                          onClick={() => onOpen(e.experiment)}
+                          title={e.analyzed === false ? 'Not analyzed: no database to open' : 'Load this experiment and open it in the Group viewer'}>
                     Open
                   </button>
                 </td>
@@ -546,12 +560,12 @@ const csvCell = (v) => {
 };
 
 function downloadCsv(rows, columns) {
-  const header = ['experiment', 'flyhostel', 'group_size', 'date', 'start_time', 'duration_h', 'has_val', ...columns];
+  const header = ['experiment', 'flyhostel', 'group_size', 'date', 'start_time', 'duration_h', 'has_val', 'analyzed', ...columns];
   const lines = [header.join(',')];
   for (const r of rows) {
     if (r._noFly) continue;
     const e = r._exp;
-    lines.push([e.experiment, e.flyhostel, e.group_size, e.date, e.start_time, e.duration_h, e.has_val,
+    lines.push([e.experiment, e.flyhostel, e.group_size, e.date, e.start_time, e.duration_h, e.has_val, e.analyzed !== false,
       ...columns.map((c) => r[c])].map(csvCell).join(','));
   }
   const url = URL.createObjectURL(new Blob([lines.join('\n') + '\n'], { type: 'text/csv' }));
@@ -563,9 +577,10 @@ function downloadCsv(rows, columns) {
 }
 
 export default function OverviewTab({ active, currentExperiment, onOpenExperiment }) {
-  const { log } = useConsole();
+  const { log, trackJob } = useConsole();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [reindexing, setReindexing] = useState(false);
   const [error, setError] = useState(null);
   const [unit, setUnit] = useState(() => loadStored('fh-overview-unit', 'experiments'));
   const [charts, setCharts] = useState(() => loadStored('fh-overview-charts', DEFAULT_CHARTS));
@@ -590,6 +605,7 @@ export default function OverviewTab({ active, currentExperiment, onOpenExperimen
         setData(d);
         const broken = d.experiments.filter((e) => e.error).length;
         if (broken) log('warning', `Overview: ${broken} experiment(s) in index.txt could not be read`);
+        (d.warnings || []).forEach((w) => log('warning', `Overview: ${w}`));
       })
       .catch((err) => {
         const msg = err.response?.data?.error || err.message;
@@ -598,6 +614,20 @@ export default function OverviewTab({ active, currentExperiment, onOpenExperimen
       })
       .finally(() => setLoading(false));
   }, [log]);
+
+  // Rewrites $FLYHOSTEL_VIDEOS/index.txt on the server (find … -regex .*FlyHostel.*db), then reloads.
+  const reindex = useCallback(() => {
+    setReindexing(true);
+    api.post('/api/overview/reindex')
+      .then((r) => trackJob(unwrap(r.data)))
+      .then((job) => {
+        if (job?.status !== 'done') return;
+        log('success', `index.txt rebuilt: ${job.items[0]?.count} databases`);
+        fetchData();
+      })
+      .catch((err) => log('error', `Could not rebuild index.txt: ${err.response?.data?.error || err.message}`))
+      .finally(() => setReindexing(false));
+  }, [trackJob, log, fetchData]);
 
   // Scanning every database takes a few seconds: only when the tab is first opened.
   useEffect(() => {
@@ -681,6 +711,10 @@ export default function OverviewTab({ active, currentExperiment, onOpenExperimen
                 title="One row per fly matching the current filters, with every metadata column">
           <i className="fa fa-download" style={{ marginRight: 6 }} />CSV
         </button>
+        <button onClick={reindex} disabled={reindexing || loading}
+                title="Rewrite index.txt with every database now in the videos folder, then reload (runs in the background)">
+          <i className={`fa ${reindexing ? 'fa-spinner fa-spin' : 'fa-database'}`} style={{ marginRight: 6 }} />Rebuild index
+        </button>
         <button onClick={() => fetchData(true)} disabled={loading} title="Re-read every database">
           <i className={`fa fa-refresh${loading ? ' fa-spin' : ''}`} style={{ marginRight: 6 }} />Refresh
         </button>
@@ -705,6 +739,8 @@ export default function OverviewTab({ active, currentExperiment, onOpenExperimen
         <Stat label="Flies" value={stats.flies} sub={of(stats.flies, totals.flies)} />
         <Stat label="Genotypes" value={stats.genotypes} sub={of(stats.genotypes, totals.genotypes)} />
         <Stat label="FlyHostels" value={stats.hostels} />
+        <Stat label="Not analyzed" value={stats.notAnalyzed}
+              sub="folder and metadata, no database" />
         <Stat label="Validated (_VAL)" value={stats.validated}
               sub={stats.experiments ? `${Math.round((100 * stats.validated) / stats.experiments)}% of experiments` : undefined} />
         <Stat label="Recorded" value={stats.first ? `${stats.first.slice(0, 7)} → ${stats.last.slice(0, 7)}` : '—'} />

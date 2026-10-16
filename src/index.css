@@ -529,3 +529,5 @@ body.resizing-row, body.resizing-row * { cursor: row-resize !important; user-sel
 .ov-query-result { flex-basis: 100%; font-size: 13px; }
 .ov-query-n { font-size: 16px; color: var(--accent); }
 .ov-query-hint { color: var(--subtext); font-size: 12px; }
+.ov-badge { margin-left: 6px; padding: 0 6px; border-radius: 8px; font-family: var(--font, inherit); font-size: 11px;
+  background: var(--surface-2); border: 1px solid var(--border); color: var(--subtext); white-space: nowrap; }
