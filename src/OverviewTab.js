@@ -14,6 +14,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import api from './api';
 import { useConsole } from './MessageConsole';
+import MetadataUpdate from './MetadataUpdate';
 
 const MISSING = '(missing)';
 const TOP_N = 12;
@@ -458,7 +459,7 @@ const TABLE_COLUMNS = [
 
 // Experiments whose light cycle is not (only) in the `light_cycle` column; the
 // server merges it (overview.py, merge_light_cycle) and says how in light_cycle_flags.
-function LightCycleIssues({ rows, onOpen }) {
+function LightCycleIssues({ rows, onOpen, onUpdateMetadata }) {
   const flagged = useMemo(() => {
     const seen = new Map();
     for (const r of rows) {
@@ -508,7 +509,10 @@ function LightCycleIssues({ rows, onOpen }) {
                 <td className="mono">{e.experiment}</td>
                 <td>{e.cycles}</td>
                 <td className="ov-wrap">{e.light_cycle_flags.join('; ')}</td>
-                <td><button onClick={() => onOpen(e.experiment)}>Open</button></td>
+                <td className="ov-actions">
+                  <SheetButton experiment={e} onClick={onUpdateMetadata} />
+                  <button onClick={() => onOpen(e.experiment)}>Open</button>
+                </td>
               </tr>
             ))}
           </tbody>
@@ -521,7 +525,18 @@ function LightCycleIssues({ rows, onOpen }) {
 // SELECTED_EXPERIMENT may be in underscore form (VALIDATOR_EXPERIMENT allows both).
 const sameExperiment = (a, b) => !!a && !!b && a.replace(/\//g, '_') === b.replace(/\//g, '_');
 
-function ExperimentTable({ rows, onOpen, current }) {
+// Re-download the experiment's metadata from the Google sheets into its database.
+function SheetButton({ experiment, onClick }) {
+  if (experiment.analyzed === false || experiment.error) return null;
+  return (
+    <button className="ov-sheet" onClick={() => onClick(experiment.experiment)}
+            title="Update the metadata in this experiment's database from the Google sheets (shows the new rows and checks before writing)">
+      <i className="fa fa-cloud-download" />
+    </button>
+  );
+}
+
+function ExperimentTable({ rows, onOpen, current, onUpdateMetadata }) {
   const [sort, setSort] = useState({ key: 'date', desc: true });
   const experiments = useMemo(() => {
     const byExp = new Map();
@@ -590,7 +605,8 @@ function ExperimentTable({ rows, onOpen, current }) {
                   {e.light_cycle}{e.light_cycle_flags?.length > 0 && <span className="ov-warn"> ⚠</span>}
                 </td>
                 <td>{e.has_val ? '✓' : ''}</td>
-                <td>
+                <td className="ov-actions">
+                  <SheetButton experiment={e} onClick={onUpdateMetadata} />
                   <button disabled={!!e.error || e.analyzed === false || sameExperiment(e.experiment, current)}
                           onClick={() => onOpen(e.experiment)}
                           title={e.analyzed === false ? 'Not analyzed: no database to open' : 'Load this experiment and open it in the Group viewer'}>
@@ -633,6 +649,7 @@ export default function OverviewTab({ active, currentExperiment, onOpenExperimen
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [reindexing, setReindexing] = useState(false);
+  const [metadataOf, setMetadataOf] = useState(null);   // experiment whose sheet metadata is being updated
   const [error, setError] = useState(null);
   const [unit, setUnit] = useState(() => loadStored('fh-overview-unit', 'experiments'));
   const [charts, setCharts] = useState(() => loadStored('fh-overview-charts', DEFAULT_CHARTS));
@@ -815,9 +832,14 @@ export default function OverviewTab({ active, currentExperiment, onOpenExperimen
       <CrossTab rows={filtered} unit={unit} rowProp={rowProp} colProp={colProp} props={allProps}
                 setRowProp={setRowProp} setColProp={setColProp} />
 
-      <LightCycleIssues rows={filtered} onOpen={onOpenExperiment} />
+      <LightCycleIssues rows={filtered} onOpen={onOpenExperiment} onUpdateMetadata={setMetadataOf} />
 
-      <ExperimentTable rows={filtered} onOpen={onOpenExperiment} current={currentExperiment} />
+      <ExperimentTable rows={filtered} onOpen={onOpenExperiment} current={currentExperiment}
+                       onUpdateMetadata={setMetadataOf} />
+
+      {metadataOf && (
+        <MetadataUpdate experiment={metadataOf} onClose={() => setMetadataOf(null)} onWritten={() => fetchData()} />
+      )}
     </div>
   );
 }

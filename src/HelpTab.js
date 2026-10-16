@@ -308,6 +308,17 @@ export default function HelpTab() {
               folder (same as <code>find -L -maxdepth 4 -mindepth 4 -regex .*FlyHostel.*db -not -name index.db</code>),
               in the background, and reloads the dashboard. Progress shows in the console.
             </li>
+            <li>
+              <b>Fixing metadata.</b> After correcting a sheet (e.g. a light cycle written in the wrong
+              column), click <i className="fa fa-cloud-download" /> next to the experiment (experiments
+              table or light cycle list). It downloads that experiment's rows from the sheets
+              (<code>download_flyhostel_metadata</code>, ~10 s) and shows them with checks: one row
+              per animal, FlyHostel number / date / time matching the experiment, identities present
+              and unique, genotype filled in, light cycle encoding. Changed cells are highlighted
+              (hover for the current value), and the rows are also printed in the console. Nothing is
+              written until <i>Write to database</i>; failed checks (✗) must be confirmed first. The
+              old metadata is saved in <code>&lt;experiment&gt;/metadata_backups/</code>.
+            </li>
             <li><i>Count</i> switches every chart between experiments and flies.</li>
             <li>
               <b>Click a bar to filter</b> on that value; click more bars to add values.
