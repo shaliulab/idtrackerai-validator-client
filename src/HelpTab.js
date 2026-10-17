@@ -383,8 +383,8 @@ export default function HelpTab() {
           <p>
             Every experiment folder in the videos drives, with the space it takes and whether its
             critical files are in <code>/flyhostel_data/backup</code> (copied there by flyhostel's backup
-            script: database, index.db, metadata.yaml, landmarks, configs, raw chunks 0–399, pose of those
-            chunks, motionmapper outputs, interactions, PE traces and validation files).
+            script: database, index.db, metadata.yaml, landmarks, configs, raw chunks 0–399, pose of the
+            chunks among those that the database tracks, motionmapper outputs, interactions, PE traces and validation files).
           </p>
           <ul>
             <li><i>Backup</i>: <b>backed up</b> = every critical file has a copy of the same size that is not
@@ -392,6 +392,8 @@ export default function HelpTab() {
               copy; <b>no backup</b> = no folder in the backup. ▸ lists the files concerned.</li>
             <li><i>Not in backup</i>: space taken by files with no identical copy, critical or not (chunks from
               400 on, idtrackerai sessions, motionmapper movies, …). They are lost on delete.</li>
+            <li><b>⚠ gaps</b>: the chunks tracked in the database, or the raw chunks, are not consecutive.
+              This is a serious problem; ▸ lists the missing chunks and <i>Backup: ⚠ chunk gaps</i> filters them.</li>
             <li><i>Dropbox index</i>: listed in <code>FlyHostel&lt;N&gt;_dropbox_index.txt</code> of the videos
               folder, a snapshot that may be old.</li>
             <li>The table shows the last scan. <i>Scan all</i> walks every folder again in the background
