@@ -649,9 +649,11 @@ function ExperimentTable({ rows, onOpen, current, onUpdateMetadata, sheetStatus,
                 </td>
                 <td className="ov-actions">
                   <SheetButton experiment={e} onClick={onUpdateMetadata} status={sheetStatus[e.experiment]} />
-                  <button disabled={!!e.error || e.analyzed === false || sameExperiment(e.experiment, current)}
+                  <button disabled={!!e.error || sameExperiment(e.experiment, current)}
                           onClick={() => onOpen(e.experiment)}
-                          title={e.analyzed === false ? 'Not analyzed: no database to open' : 'Load this experiment and open it in the Group viewer'}>
+                          title={e.analyzed === false
+                            ? 'Not analyzed: open its recording (and the blobs_collections of idtrackerai, if any) in the Group viewer'
+                            : 'Load this experiment and open it in the Group viewer'}>
                     Open
                   </button>
                 </td>

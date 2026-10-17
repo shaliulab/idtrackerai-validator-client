@@ -28,6 +28,7 @@ const selectStyles = {
   indicatorsContainer: (base) => ({ ...base, height: 30 }),
   indicatorSeparator: (base) => ({ ...base, background: 'var(--border)' }),
   menu: (base) => ({ ...base, background: 'var(--surface)', border: '1px solid var(--border)', zIndex: 20 }),
+  groupHeading: (base) => ({ ...base, color: 'var(--subtext)' }),
   option: (base, state) => ({
     ...base,
     fontFamily: 'monospace',
@@ -55,10 +56,14 @@ const SelectComponent = ({ onExperimentChange }) => {
   useEffect(() => {
     api.get('/api/list')
       .then(response => {
-        const data = unwrap(response.data)["experiments"];
-        if (Array.isArray(data)) {
-          setOptions(data.map(item => ({ value: item, label: item })));
-        }
+        // Experiments without database (as in the Overview) can be opened too: their
+        // recording, and the blobs_collections of idtrackerai if it has started.
+        const { experiments = [], not_analyzed: notAnalyzed = [] } = unwrap(response.data);
+        setOptions([
+          { label: 'Analyzed', options: experiments.map(item => ({ value: item, label: item })) },
+          { label: 'No database (recording / idtrackerai blobs only)',
+            options: notAnalyzed.map(item => ({ value: item, label: `${item} (no database)` })) },
+        ]);
       })
       .catch(err => {
         console.error("Error fetching experiments:", err);

@@ -98,7 +98,10 @@ export default function HelpTab() {
           <ol>
             <li>
               <b>Load an experiment.</b> Choose one in <i>Browse available experiments…</i>
-              in the top bar. All tabs follow the loaded experiment.
+              in the top bar. All tabs follow the loaded experiment. Experiments not analyzed
+              yet (no database, listed under <i>No database</i>, or <i>Open</i> in the
+              Overview) show their recording and, once idtrackerai has started on them, its
+              blobs; the PE and Ethograms tabs are grayed out for them.
             </li>
             <li>
               <b>Choose the tracking source.</b> Ticking <i>Validated tracking</i> reads
@@ -111,7 +114,8 @@ export default function HelpTab() {
               (<code>idtrackerai/session_&lt;chunk&gt;/</code>, most advanced step), handy to
               check an ongoing run. The tag beside it names the file (hover for when it was
               written); identity 0 means idtrackerai has not assigned one yet. The first
-              frame of a chunk takes a few seconds while the file loads.
+              frame of a chunk takes a few seconds while the file loads. <i>None</i> shows
+              the recording only. Sources the experiment does not have are grayed out.
             </li>
             <li>
               <b>Watch the console.</b> The panel at the bottom shows messages, errors and the

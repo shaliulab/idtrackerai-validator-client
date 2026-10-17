@@ -170,6 +170,11 @@ function App() {
   // Loaded experiment (slash form), shown in the Overview table; bumped key remounts
   // the experiment picker after a load from elsewhere so it shows the new one.
   const [currentExperiment, setCurrentExperiment] = useState(null);
+  // What the loaded experiment has. Without database (not analyzed yet) only its
+  // recording and idtrackerai's blobs_collections can be shown.
+  const [experimentInfo, setExperimentInfo] = useState({ has_database: true, has_blobs: false });
+  const noDatabase = experimentInfo.has_database
+    ? null : 'Not available: the loaded experiment has no database (not analyzed yet)';
   const [pickerKey, setPickerKey] = useState(0);
   // Bumped after the PE annotations are wiped: remounts PEValidator so it reloads.
   const [peReloadKey, setPeReloadKey] = useState(0);
@@ -273,7 +278,9 @@ function App() {
   const fetchCurrentExperiment = useCallback(async () => {
     try {
       const { data } = await api.get('/api/current_experiment');
-      setCurrentExperiment((typeof data === 'string' ? JSON.parse(data) : data)?.experiment ?? null);
+      const info = typeof data === 'string' ? JSON.parse(data) : data;
+      setCurrentExperiment(info?.experiment ?? null);
+      setExperimentInfo({ has_database: info?.has_database ?? true, has_blobs: !!info?.has_blobs });
     } catch {
       setCurrentExperiment(null);
     }
@@ -325,12 +332,14 @@ function App() {
   useEffect(() => { fetchFlies(); }, [fetchFlies]);
 
   // Ctrl+1 … Ctrl+5 switch tabs
+  const hasDatabaseRef = useRef(true);
+  hasDatabaseRef.current = experimentInfo.has_database;
   useEffect(() => {
     const onKey = (e) => {
       if (!e.ctrlKey || e.metaKey || e.altKey) return;   // Ctrl only, not Cmd/Alt combos
       if (e.key === '1') { e.preventDefault(); setActiveTab('group_viewer'); }
-      else if (e.key === '2') { e.preventDefault(); setActiveTab('proboscis_extension'); }
-      else if (e.key === '3') { e.preventDefault(); setActiveTab('ethogram'); }
+      else if (e.key === '2') { e.preventDefault(); if (hasDatabaseRef.current) setActiveTab('proboscis_extension'); }
+      else if (e.key === '3') { e.preventDefault(); if (hasDatabaseRef.current) setActiveTab('ethogram'); }
       else if (e.key === '4') { e.preventDefault(); setActiveTab('overview'); }
       else if (e.key === '5') { e.preventDefault(); setActiveTab('help'); }
     };
@@ -382,8 +391,9 @@ function App() {
   const showPoseRef = useRef(showPose);
   showPoseRef.current = showPose;
 
-  // Tracking source: 'db' (the experiment's database) or 'blobs' (idtrackerai's
-  // blobs_collection*.npy of the frame's chunk, to check an ongoing run).
+  // Tracking source: 'db' (the experiment's database), 'blobs' (idtrackerai's
+  // blobs_collection*.npy of the frame's chunk, to check an ongoing run) or 'none'
+  // (the recording only). Set from experimentInfo on every experiment load.
   const [trackingSource, setTrackingSource] = useState('db');
   const trackingSourceRef = useRef(trackingSource);
   trackingSourceRef.current = trackingSource;
@@ -397,7 +407,9 @@ function App() {
         const image = await api.get(`/api/frame/${n}`, { responseType: 'blob' });
         // Segmentation is costly: only ask for contours when they are drawn.
         const [tracking, preprocess] = await Promise.all([
-          api.get(`/api/tracking/${n}?pose=${showPoseRef.current ? 1 : 0}&source=${trackingSourceRef.current}`),
+          trackingSourceRef.current === 'none'
+            ? { data: { tracking_data: [] } }
+            : api.get(`/api/tracking/${n}?pose=${showPoseRef.current ? 1 : 0}&source=${trackingSourceRef.current}`),
           PRINT_CONTOUR
             ? api.get(`/api/preprocess/${n}`).catch(() => ({ data: { contours: [] } }))
             : { data: { contours: [] } },
@@ -479,6 +491,18 @@ function App() {
     player.invalidate();
   }, [player, showPose]);
 
+  // Each loaded experiment starts on its database, else its blobs, else the recording only
+  useEffect(() => {
+    setTrackingSource(experimentInfo.has_database ? 'db' : experimentInfo.has_blobs ? 'blobs' : 'none');
+  }, [experimentInfo]);
+
+  // PE and Ethograms need the database
+  useEffect(() => {
+    if (!experimentInfo.has_database) {
+      setActiveTab((tab) => (tab === 'proboscis_extension' || tab === 'ethogram' ? 'group_viewer' : tab));
+    }
+  }, [experimentInfo]);
+
   const firstTrackingSource = useRef(true);
   useEffect(() => {
     if (firstTrackingSource.current) { firstTrackingSource.current = false; return; }
@@ -529,7 +553,6 @@ function App() {
   const onExperimentLoaded = useCallback(async (firstFrame) => {
     // Load the new experiment's first frame, not the old frame number again.
     player.invalidate(firstFrame);
-    setTrackingSource('db');
     setFrameNumber(firstFrame);
     fetchFramerate();
     fetchFrameRange();
@@ -591,11 +614,12 @@ function App() {
         <span className="spacer" />
 
         <div className="app-actions">
-          <label className="chip" title="Database: the experiment's .db file. blobs_collection: idtrackerai's blobs_collection*.npy of the frame's chunk (idtrackerai/session_<chunk>/, most advanced step), e.g. to check an ongoing run">
+          <label className="chip" title="Database: the experiment's .db file. blobs_collection: idtrackerai's blobs_collection*.npy of the frame's chunk (idtrackerai/session_<chunk>/, most advanced step), e.g. to check an ongoing run. Grayed out when the experiment has none">
             Tracking
             <select value={trackingSource} onChange={(e) => setTrackingSource(e.target.value)}>
-              <option value="db">Database</option>
-              <option value="blobs">blobs_collection</option>
+              <option value="db" disabled={!experimentInfo.has_database}>Database</option>
+              <option value="blobs" disabled={!experimentInfo.has_blobs}>blobs_collection</option>
+              <option value="none">None (recording only)</option>
             </select>
           </label>
           {trackingSource === 'blobs' && <BlobsSourceTag info={blobsInfo} />}
@@ -620,8 +644,8 @@ function App() {
       {/* ── Tabs ── */}
       <nav className="tabs">
         <Tab id="group_viewer" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+1">Group viewer</Tab>
-        <Tab id="proboscis_extension" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+2">Proboscis extension (PE)</Tab>
-        <Tab id="ethogram" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+3">Ethograms</Tab>
+        <Tab id="proboscis_extension" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+2" disabled={noDatabase}>Proboscis extension (PE)</Tab>
+        <Tab id="ethogram" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+3" disabled={noDatabase}>Ethograms</Tab>
         <Tab id="overview" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+4">Overview</Tab>
         <Tab id="help" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+5">
           <i className="fa fa-question-circle-o" style={{ marginRight: 6 }} />How to use
