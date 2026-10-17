@@ -554,3 +554,24 @@ body.resizing-row, body.resizing-row * { cursor: row-resize !important; user-sel
 .ov-sheet-status.ov-sheet-minor, .ov-sheet-status.ov-sheet-same { color: var(--subtext); }
 button.ov-sheet.ov-sheet-changes { border-color: var(--accent); color: var(--accent); }
 button.ov-sheet.ov-sheet-error { border-color: var(--danger); color: var(--danger); }
+
+/* DataManagementTab.js */
+.dm-table-scroll { max-height: 70vh; }
+.dm-status { font-size: 12px; font-weight: 600; white-space: nowrap; padding: 1px 8px; border-radius: 8px; border: 1px solid; }
+.dm-status.dm-ok { color: #2ca02c; border-color: #2ca02c; }
+.dm-status.dm-warn { color: #e07b00; border-color: #e07b00; }
+.dm-status.dm-bad { color: var(--danger); border-color: var(--danger); }
+.dm-status.dm-none { color: var(--subtext); border-color: var(--border); font-weight: 400; }
+.dm-expand { width: 20px; margin-right: 4px; }
+.ov-table tr.dm-details-row { background: var(--surface-2); }
+.dm-details { white-space: normal; font-size: 12px; line-height: 1.6; padding: 4px 8px; }
+.dm-details .mono, .dm-dialog .mono { font-family: monospace; }
+.dm-files .mono { word-break: break-all; }
+.dm-dialog { width: min(720px, 100%); }
+.dm-banner { margin: 8px 0 12px; }
+.dm-lost { font-size: 12px; margin-top: 2px; }
+.dm-confirm { flex-wrap: wrap; }
+.dm-problem-badge { margin-left: 6px; padding: 0 6px; border-radius: 8px; font-size: 11px; font-weight: 600;
+  color: var(--danger); border: 1px solid var(--danger); background: var(--danger-soft); white-space: nowrap; }
+.dm-problems { color: var(--danger); }
+.dm-problems ul { margin: 2px 0 4px; padding-left: 20px; }

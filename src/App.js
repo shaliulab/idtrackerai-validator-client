@@ -16,6 +16,7 @@ import PEValidator from './PEValidator';
 import DeletePEAnnotations from './DeletePEAnnotations';
 import HelpTab from './HelpTab';
 import OverviewTab from './OverviewTab';
+import DataManagementTab from './DataManagementTab';
 import ValidationCsvBuilder from './ValidationCsvBuilder';
 import CvatLinks from './CvatLinks';
 import api from './api';
@@ -331,7 +332,7 @@ function App() {
 
   useEffect(() => { fetchFlies(); }, [fetchFlies]);
 
-  // Ctrl+1 … Ctrl+5 switch tabs
+  // Ctrl+1 … Ctrl+6 switch tabs
   const hasDatabaseRef = useRef(true);
   hasDatabaseRef.current = experimentInfo.has_database;
   useEffect(() => {
@@ -342,6 +343,7 @@ function App() {
       else if (e.key === '3') { e.preventDefault(); if (hasDatabaseRef.current) setActiveTab('ethogram'); }
       else if (e.key === '4') { e.preventDefault(); setActiveTab('overview'); }
       else if (e.key === '5') { e.preventDefault(); setActiveTab('help'); }
+      else if (e.key === '6') { e.preventDefault(); setActiveTab('data_management'); }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -647,6 +649,7 @@ function App() {
         <Tab id="proboscis_extension" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+2" disabled={noDatabase}>Proboscis extension (PE)</Tab>
         <Tab id="ethogram" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+3" disabled={noDatabase}>Ethograms</Tab>
         <Tab id="overview" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+4">Overview</Tab>
+        <Tab id="data_management" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+6">Data management</Tab>
         <Tab id="help" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+5">
           <i className="fa fa-question-circle-o" style={{ marginRight: 6 }} />How to use
         </Tab>
@@ -813,6 +816,10 @@ function App() {
           currentExperiment={currentExperiment}
           onOpenExperiment={openExperiment}
         />
+      </div>
+
+      <div className="tab-panel" style={{ display: activeTab === 'data_management' ? 'block' : 'none' }}>
+        <DataManagementTab active={activeTab === 'data_management'} currentExperiment={currentExperiment} />
       </div>
 
       <div className="tab-panel" style={{ display: activeTab === 'help' ? 'block' : 'none' }}>

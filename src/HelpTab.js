@@ -13,6 +13,7 @@ const SECTIONS = [
   { id: 'help-pe', title: 'Proboscis extension (PE)' },
   { id: 'help-ethogram', title: 'Ethograms' },
   { id: 'help-overview-tab', title: 'Overview' },
+  { id: 'help-data', title: 'Data management' },
   { id: 'help-keys', title: 'Keyboard & mouse' },
   { id: 'help-glossary', title: 'Glossary' },
 ];
@@ -28,7 +29,7 @@ function Section({ id, title, children }) {
 
 const SHORTCUTS = [
   ['Anywhere', [
-    [<><Key>Ctrl</Key>+<Key>1</Key> / <Key>2</Key> / <Key>3</Key> / <Key>4</Key> / <Key>5</Key></>, 'Switch to Group viewer / PE / Ethograms / Overview / How to use'],
+    [<><Key>Ctrl</Key>+<Key>1</Key> / <Key>2</Key> / <Key>3</Key> / <Key>4</Key> / <Key>5</Key> / <Key>6</Key></>, 'Switch to Group viewer / PE / Ethograms / Overview / How to use / Data management'],
   ]],
   ['Group viewer', [
     [<><Key>1</Key> / <Key>7</Key></>, 'Previous / next chunk'],
@@ -86,10 +87,11 @@ export default function HelpTab() {
             <li><b>check identities</b> frame by frame, and find the frames where tracking failed or was corrected (Group viewer);</li>
             <li><b>annotate proboscis extension</b> events picked up by the pose pipeline (PE tab);</li>
             <li><b>browse each fly's behaviour</b> over the whole experiment and export sleep bout videos (Ethograms);</li>
-            <li><b>see which experiments exist</b>, by genotype, group size, sex and any other metadata (Overview).</li>
+            <li><b>see which experiments exist</b>, by genotype, group size, sex and any other metadata (Overview);</li>
+            <li><b>free disk space</b> by deleting experiments that are backed up (Data management).</li>
           </ul>
           <p className="help-note">
-            Each tab name shows its shortcut (<Key>Ctrl</Key>+<Key>1</Key>…<Key>5</Key>).
+            Each tab name shows its shortcut (<Key>Ctrl</Key>+<Key>1</Key>…<Key>6</Key>).
             Hover over a button to see what it does.
           </p>
         </Section>
@@ -375,6 +377,29 @@ export default function HelpTab() {
             <code>light_cycle</code> are listed under <i>Non-standard light cycle encoding</i> and marked ⚠
             in the experiments table. Only the dashboard is affected: the databases are unchanged.
           </p>
+        </Section>
+
+        <Section id="help-data" title="Data management">
+          <p>
+            Every experiment folder in the videos drives, with the space it takes and whether its
+            critical files are in <code>/flyhostel_data/backup</code> (copied there by flyhostel's backup
+            script: database, index.db, metadata.yaml, landmarks, configs, raw chunks 0–399, pose of those
+            chunks, motionmapper outputs, interactions, PE traces and validation files).
+          </p>
+          <ul>
+            <li><i>Backup</i>: <b>backed up</b> = every critical file has a copy of the same size that is not
+              older; <b>outdated</b> = some changed since (e.g. the database); <b>incomplete</b> = some have no
+              copy; <b>no backup</b> = no folder in the backup. ▸ lists the files concerned.</li>
+            <li><i>Not in backup</i>: space taken by files with no identical copy, critical or not (chunks from
+              400 on, idtrackerai sessions, motionmapper movies, …). They are lost on delete.</li>
+            <li><i>Dropbox index</i>: listed in <code>FlyHostel&lt;N&gt;_dropbox_index.txt</code> of the videos
+              folder, a snapshot that may be old.</li>
+            <li>The table shows the last scan. <i>Scan all</i> walks every folder again in the background
+              (several minutes); ↻ rescans one experiment.</li>
+            <li><i>Delete</i> is only enabled for backed-up experiments that are not loaded. You type the
+              experiment name to confirm; the server scans it again, deletes the folder (the backup is not
+              touched) and removes its database from <code>index.txt</code>.</li>
+          </ul>
         </Section>
 
         <Section id="help-keys" title="Keyboard & mouse">
