@@ -106,6 +106,12 @@ export default function HelpTab() {
               <code>ROI_0_VAL</code>) instead of the raw tracking. Each experiment starts on
               the validated tables when it has more than one fly and they exist. Your
               choice lasts until the next experiment is loaded.
+              The <i>Tracking</i> menu next to it switches from the database to{' '}
+              <i>blobs_collection</i>: the blobs idtrackerai saved for the displayed chunk
+              (<code>idtrackerai/session_&lt;chunk&gt;/</code>, most advanced step), handy to
+              check an ongoing run. The tag beside it names the file (hover for when it was
+              written); identity 0 means idtrackerai has not assigned one yet. The first
+              frame of a chunk takes a few seconds while the file loads.
             </li>
             <li>
               <b>Watch the console.</b> The panel at the bottom shows messages, errors and the

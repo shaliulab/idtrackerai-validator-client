@@ -85,6 +85,18 @@ function VersionTag() {
   );
 }
 
+// File the displayed blobs were read from and when idtrackerai last wrote it
+function BlobsSourceTag({ info }) {
+  if (!info) return null;
+  if (info.error) {
+    return <span className="chip" style={{ color: 'var(--danger)' }} title={info.error}>chunk {info.chunk}: no blobs</span>;
+  }
+  // idtrackerai/session_000063/tracking/blobs_collection.npy -> 000063/tracking
+  const short = info.path.replace(/^idtrackerai\/session_/, '').replace(/\/blobs_collection(_\w+)?\.npy$/, (m, s) => (s || ''));
+  const written = info.mtime ? new Date(info.mtime * 1000).toLocaleString() : '?';
+  return <span className="chip" title={`${info.path}, written ${written}`}>{short}</span>;
+}
+
 function Logos() {
   const [failed, setFailed] = useState({});
   const shown = LOGOS.filter((l) => !failed[l.src]);
@@ -370,6 +382,14 @@ function App() {
   const showPoseRef = useRef(showPose);
   showPoseRef.current = showPose;
 
+  // Tracking source: 'db' (the experiment's database) or 'blobs' (idtrackerai's
+  // blobs_collection*.npy of the frame's chunk, to check an ongoing run).
+  const [trackingSource, setTrackingSource] = useState('db');
+  const trackingSourceRef = useRef(trackingSource);
+  trackingSourceRef.current = trackingSource;
+  // File the displayed blobs come from, or why there are none ({path, mtime, error})
+  const [blobsInfo, setBlobsInfo] = useState(null);
+
   const playerRef = useRef(null);
   if (playerRef.current === null) {
     playerRef.current = new FramePlayer({
@@ -377,7 +397,7 @@ function App() {
         const image = await api.get(`/api/frame/${n}`, { responseType: 'blob' });
         // Segmentation is costly: only ask for contours when they are drawn.
         const [tracking, preprocess] = await Promise.all([
-          api.get(`/api/tracking/${n}?pose=${showPoseRef.current ? 1 : 0}`),
+          api.get(`/api/tracking/${n}?pose=${showPoseRef.current ? 1 : 0}&source=${trackingSourceRef.current}`),
           PRINT_CONTOUR
             ? api.get(`/api/preprocess/${n}`).catch(() => ({ data: { contours: [] } }))
             : { data: { contours: [] } },
@@ -396,6 +416,7 @@ function App() {
         setTrackingData(validateData(bundle.tracking.tracking_data || []));
         setTrackingPoseData(validatePoseData(bundle.tracking.pose || {}));
         setNumberOfAnimals(bundle.tracking.number_of_animals || 0);
+        setBlobsInfo(bundle.tracking.blobs || null);
         setContoursData(bundle.contours);
       },
       onError: (n, error) => {
@@ -458,6 +479,18 @@ function App() {
     player.invalidate();
   }, [player, showPose]);
 
+  const firstTrackingSource = useRef(true);
+  useEffect(() => {
+    if (firstTrackingSource.current) { firstTrackingSource.current = false; return; }
+    player.invalidate();
+  }, [player, trackingSource]);
+
+  // Log each blobs_collection problem once, not once per frame
+  const blobsError = trackingSource === 'blobs' ? blobsInfo?.error : null;
+  useEffect(() => {
+    if (blobsError) log('warning', blobsError);
+  }, [blobsError, log]);
+
   // Playback: the player only advances once the next frame is loaded, so it never
   // runs ahead of the server. Speed = 2 x "Playback Framerate" recording frames per
   // second, as before; shown at up to PLAYBACK_FPS frames per second.
@@ -496,6 +529,7 @@ function App() {
   const onExperimentLoaded = useCallback(async (firstFrame) => {
     // Load the new experiment's first frame, not the old frame number again.
     player.invalidate(firstFrame);
+    setTrackingSource('db');
     setFrameNumber(firstFrame);
     fetchFramerate();
     fetchFrameRange();
@@ -557,10 +591,21 @@ function App() {
         <span className="spacer" />
 
         <div className="app-actions">
-          <label className="chip check" title="Read tracking from IDENTITY_VAL (validated) instead of IDENTITY">
+          <label className="chip" title="Database: the experiment's .db file. blobs_collection: idtrackerai's blobs_collection*.npy of the frame's chunk (idtrackerai/session_<chunk>/, most advanced step), e.g. to check an ongoing run">
+            Tracking
+            <select value={trackingSource} onChange={(e) => setTrackingSource(e.target.value)}>
+              <option value="db">Database</option>
+              <option value="blobs">blobs_collection</option>
+            </select>
+          </label>
+          {trackingSource === 'blobs' && <BlobsSourceTag info={blobsInfo} />}
+          <label className="chip check" title={trackingSource === 'db'
+            ? 'Read tracking from IDENTITY_VAL (validated) instead of IDENTITY'
+            : 'Only applies to the database'}>
             <input
               type="checkbox"
               checked={useVal}
+              disabled={trackingSource !== 'db'}
               onChange={(e) => toggleUseVal(e.target.checked)}
             />
             Validated tracking
