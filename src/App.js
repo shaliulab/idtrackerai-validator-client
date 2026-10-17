@@ -544,13 +544,6 @@ function App() {
   const firstRow = trackingData[0];
   const chunksize = firstRow?.chunksize;
 
-  const flatToSlash = (exp) => {
-    const parts = exp.split('_');
-    return parts.length < 3 ? exp
-      : `${parts[0]}/${parts[1]}/${parts.slice(2).join('_')}`;
-  };
-
-
   // Everything that depends on the loaded experiment, refreshed after /api/load.
   const onExperimentLoaded = useCallback(async (firstFrame) => {
     // Load the new experiment's first frame, not the old frame number again.
@@ -582,9 +575,9 @@ function App() {
     const experiment = flyId.split('__')[0];
     const current = selectedFly?.split('__')[0];
     if (experiment !== current) {
-      // PEValidator's fly ids are flat (FlyHostel4_2X_2025-06-28_16-00-00);
-      // /api/load expects the slash form, as typed in SelectComponent.
-      const data = await postLoad(flatToSlash(experiment));
+      // PEValidator's fly ids are flat (FlyHostel4_2X_2025-06-28_16-00-00, or
+      // FlyHostel1_4X_2026-10-13_17-00-00_arena1); /api/load takes either form.
+      const data = await postLoad(experiment);
       await onExperimentLoaded(data.first_frame ?? FIRST_FRAME);
     }
     setSelectedFly(flyId);

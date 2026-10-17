@@ -161,7 +161,10 @@ export default function EthogramViewer({ flies, request, animalMetadata, active,
 
         let figure = figureCache.current.get(fly);
         if (!figure) {
+          // drawn by the server from the fly's feather on first request (can take a while)
+          if (entry && !entry.drawn) log('info', `${fly}: drawing its ethogram from the feather file…`);
           const { data } = await api.get(`${API}/${fly}/figure`);
+          if (entry && !entry.drawn) entry.drawn = true;
           figure = unwrap(data);
           figureCache.current.set(fly, figure);
           while (figureCache.current.size > FIGURE_CACHE_SIZE) {
@@ -203,7 +206,7 @@ export default function EthogramViewer({ flies, request, animalMetadata, active,
     };
     load();
     return () => { cancelled = true; };
-  }, [fly, active, flies, moveCursor]);
+  }, [fly, active, flies, moveCursor, log]);
 
   // Plotly cannot size itself while the tab is display:none.
   useEffect(() => {
@@ -435,9 +438,9 @@ export default function EthogramViewer({ flies, request, animalMetadata, active,
         <label>
           Fly:&nbsp;
           <select value={fly || ''} onChange={(e) => setFly(e.target.value)} style={selectStyle}>
-            {flies.map(({ fly: f, available }) => (
+            {flies.map(({ fly: f, available, drawn }) => (
               <option key={f} value={f}>
-                {f}{available ? '' : ' (no ethogram)'}
+                {f}{!available ? ' (no ethogram)' : drawn === false ? ' (not drawn yet)' : ''}
               </option>
             ))}
           </select>
