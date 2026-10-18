@@ -575,3 +575,21 @@ button.ov-sheet.ov-sheet-error { border-color: var(--danger); color: var(--dange
   color: var(--danger); border: 1px solid var(--danger); background: var(--danger-soft); white-space: nowrap; }
 .dm-problems { color: var(--danger); }
 .dm-problems ul { margin: 2px 0 4px; padding-left: 20px; }
+
+/* ── Group viewer: ROIs & segmentation card (RoiPanel.js) ── */
+.roi-card { flex-shrink: 0; }
+.roi-card .card-header { user-select: none; }
+.roi-body { max-height: 40vh; overflow: auto; display: flex; flex-direction: column; gap: 8px; font-size: 13px; }
+.roi-table { width: 100%; border-collapse: collapse; }
+.roi-table th { text-align: left; font-weight: 600; font-size: 11px; color: var(--subtext); padding: 2px 6px; border-bottom: 1px solid var(--border); }
+.roi-table td { padding: 3px 6px; border-bottom: 1px solid var(--border); vertical-align: middle; white-space: nowrap; }
+.roi-table td:nth-child(2) { white-space: normal; word-break: break-all; }
+.roi-details td { background: var(--surface-2); }
+.roi-details ol { margin: 0; padding-left: 18px; }
+.roi-details code { display: block; font-size: 11px; color: var(--subtext); white-space: normal; word-break: break-all; }
+.roi-swatch { display: inline-flex; align-items: center; padding-left: 6px; border-left: 4px solid var(--roi-color); }
+.roi-link { border: none; background: none; padding: 0; color: var(--text); text-align: left; cursor: pointer; }
+.roi-muted { color: var(--subtext); font-size: 12px; }
+.roi-error { color: var(--danger); }
+.roi-readout { padding: 6px 8px; border-radius: var(--radius); background: var(--surface-2); }
+.roi-warn { background: var(--danger-soft); color: var(--danger); }

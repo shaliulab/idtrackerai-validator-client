@@ -9,7 +9,6 @@ import {
   TEXT_FAMILY,
   LABEL_FIELD,
   LABEL_FIELD_CANDIDATES,
-  PRINT_CONTOUR,
 } from './constants';
 
 const SKELETON = [
@@ -70,6 +69,7 @@ const FrameWithSquare = React.forwardRef(
       trackingData,
       videoFrameRate,
       contoursData,
+      roiOverlays,
       frameNumber,
       setFrameNumber,
       isPlaying = false,
@@ -292,9 +292,42 @@ const FrameWithSquare = React.forwardRef(
           context.globalAlpha = 1.0;
         }
 
-        // Contours
-        if (PRINT_CONTOUR && contoursData) {
-          const contour_color = 'hsla(120, 100%, 50%, 0.2)';
+        // ROIs of the idtrackerai settings ("ROIs & segmentation" card): dashed when
+        // the ROI removes its area from the mask, numbered when a source has several
+        if (roiOverlays?.length) {
+          context.save();
+          context.lineWidth = 2;
+          context.font = `bold ${TEXT_SIZE}px ${TEXT_FAMILY}`;
+          roiOverlays.forEach(({ color, rois }) => {
+            rois.forEach((roi, i) => {
+              if (!roi.vertices.length) return;
+              context.beginPath();
+              roi.vertices.forEach(([x, y], idx) => {
+                if (idx === 0) context.moveTo(x * sx, y * sy);
+                else context.lineTo(x * sx, y * sy);
+              });
+              context.closePath();
+              context.setLineDash(roi.sign === '-' ? [8, 6] : []);
+              context.strokeStyle = color;
+              context.stroke();
+              if (rois.length > 1) {
+                const n = roi.vertices.length;
+                const cx = roi.vertices.reduce((a, v) => a + v[0], 0) / n;
+                const cy = roi.vertices.reduce((a, v) => a + v[1], 0) / n;
+                context.fillStyle = color;
+                context.fillText(String(i + 1), cx * sx - TEXT_SIZE / 4, cy * sy + TEXT_SIZE / 3);
+              }
+            });
+          });
+          context.restore();
+        }
+
+        // Contours (segmentation preview)
+        if (contoursData?.length) {
+          const contour_color = 'hsla(120, 100%, 50%, 0.25)';
+          context.save();
+          context.strokeStyle = 'hsl(120, 100%, 40%)';
+          context.lineWidth = 1;
           contoursData.forEach((contour) => {
             context.beginPath();
             contour.forEach((point, idx) => {
@@ -308,7 +341,9 @@ const FrameWithSquare = React.forwardRef(
             context.closePath();
             context.fillStyle = contour_color;
             context.fill();
+            context.stroke();
           });
+          context.restore();
         }
 
         // --- MAGNIFIER OVERLAY ---
@@ -418,6 +453,7 @@ const FrameWithSquare = React.forwardRef(
       imageURL,
       trackingData,
       contoursData,
+      roiOverlays,
       poseData,
       number_of_animals,
       displayWidth,

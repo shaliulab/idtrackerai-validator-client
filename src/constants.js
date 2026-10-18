@@ -9,7 +9,6 @@ export const SQUARE_HEIGHT = 100;
 export const SQUARE_WIDTH = 100;
 export const TEXT_SIZE = 20;
 export const TEXT_FAMILY = "Arial";
-export const PRINT_CONTOUR = false;
 
 // Target display size on the client.
 export const DISPLAY_SIZE = 2000;

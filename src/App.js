@@ -11,7 +11,7 @@ import { BlobsTable } from './blobs_table';
 import SelectComponent, { postLoad } from './selectComponent';
 import Splitter from './Splitter';
 
-import { FIRST_FRAME, PLACEHOLDER_IMAGE, LABEL_FIELD, PRINT_CONTOUR } from './constants';
+import { FIRST_FRAME, PLACEHOLDER_IMAGE, LABEL_FIELD } from './constants';
 import PEValidator from './PEValidator';
 import DeletePEAnnotations from './DeletePEAnnotations';
 import HelpTab from './HelpTab';
@@ -19,6 +19,7 @@ import OverviewTab from './OverviewTab';
 import DataManagementTab from './DataManagementTab';
 import ValidationCsvBuilder from './ValidationCsvBuilder';
 import CvatLinks from './CvatLinks';
+import RoiPanel from './RoiPanel';
 import api from './api';
 import { loadPlotly } from './plotly';
 import MessageConsole, { useConsole, useConsoleState, consoleHeight } from './MessageConsole';
@@ -123,6 +124,10 @@ function App() {
   const [trackingData, setTrackingData] = useState([]);
   const [trackingPoseData, setTrackingPoseData] = useState({});
   const [contoursData, setContoursData] = useState([]);
+  // Segmentation preview of the displayed frame ({contours, areas, error}) and the
+  // ROIs drawn on it, both chosen in the "ROIs & segmentation" card
+  const [segmentation, setSegmentation] = useState(null);
+  const [roiOverlays, setRoiOverlays] = useState([]);
   const [isPlaying, setIsPlaying] = useState(false);
   const [videoFrameRate, setVideoFrameRate] = useState(1);
   const [recordingFramerate, setRecordingFramerate] = useState(null);
@@ -343,8 +348,8 @@ function App() {
       else if (e.key === '2') { e.preventDefault(); if (hasDatabaseRef.current) setActiveTab('proboscis_extension'); }
       else if (e.key === '3') { e.preventDefault(); if (hasDatabaseRef.current) setActiveTab('ethogram'); }
       else if (e.key === '4') { e.preventDefault(); setActiveTab('overview'); }
-      else if (e.key === '5') { e.preventDefault(); setActiveTab('help'); }
-      else if (e.key === '6') { e.preventDefault(); setActiveTab('data_management'); }
+      else if (e.key === '5') { e.preventDefault(); setActiveTab('data_management'); }
+      else if (e.key === '6') { e.preventDefault(); setActiveTab('help'); }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -402,6 +407,10 @@ function App() {
   trackingSourceRef.current = trackingSource;
   // File the displayed blobs come from, or why there are none ({path, mtime, error})
   const [blobsInfo, setBlobsInfo] = useState(null);
+  // Source (id of /api/rois) whose settings segment each frame, or null
+  const [segmentationSource, setSegmentationSource] = useState(null);
+  const segmentationSourceRef = useRef(segmentationSource);
+  segmentationSourceRef.current = segmentationSource;
 
   const playerRef = useRef(null);
   if (playerRef.current === null) {
@@ -409,13 +418,15 @@ function App() {
       load: async (n) => {
         const image = await api.get(`/api/frame/${n}`, { responseType: 'blob' });
         // Segmentation is costly: only ask for contours when they are drawn.
+        const segment = segmentationSourceRef.current;
         const [tracking, preprocess] = await Promise.all([
           trackingSourceRef.current === 'none'
             ? { data: { tracking_data: [] } }
             : api.get(`/api/tracking/${n}?pose=${showPoseRef.current ? 1 : 0}&source=${trackingSourceRef.current}`),
-          PRINT_CONTOUR
-            ? api.get(`/api/preprocess/${n}`).catch(() => ({ data: { contours: [] } }))
-            : { data: { contours: [] } },
+          segment
+            ? api.get(`/api/preprocess/${n}?source=${encodeURIComponent(segment)}`)
+              .catch((error) => ({ data: { contours: [], error: error.response?.data?.error || error.message } }))
+            : null,
         ]);
         const unwrap = (data) => (typeof data === 'string' ? JSON.parse(data) : data);
         return {
@@ -423,7 +434,7 @@ function App() {
           url: URL.createObjectURL(image.data),
           blob: image.data,
           tracking: unwrap(tracking.data),
-          contours: unwrap(preprocess.data).contours || [],
+          segmentation: preprocess && unwrap(preprocess.data),
         };
       },
       onDisplay: (bundle) => {
@@ -432,7 +443,8 @@ function App() {
         setTrackingPoseData(validatePoseData(bundle.tracking.pose || {}));
         setNumberOfAnimals(bundle.tracking.number_of_animals || 0);
         setBlobsInfo(bundle.tracking.blobs || null);
-        setContoursData(bundle.contours);
+        setContoursData(bundle.segmentation?.contours || []);
+        setSegmentation(bundle.segmentation);
       },
       onError: (n, error) => {
         console.error(`Error loading frame ${n}:`, error);
@@ -511,6 +523,12 @@ function App() {
     if (firstTrackingSource.current) { firstTrackingSource.current = false; return; }
     player.invalidate();
   }, [player, trackingSource]);
+
+  const firstSegmentationSource = useRef(true);
+  useEffect(() => {
+    if (firstSegmentationSource.current) { firstSegmentationSource.current = false; return; }
+    player.invalidate();
+  }, [player, segmentationSource]);
 
   // Log each blobs_collection problem once, not once per frame
   const blobsError = trackingSource === 'blobs' ? blobsInfo?.error : null;
@@ -643,8 +661,8 @@ function App() {
         <Tab id="proboscis_extension" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+2" disabled={noDatabase}>Proboscis extension (PE)</Tab>
         <Tab id="ethogram" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+3" disabled={noDatabase}>Ethograms</Tab>
         <Tab id="overview" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+4">Overview</Tab>
-        <Tab id="data_management" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+6">Data management</Tab>
-        <Tab id="help" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+5">
+        <Tab id="data_management" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+5">Data management</Tab>
+        <Tab id="help" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+6">
           <i className="fa fa-question-circle-o" style={{ marginRight: 6 }} />How to use
         </Tab>
       </nav>
@@ -658,6 +676,7 @@ function App() {
               videoFrameRate={videoFrameRate}
               trackingData={trackingData}
               contoursData={contoursData}
+              roiOverlays={roiOverlays}
               frameNumber={frameNumber}
               setFrameNumber={setFrameNumber}
               isPlaying={isPlaying}
@@ -746,6 +765,14 @@ function App() {
                 <CvatLinks experiment={currentExperiment} frameNumber={frameNumber} />
               </div>
             </section>
+
+            <RoiPanel
+              experiment={currentExperiment}
+              segmentationSource={segmentationSource}
+              setSegmentationSource={setSegmentationSource}
+              onOverlaysChange={setRoiOverlays}
+              segmentation={segmentation}
+            />
 
             <ValidationCsvBuilder
               frameNumber={frameNumber}

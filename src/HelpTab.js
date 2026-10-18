@@ -29,7 +29,7 @@ function Section({ id, title, children }) {
 
 const SHORTCUTS = [
   ['Anywhere', [
-    [<><Key>Ctrl</Key>+<Key>1</Key> / <Key>2</Key> / <Key>3</Key> / <Key>4</Key> / <Key>5</Key> / <Key>6</Key></>, 'Switch to Group viewer / PE / Ethograms / Overview / How to use / Data management'],
+    [<><Key>Ctrl</Key>+<Key>1</Key> / <Key>2</Key> / <Key>3</Key> / <Key>4</Key> / <Key>5</Key> / <Key>6</Key></>, 'Switch to Group viewer / PE / Ethograms / Overview / Data management / How to use'],
   ]],
   ['Group viewer', [
     [<><Key>1</Key> / <Key>7</Key></>, 'Previous / next chunk'],
@@ -186,6 +186,26 @@ export default function HelpTab() {
               CVAT job; it is grayed out when the frame is not one of the frames selected for
               CVAT validation. <i className="fa fa-refresh" /> reloads the list after new tasks are uploaded.
             </li>
+          </ul>
+
+          <h3>ROIs &amp; segmentation</h3>
+          <p>
+            The card under Navigation lists the idtrackerai settings of the experiment:
+            the configuration stored in the database, <code>&lt;date&gt;.toml</code>,{' '}
+            <code>landmarks.toml</code> and <code>&lt;date&gt;.conf</code> (those present), with
+            their intensity and area thresholds and number of animals. The files are only read here, never changed.
+          </p>
+          <ul>
+            <li>Tick a source in the <b>ROIs</b> column to draw its ROIs on the frame in that colour. A dashed ROI is cut out of the mask; numbers mark the ROIs of a source with several (landmarks).</li>
+            <li>Click a source's name to list its ROIs.</li>
+            <li>
+              Pick a source in the <b>Segment</b> column to segment every displayed frame with its
+              settings, as idtrackerai would. Blobs are filled in green, and the number of blobs and their
+              areas are shown under the table (in red when it differs from the number of animals).
+              This works for experiments without database too, to check the settings before tracking.
+              Background subtraction and resolution reduction are not applied in the preview.
+            </li>
+            <li>Both choices are kept when you open another experiment. <i className="fa fa-refresh" /> reads the files again.</li>
           </ul>
         </Section>
 
