@@ -20,7 +20,12 @@ const COLUMNS = [
   { key: 'area',     label: 'Area',      w: 46  },
   { key: 'yolo',     label: 'YOLO',      w: 46  },
   { key: 'zt',       label: 'ZT',        w: 70  },
+  { key: 'temp',     label: '°C',        w: 46, title: 'Incubator temperature (°C)' },
+  { key: 'humidity', label: 'RH %',      w: 50, title: 'Incubator relative humidity (%)' },
 ];
+
+// Incubator readings (same for every fly), interpolated between the minute readings
+const fixed1 = v => (v == null ? null : Number(v).toFixed(1));
 
 // Cell that truncates overflow and shows the full value in a native tooltip on hover
 const TC = ({ value, title }) => {
@@ -106,7 +111,7 @@ const BlobsTable = ({ Data, setFrameNumber, number_of_animals, animalMetadata = 
       </colgroup>
       <thead>
         <tr>
-          {columns.map(c => <th key={c.key} title={c.label}>{c.label}</th>)}
+          {columns.map(c => <th key={c.key} title={c.title ?? c.label}>{c.label}</th>)}
         </tr>
       </thead>
       <tbody>
@@ -205,6 +210,8 @@ const BlobsTable = ({ Data, setFrameNumber, number_of_animals, animalMetadata = 
               <TC value={row.area} />
               <TC value={row.modified?.toString()} />
               <TC value={row.ZT} />
+              <TC value={fixed1(row.temperature)} title={row.temperature == null ? 'No incubator reading at this time' : undefined} />
+              <TC value={fixed1(row.humidity)} title={row.humidity == null ? 'No incubator reading at this time' : undefined} />
             </tr>
           );
         })}
