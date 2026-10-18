@@ -1,19 +1,19 @@
 // src/icons.js
 import React from 'react';
-import { ReactComponent as OneBackIcon } from './assets/icons/oneback.svg';
-import { ReactComponent as TenBackIcon } from './assets/icons/tenback.svg';
-import { ReactComponent as ThirtyBackIcon } from './assets/icons/thirtyback.svg';
-// import { ReactComponent as ThirtyBackIcon } from './assets/icons/tenback.svg';
-import { ReactComponent as ChunkBackIcon } from './assets/icons/chunkback.svg';
+import OneBackIcon from './assets/icons/oneback.svg?react';
+import TenBackIcon from './assets/icons/tenback.svg?react';
+import ThirtyBackIcon from './assets/icons/thirtyback.svg?react';
+// import ThirtyBackIcon from './assets/icons/tenback.svg?react';
+import ChunkBackIcon from './assets/icons/chunkback.svg?react';
 
-import { ReactComponent as OneForthIcon } from './assets/icons/oneforth.svg';
-import { ReactComponent as TenForthIcon } from './assets/icons/tenforth.svg';
-import { ReactComponent as ThirtyForthIcon } from './assets/icons/thirtyforth.svg';
-// import { ReactComponent as ThirtyForthIcon } from './assets/icons/tenforth.svg';
-import { ReactComponent as ChunkForthIcon } from './assets/icons/chunkforth.svg';
+import OneForthIcon from './assets/icons/oneforth.svg?react';
+import TenForthIcon from './assets/icons/tenforth.svg?react';
+import ThirtyForthIcon from './assets/icons/thirtyforth.svg?react';
+// import ThirtyForthIcon from './assets/icons/tenforth.svg?react';
+import ChunkForthIcon from './assets/icons/chunkforth.svg?react';
 
-import { ReactComponent as PreviousRejectionIcon } from './assets/icons/previousRejection.svg';
-import { ReactComponent as NextRejectionIcon } from './assets/icons/nextRejection.svg';
+import PreviousRejectionIcon from './assets/icons/previousRejection.svg?react';
+import NextRejectionIcon from './assets/icons/nextRejection.svg?react';
 
 
 // One icon button of the transport bar; `title` names the action and its key.

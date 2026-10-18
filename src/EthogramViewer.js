@@ -6,8 +6,8 @@
 // in behavior-viewer's sync.js: the x axis is seconds since the start of the movie.
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import Plotly from 'plotly.js-dist-min';
-import Hls from 'hls.js';
+import { Plotly } from './plotly';
+import Hls from 'hls.js/light';
 import api, { apiUrl } from './api';
 import { useConsole } from './MessageConsole';
 import { FlyRow } from './blobs_table';

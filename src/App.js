@@ -20,10 +20,11 @@ import DataManagementTab from './DataManagementTab';
 import ValidationCsvBuilder from './ValidationCsvBuilder';
 import CvatLinks from './CvatLinks';
 import api from './api';
+import { loadPlotly } from './plotly';
 import MessageConsole, { useConsole, useConsoleState, consoleHeight } from './MessageConsole';
 
-// Plotly is ~1.5 MB gzipped: load it in its own chunk, off the viewer's critical path.
-const EthogramViewer = lazy(() => import('./EthogramViewer'));
+// Plotly is ~1.5 MB gzipped: load it (and the tab) off the viewer's critical path.
+const EthogramViewer = lazy(() => loadPlotly().then(() => import('./EthogramViewer')));
 
 // ── Theme tokens ──────────────────────────────────────────────────────────
 // Most styling reads the CSS variables in index.css (switched by
@@ -64,8 +65,8 @@ const PAGE_BOTTOM_GAP = 12;
 // idtrackerai-validator-client/public/logos/ under these names; a missing file
 // is simply not shown.
 const LOGOS = [
-  { src: `${process.env.PUBLIC_URL}/logos/logo1.png`, alt: 'Logo 1' },
-  { src: `${process.env.PUBLIC_URL}/logos/logo2.png`, alt: 'Logo 2' },
+  { src: `${import.meta.env.BASE_URL}logos/logo1.png`, alt: 'Logo 1' },
+  { src: `${import.meta.env.BASE_URL}logos/logo2.png`, alt: 'Logo 2' },
 ];
 
 // Commit of the root repository the server runs from (/api/version).
