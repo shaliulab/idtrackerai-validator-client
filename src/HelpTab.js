@@ -168,7 +168,7 @@ export default function HelpTab() {
             genotype, idtrackerai details (local identity, fragment, area), the ZT time and the
             incubator's temperature (°C) and relative humidity (RH %) at that time (— when the
             incubator logged nothing then).
-            You can type a frame number or chunk into the first columns to jump there.
+            You can type a frame number, a chunk or a frame index (within the displayed chunk) into the first columns to jump there.
           </p>
           <ul>
             <li><b>← z / z →</b> jump to the start of the previous / next sleep bout of that fly.</li>

@@ -66,6 +66,9 @@ const BlobsTable = ({ Data, setFrameNumber, number_of_animals, animalMetadata = 
   const [chunkDraft, setChunkDraft] = useState('');
   const [editingChunkRow, setEditingChunkRow] = useState(null);
 
+  const [fidxDraft, setFidxDraft] = useState('');
+  const [editingFidxRow, setEditingFidxRow] = useState(null);
+
   // { "prev_1": true, "next_3": true, ... }  — tracks in-flight requests
   const [sleepLoading, setSleepLoading] = useState({});
 
@@ -82,6 +85,16 @@ const BlobsTable = ({ Data, setFrameNumber, number_of_animals, animalMetadata = 
       setFrameNumber(chunk * cs);
     }
     setEditingChunkRow(null);
+  };
+
+  // Frame index within the displayed frame's chunk
+  const commitFidx = (val, frameNumber, chunksize) => {
+    const idx = parseInt(val, 10);
+    const cs = Number(chunksize);
+    if (Number.isFinite(idx) && idx >= 0 && Number.isFinite(cs) && cs > 0 && idx < cs && setFrameNumber) {
+      setFrameNumber(Math.floor(frameNumber / cs) * cs + idx);
+    }
+    setEditingFidxRow(null);
   };
 
   const navSleep = useCallback(async (dir, identity, frameNumber) => {
@@ -121,7 +134,8 @@ const BlobsTable = ({ Data, setFrameNumber, number_of_animals, animalMetadata = 
               <tr key={`pad-${index}`} style={{ visibility: 'hidden' }}>
                 <td><input type="number" readOnly value="" /></td>
                 <td><input type="number" readOnly value="" /></td>
-                {columns.slice(2).map(c => <td key={c.key}>&nbsp;</td>)}
+                <td><input type="number" readOnly value="" /></td>
+                {columns.slice(3).map(c => <td key={c.key}>&nbsp;</td>)}
               </tr>
             );
           }
@@ -168,7 +182,25 @@ const BlobsTable = ({ Data, setFrameNumber, number_of_animals, animalMetadata = 
                 />
               </td>}
 
-              <TC value={row.frame_number % row.chunksize} />
+              {readOnly && <TC value={row.frame_number % row.chunksize} />}
+
+              {/* Frame index — editable, jumps to that frame of the current chunk */}
+              {!readOnly && <td>
+                <input
+                  type="number"
+                  min={0}
+                  max={row.chunksize - 1}
+                  value={editingFidxRow === index ? fidxDraft : row.frame_number % row.chunksize}
+                  onFocus={() => { setEditingFidxRow(index); setFidxDraft(String(row.frame_number % row.chunksize)); }}
+                  onChange={e => setFidxDraft(e.target.value)}
+                  onBlur={() => commitFidx(fidxDraft, row.frame_number, row.chunksize)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') e.target.blur();
+                    else if (e.key === 'Escape') setEditingFidxRow(null);
+                  }}
+                  onWheel={e => e.target.blur()}
+                />
+              </td>}
               <TC value={row.x} />
               <TC value={row.y} />
               <TC value={row.identity} />
