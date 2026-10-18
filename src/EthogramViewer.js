@@ -1,24 +1,36 @@
 // EthogramViewer.js  —  per-fly ethogram tab (merged from the behavior-viewer project)
 //
-// Shows the pre-rendered plotly ethogram of one fly of the loaded experiment at a
-// time, with a dropdown + prev/next buttons to switch between flies of the group.
-// When the fly has an HLS movie, the video and the ethogram are kept in sync like
-// in behavior-viewer's sync.js: the x axis is seconds since the start of the movie.
+// Shows the ethogram of one fly of the loaded experiment at a time (EthogramTrack,
+// drawn from /api/ethogram/<fly>/track), with a dropdown + prev/next buttons to
+// switch between flies of the group. When the fly has an HLS movie, the video and
+// the ethogram cursor are kept in sync: the x axis is seconds since the start of
+// the movie. The visible window is only ever moved, never reset: playback pages
+// it along (with "follow"), jumps center it, and its width is kept per browser.
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Plotly } from './plotly';
 import Hls from 'hls.js/light';
 import api, { apiUrl } from './api';
 import { useConsole } from './MessageConsole';
 import { FlyRow } from './blobs_table';
+import { useStoredNumber } from './layout';
+import EthogramTrack, { prepareTrack, clampView, formatClock, MIN_VIEW_WIDTH } from './EthogramTrack';
 
 const API = '/api/ethogram';
 
 // Axios can hand back a raw string when a payload contains NaN; parse defensively.
 const unwrap = (data) => (typeof data === 'string' ? JSON.parse(data) : data);
 
-// Figures are 10-25 MB of JSON each: keep only the last few in memory.
-const FIGURE_CACHE_SIZE = 6;
+// Tracks are ~0.5 MB each: keep the last few.
+const TRACK_CACHE_SIZE = 12;
+
+const ZOOMS = [
+  { label: '1 min', width: 60 },
+  { label: '5 min', width: 300 },
+  { label: '15 min', width: 900 },
+  { label: '1 h', width: 3600 },
+  { label: '6 h', width: 6 * 3600 },
+];
+const DEFAULT_WIDTH = 300;
 
 // frame number -> seconds since the start of the fly's movie (null if unknown)
 const movieTimeOf = (props, frameNumber) =>
@@ -27,11 +39,7 @@ const movieTimeOf = (props, frameNumber) =>
     : null;
 
 // seconds since ZT0 -> "hh:mm:ss" (hours keep counting past 24 on later days)
-const formatZT = (zt) => {
-  const s = Math.round(zt);
-  const pad = (n) => String(n).padStart(2, '0');
-  return `${pad(Math.floor(s / 3600))}:${pad(Math.floor((s % 3600) / 60))}:${pad(s % 60)}`;
-};
+const formatZT = (zt) => formatClock(zt);
 
 // Error payloads of blob requests arrive as a Blob, not as parsed JSON.
 const errorMessage = async (err) => {
@@ -42,12 +50,23 @@ const errorMessage = async (err) => {
   return data?.error || err.message;
 };
 
-export default function EthogramViewer({ flies, request, animalMetadata, active, theme, selectStyle, onOpenInViewer }) {
+const readFlag = (key, fallback) => {
+  try { const v = localStorage.getItem(key); return v == null ? fallback : v === '1'; } catch { return fallback; }
+};
+const writeFlag = (key, value) => { try { localStorage.setItem(key, value ? '1' : '0'); } catch { /* ignore */ } };
+
+export default function EthogramViewer({ flies, request, animalMetadata, active, theme, themeName, selectStyle, onOpenInViewer }) {
   const [fly, setFly] = useState(null);
   const [properties, setProperties] = useState(null);
+  const [track, setTrack] = useState(null);          // prepareTrack() of the shown fly
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [cursorT, setCursorT] = useState(null);      // seconds since movie start
+  const [storedWidth, setStoredWidth] = useStoredNumber('fh-ethogram-window', DEFAULT_WIDTH);
+  const [view, setViewState] = useState([0, storedWidth]);
+  const [follow, setFollow] = useState(() => readFlag('fh-ethogram-follow', true));
+  const [shade, setShade] = useState(() => readFlag('fh-ethogram-shade', false));
+  const [minBout, setMinBout] = useState(1);
   const [gotoMode, setGotoMode] = useState('frame_number');   // 'frame_number' | 'zt'
   const [gotoValue, setGotoValue] = useState('');
   const [notice, setNotice] = useState(null);        // result of the last go-to / capture
@@ -55,19 +74,35 @@ export default function EthogramViewer({ flies, request, animalMetadata, active,
   const [capturing, setCapturing] = useState(false);
   const { log, trackJob } = useConsole();
   const [capturingAll, setCapturingAll] = useState(false);
-  const [saveOnServer, setSaveOnServer] = useState(false);
-  const [savedVideos, setSavedVideos] = useState(null);   // { directory, videos: [{name, t0, t1, duration, movie_time}] }  // all-bouts export: save vs download
+  const [saveOnServer, setSaveOnServer] = useState(false);   // all-bouts export: save vs download
+  const [savedVideos, setSavedVideos] = useState(null);   // { directory, videos: [{name, t0, t1, duration, movie_time}] }
 
-  const plotRef = useRef(null);
   const videoRef = useRef(null);
-  const figureCache = useRef(new Map());              // fly -> figure
-  const rangeWidthRef = useRef(20);
-  const lastTimeUpdateRef = useRef(-1);
-  const programmaticRef = useRef(false);              // ignore our own relayouts
+  const trackCache = useRef(new Map());               // fly -> prepared track
+  const viewRef = useRef(view);
   const cursorTRef = useRef(null);
+  const followRef = useRef(follow);
+  followRef.current = follow;
+  const nRef = useRef(Infinity);                      // seconds in the shown track
+  nRef.current = track ? track.n : Infinity;
+
+  const setView = useCallback(([a, b]) => {
+    const v = clampView(a, b, nRef.current);
+    viewRef.current = v;
+    setViewState(v);
+  }, []);
+
+  // Remember the window width (not on every wheel tick).
+  useEffect(() => {
+    const id = setTimeout(() => setStoredWidth(Math.round(view[1] - view[0])), 500);
+    return () => clearTimeout(id);
+  }, [view, setStoredWidth]);
+
+  useEffect(() => writeFlag('fh-ethogram-follow', follow), [follow]);
+  useEffect(() => writeFlag('fh-ethogram-shade', shade), [shade]);
 
   // Keep the selection within the current group of flies. A new experiment has
-  // its own time axis: start it at the figure's default window, not at the old cursor.
+  // its own time axis: start it at the beginning, not at the old cursor.
   const experimentRef = useRef(null);
   useEffect(() => {
     const experiment = flies.length ? flies[0].fly.split('__')[0] : null;
@@ -93,27 +128,43 @@ export default function EthogramViewer({ flies, request, animalMetadata, active,
     setFly(flies[(((flyIndex + delta) % n) + n) % n].fly);
   }, [flies, flyIndex]);
 
-  const moveCursor = useCallback((t) => {
+  // Move the cursor to t (s since movie start).
+  //   center:    put t in the middle of the window (jumps)
+  //   fromVideo: the movie is there already; the window follows only with "follow"
+  // Otherwise the window moves only if t left it. Its width never changes.
+  const seek = useCallback((t, { center = false, fromVideo = false } = {}) => {
     cursorTRef.current = t;
     setCursorT(t);
-  }, []);
+    if (!fromVideo && videoRef.current && videoRef.current.readyState > 0) {
+      videoRef.current.currentTime = Math.max(0, t);
+    }
+    const [a, b] = viewRef.current;
+    const w = b - a;
+    if (center) {
+      setView([t - w / 2, t + w / 2]);
+    } else if (fromVideo) {
+      // page ahead, leaving a bit of the past in sight
+      if (followRef.current && (t < a || t > b - 0.05 * w)) setView([t - 0.1 * w, t + 0.9 * w]);
+    } else if (t < a || t > b) {
+      setView([t - w / 2, t + w / 2]);
+    }
+  }, [setView]);
 
-  const relayout = useCallback((update) => {
-    const div = plotRef.current;
-    if (!div || !div.layout) return Promise.resolve();
-    programmaticRef.current = true;
-    return Plotly.relayout(div, update).finally(() => { programmaticRef.current = false; });
-  }, []);
-
-  const centerOn = useCallback((t) => {
-    const half = rangeWidthRef.current / 2;
-    moveCursor(t);
-    return relayout({
-      'xaxis.range': [t - half, t + half],
-      'shapes[0].x0': t,
-      'shapes[0].x1': t,
-    });
-  }, [relayout, moveCursor]);
+  const zoomTo = useCallback((width) => {
+    const [a, b] = viewRef.current;
+    const t = cursorTRef.current;
+    const anchor = t != null && t >= a && t <= b ? t : (a + b) / 2;
+    // the anchor keeps its place on screen
+    const f = (anchor - a) / (b - a);
+    setView([anchor - f * width, anchor + (1 - f) * width]);
+  }, [setView]);
+  const zoomBy = useCallback((factor) => {
+    const [a, b] = viewRef.current;
+    zoomTo(Math.max(MIN_VIEW_WIDTH, (b - a) * factor));
+  }, [zoomTo]);
+  const showAll = useCallback(() => {
+    if (track) setView([0, track.n]);
+  }, [track, setView]);
 
   // ── Requests from elsewhere in the app (blobs table "etho" button):
   //    show fly `request.fly` at frame `request.frameNumber` ──
@@ -128,13 +179,12 @@ export default function EthogramViewer({ flies, request, animalMetadata, active,
     const t = loading ? null : movieTimeOf(properties, request.frameNumber);
     if (t == null) return;                   // still loading: applied by the load effect
     pendingSeekRef.current = null;
-    centerOn(t);
-    if (videoRef.current && hasMovie) videoRef.current.currentTime = Math.max(0, t);
+    seek(t, { center: true });
   // Only react to new requests, not to the state they read.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [request]);
 
-  // ── Load figure + properties for the selected fly ──
+  // ── Load track + properties for the selected fly ──
   useEffect(() => {
     if (!active || !fly) return;
     let cancelled = false;
@@ -144,113 +194,64 @@ export default function EthogramViewer({ flies, request, animalMetadata, active,
       setError(null);
       setLoading(true);
       try {
-        const { data: props } = await api.get(`${API}/${fly}/properties`);
+        const { data: rawProps } = await api.get(`${API}/${fly}/properties`);
         if (cancelled) return;
-        setProperties(unwrap(props));
-
-        const pending = pendingSeekRef.current;
-        if (pending?.fly === fly) {
-          const t = movieTimeOf(unwrap(props), pending.frameNumber);
-          if (t != null) moveCursor(t);      // the layout below centers on the cursor
-          pendingSeekRef.current = null;
-        }
+        const props = unwrap(rawProps);
+        setProperties(props);
 
         if (entry && !entry.available) {
+          setTrack(null);
           throw new Error(`No ethogram has been generated for ${fly}`);
         }
 
-        let figure = figureCache.current.get(fly);
-        if (!figure) {
-          // drawn by the server from the fly's feather on first request (can take a while)
-          if (entry && !entry.drawn) log('info', `${fly}: drawing its ethogram from the feather file…`);
-          const { data } = await api.get(`${API}/${fly}/figure`);
-          if (entry && !entry.drawn) entry.drawn = true;
-          figure = unwrap(data);
-          figureCache.current.set(fly, figure);
-          while (figureCache.current.size > FIGURE_CACHE_SIZE) {
-            figureCache.current.delete(figureCache.current.keys().next().value);
+        let data = trackCache.current.get(fly);
+        if (!data) {
+          const { data: raw } = await api.get(`${API}/${fly}/track`);
+          data = prepareTrack(unwrap(raw));
+          trackCache.current.set(fly, data);
+          while (trackCache.current.size > TRACK_CACHE_SIZE) {
+            trackCache.current.delete(trackCache.current.keys().next().value);
           }
         }
         if (cancelled) return;
+        nRef.current = data.n;
+        setTrack(data);
 
-        // Flies of a group share the time axis: keep looking at the same time
-        // window when switching between them.
-        const layout = { ...figure.layout, autosize: true };
-        const t = cursorTRef.current;
-        if (t != null) {
-          const half = rangeWidthRef.current / 2;
-          layout.xaxis = { ...layout.xaxis, range: [t - half, t + half] };
-          if (layout.shapes?.length) {
-            layout.shapes = [{ ...layout.shapes[0], x0: t, x1: t }, ...layout.shapes.slice(1)];
-          }
-        } else if (layout.xaxis?.range) {
-          const [x0, x1] = layout.xaxis.range;
-          rangeWidthRef.current = Math.abs(x1 - x0);
-          moveCursor((x0 + x1) / 2);
+        // Flies of a group share the time axis: keep the same window when
+        // switching between them, unless another tab asked for a frame.
+        const pending = pendingSeekRef.current;
+        let t = cursorTRef.current;
+        let center = false;
+        if (pending?.fly === fly) {
+          const pt = movieTimeOf(props, pending.frameNumber);
+          if (pt != null) { t = pt; center = true; }
+          pendingSeekRef.current = null;
         }
-
-        programmaticRef.current = true;
-        await Plotly.react(plotRef.current, figure.data, layout, { responsive: true });
-        programmaticRef.current = false;
-        if (videoRef.current && cursorTRef.current != null) {
-          videoRef.current.currentTime = Math.max(0, cursorTRef.current);
+        if (t == null) {
+          t = 0;
+          const w = viewRef.current[1] - viewRef.current[0];
+          setView([0, w]);
         }
+        seek(t, { center });
       } catch (err) {
         if (cancelled) return;
         console.error('Could not load ethogram', err);
+        setTrack(null);
         setError(err.response?.data?.error || err.message);
-        Plotly.purge(plotRef.current);
       } finally {
         if (!cancelled) setLoading(false);
       }
     };
     load();
     return () => { cancelled = true; };
-  }, [fly, active, flies, moveCursor, log]);
-
-  // Plotly cannot size itself while the tab is display:none.
-  useEffect(() => {
-    if (active && plotRef.current?.layout) Plotly.Plots.resize(plotRef.current);
-  }, [active]);
-
-  // ── Ethogram → video ──
-  useEffect(() => {
-    const div = plotRef.current;
-    if (!div) return;
-    const onRelayout = (ev) => {
-      if (programmaticRef.current) return;
-      let range = ev['xaxis.range'];
-      if (!range && ev['xaxis.range[0]'] != null) range = [ev['xaxis.range[0]'], ev['xaxis.range[1]']];
-      if (!range) return;
-      const [x0, x1] = range.map(Number);
-      rangeWidthRef.current = Math.abs(x1 - x0);
-      const t = (x0 + x1) / 2;
-      moveCursor(t);
-      relayout({ 'shapes[0].x0': t, 'shapes[0].x1': t });
-      if (videoRef.current && hasMovie) videoRef.current.currentTime = Math.max(0, t);
-    };
-    const onClick = (ev) => {
-      const x = ev.points?.[0]?.x;
-      if (x == null) return;
-      centerOn(Number(x));
-      if (videoRef.current && hasMovie) videoRef.current.currentTime = Math.max(0, Number(x));
-    };
-    // plotly attaches .on() only after the first newPlot/react.
-    if (!div.on) return;
-    div.on('plotly_relayout', onRelayout);
-    div.on('plotly_click', onClick);
-    return () => {
-      div.removeListener?.('plotly_relayout', onRelayout);
-      div.removeListener?.('plotly_click', onClick);
-    };
-  }, [hasMovie, relayout, centerOn, moveCursor, loading]);
+  }, [fly, active, flies, seek, setView]);
 
   // ── HLS movie ──
   useEffect(() => {
     const video = videoRef.current;
     if (!active || !fly || !video || !hasMovie) return;
     const src = apiUrl(`${API}/${fly}/movie/movie.m3u8`);
-    // Read the cursor when the stream is ready: the figure may load after this runs.
+    // Read the cursor when the stream is ready: the track may load after this runs.
     const startAt = () => Math.max(0, cursorTRef.current ?? 0);
     let hls = null;
     if (Hls.isSupported()) {
@@ -274,23 +275,21 @@ export default function EthogramViewer({ flies, request, animalMetadata, active,
     const video = videoRef.current;
     if (!video) return;
     const onTime = () => {
-      // Update at most once per second of video, but keep the exact time: a
-      // floored cursor would sit before a sleep bout we just jumped to.
-      const second = Math.floor(video.currentTime);
-      if (second === lastTimeUpdateRef.current) return;
-      lastTimeUpdateRef.current = second;
-      centerOn(video.currentTime);
+      // our own seeks land here too: nothing to do then
+      if (cursorTRef.current != null && Math.abs(video.currentTime - cursorTRef.current) < 0.05) return;
+      seek(video.currentTime, { fromVideo: true });
     };
     video.addEventListener('timeupdate', onTime);
     return () => video.removeEventListener('timeupdate', onTime);
-  }, [centerOn, hasMovie]);
+  }, [seek, hasMovie]);
 
   // Pause the movie when leaving the tab.
   useEffect(() => {
     if (!active) videoRef.current?.pause();
   }, [active]);
 
-  // ── Keyboard: ←/→ pan (Shift ×10, Ctrl ×60, Ctrl+Alt ×600 s), ↑/↓ switch fly ──
+  // ── Keyboard: ←/→ move the cursor (Shift ×10, Ctrl ×60, Ctrl+Alt ×600 s), ↑/↓ switch fly,
+  //    +/- zoom, Space play/pause ──
   useEffect(() => {
     if (!active) return;
     const onKey = (e) => {
@@ -301,22 +300,31 @@ export default function EthogramViewer({ flies, request, animalMetadata, active,
         step(e.key === 'ArrowUp' ? -1 : 1);
         return;
       }
+      if (e.key === '+' || e.key === '=') { e.preventDefault(); zoomBy(0.5); return; }
+      if (e.key === '-' || e.key === '_') { e.preventDefault(); zoomBy(2); return; }
+      if (e.key === ' ' && tag !== 'BUTTON' && tag !== 'VIDEO' && videoRef.current && hasMovie) {
+        e.preventDefault();
+        const video = videoRef.current;
+        if (video.paused) video.play(); else video.pause();
+        return;
+      }
       if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
       if (cursorTRef.current == null) return;
       e.preventDefault();
       const amount = (e.ctrlKey ? 60 : e.shiftKey ? 10 : 1) * (e.ctrlKey && e.altKey ? 10 : 1);
-      const t = cursorTRef.current + (e.key === 'ArrowLeft' ? -amount : amount);
-      centerOn(t);
-      if (videoRef.current && hasMovie) videoRef.current.currentTime = Math.max(0, t);
+      seek(cursorTRef.current + (e.key === 'ArrowLeft' ? -amount : amount));
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [active, step, centerOn, hasMovie]);
+  }, [active, step, seek, zoomBy, hasMovie]);
 
-  const cursorFrame =
-    properties && properties.first_chunk != null && cursorT != null
-      ? Math.round(properties.first_chunk * properties.chunksize + cursorT * properties.framerate)
-      : null;
+  const frameOf = useCallback(
+    (t) => (properties && properties.first_chunk != null && t != null
+      ? Math.round(properties.first_chunk * properties.chunksize + t * properties.framerate)
+      : null),
+    [properties],
+  );
+  const cursorFrame = frameOf(cursorT);
 
   useEffect(() => { setNotice(null); setActionError(null); }, [fly]);
 
@@ -338,14 +346,13 @@ export default function EthogramViewer({ flies, request, animalMetadata, active,
       const { data } = await api.get(`${API}/${fly}/locate`, { params: { [gotoMode]: value } });
       const position = unwrap(data);
       if (position.movie_time == null) throw new Error(`Frame ${position.frame_number} cannot be placed in ${fly}'s ethogram (no feather file)`);
-      centerOn(position.movie_time);
-      if (videoRef.current && hasMovie) videoRef.current.currentTime = Math.max(0, position.movie_time);
+      seek(position.movie_time, { center: true });
       setNotice({ kind: 'goto', ...position });
       log('info', `${fly}: went to frame ${position.frame_number} · ZT ${position.zt.toFixed(1)} s (${formatZT(position.zt)})`);
     } catch (err) {
       reportError(await errorMessage(err));
     }
-  }, [fly, gotoMode, gotoValue, centerOn, hasMovie, log, reportError]);
+  }, [fly, gotoMode, gotoValue, seek, log, reportError]);
 
   // ── Sleep bout videos saved on the server (<basedir>/flyhostel/videos/<fly>/) ──
   const fetchSavedVideos = useCallback(async () => {
@@ -365,9 +372,8 @@ export default function EthogramViewer({ flies, request, animalMetadata, active,
 
   const jumpToSavedVideo = useCallback((video) => {
     if (video.movie_time == null) return;
-    centerOn(video.movie_time);
-    if (videoRef.current && hasMovie) videoRef.current.currentTime = Math.max(0, video.movie_time);
-  }, [centerOn, hasMovie]);
+    seek(video.movie_time, { center: true });
+  }, [seek]);
 
   // ── Jump to the start of the previous / next sleep bout (an ongoing one is skipped) ──
   const navigateSleepBout = useCallback(async (direction) => {
@@ -376,14 +382,13 @@ export default function EthogramViewer({ flies, request, animalMetadata, active,
     try {
       const { data } = await api.get(`${API}/${fly}/sleep_bout/${direction}`, { params: { frame_number: cursorFrame } });
       const bout = unwrap(data);
-      centerOn(bout.movie_time);
-      if (videoRef.current && hasMovie) videoRef.current.currentTime = Math.max(0, bout.movie_time);
+      seek(bout.movie_time, { center: true });
       setNotice({ kind: 'bout', ...bout, label: 'Sleep bout' });
       log('info', `${fly}: ${direction === 'next' ? 'next' : 'previous'} sleep bout, frames ${bout.start_frame}–${bout.end_frame} (${(bout.duration / 60).toFixed(1)} min)`);
     } catch (err) {
       reportError(await errorMessage(err));
     }
-  }, [fly, cursorFrame, centerOn, hasMovie, log, reportError]);
+  }, [fly, cursorFrame, seek, log, reportError]);
 
   // ── Export the movie of the ongoing (or else next) sleep bout ──
   // Video exports run as backend jobs; the console shows their progress and
@@ -431,6 +436,9 @@ export default function EthogramViewer({ flies, request, animalMetadata, active,
     cursor: 'pointer',
   };
 
+  const viewWidth = view[1] - view[0];
+  const cursorZT = track?.zt0 != null && cursorT != null ? track.zt0 + cursorT : null;
+
   return (
     <div style={{ padding: '0 12px 12px' }}>
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', padding: '12px 0' }}>
@@ -438,9 +446,9 @@ export default function EthogramViewer({ flies, request, animalMetadata, active,
         <label>
           Fly:&nbsp;
           <select value={fly || ''} onChange={(e) => setFly(e.target.value)} style={selectStyle}>
-            {flies.map(({ fly: f, available, drawn }) => (
+            {flies.map(({ fly: f, available }) => (
               <option key={f} value={f}>
-                {f}{!available ? ' (no ethogram)' : drawn === false ? ' (not drawn yet)' : ''}
+                {f}{!available ? ' (no ethogram)' : ''}
               </option>
             ))}
           </select>
@@ -449,7 +457,8 @@ export default function EthogramViewer({ flies, request, animalMetadata, active,
 
         {cursorFrame != null && (
           <>
-            <span style={{ color: theme.subtext, marginLeft: 12 }}>
+            <span style={{ color: theme.subtext, marginLeft: 12, fontVariantNumeric: 'tabular-nums' }}>
+              {cursorZT != null && <>ZT {formatZT(cursorZT)} · </>}
               t = {cursorT.toFixed(0)} s · frame {cursorFrame}
             </span>
             <button
@@ -588,13 +597,69 @@ export default function EthogramViewer({ flies, request, animalMetadata, active,
       {error && <div style={{ color: '#d62728', padding: '4px 0' }}>{error}</div>}
       {actionError && <div style={{ color: '#d62728', padding: '4px 0' }}>{actionError}</div>}
 
-      {hasMovie && (
-        <div style={{ display: 'flex', justifyContent: 'center', paddingBottom: 8 }}>
-          <video ref={videoRef} controls muted style={{ maxWidth: '100%', maxHeight: '45vh' }} />
+      {track && (
+        <div className="card eth-card">
+          <div className="card-header eth-toolbar">
+            <span className="eth-zooms" role="group" aria-label="Window width">
+              {ZOOMS.map((z) => (
+                <button
+                  key={z.label}
+                  className={Math.abs(viewWidth - z.width) < 1 ? 'active' : ''}
+                  onClick={() => zoomTo(z.width)}
+                  title={`Show ${z.label} around the cursor`}
+                >
+                  {z.label}
+                </button>
+              ))}
+              <button className={viewWidth >= track.n ? 'active' : ''} onClick={showAll} title="Show the whole recording">All</button>
+            </span>
+            <button onClick={() => zoomBy(2)} title="Zoom out (−)" aria-label="Zoom out">−</button>
+            <button onClick={() => zoomBy(0.5)} title="Zoom in (+)" aria-label="Zoom in">+</button>
+            <span className="eth-dim">window {formatClock(viewWidth)}</span>
+            <span className="spacer" />
+            <label className="field check" title="While the movie plays, move the window along with the cursor">
+              <input type="checkbox" checked={follow} onChange={(e) => setFollow(e.target.checked)} />
+              follow playback
+            </label>
+            <label className="field check" title="Fade seconds the classifier was less sure about">
+              <input type="checkbox" checked={shade} onChange={(e) => setShade(e.target.checked)} />
+              shade by score
+            </label>
+            <label className="field" title="◀ ▶ next to each behavior skip bouts shorter than this">
+              ◀ ▶ skip bouts under
+              <input
+                type="number" min={1} step={1} value={minBout}
+                onChange={(e) => setMinBout(Math.max(1, Number(e.target.value) || 1))}
+              />
+              s
+            </label>
+          </div>
+          <div className="card-body">
+            <EthogramTrack
+              data={track}
+              view={view}
+              onView={setView}
+              cursorT={cursorT}
+              onSeek={seek}
+              frameOf={frameOf}
+              shade={shade}
+              minBout={minBout}
+              themeName={themeName}
+            />
+            <div className="eth-keys">
+              Wheel: zoom · Shift+wheel or drag: pan · click: move the cursor · double click: zoom in ·
+              drag on <i>Whole recording</i>: move the window · ◀ ▶ per behavior: previous / next bout ·
+              <b> ←/→</b> cursor · <b>+/−</b> zoom · <b>Space</b> play/pause · <b>↑/↓</b> fly
+            </div>
+          </div>
         </div>
       )}
 
-      <div ref={plotRef} style={{ width: '100%' }} />
+      {hasMovie && (
+        <div style={{ display: 'flex', justifyContent: 'center', padding: '8px 0' }}>
+          <video ref={videoRef} controls muted style={{ maxWidth: '100%', maxHeight: '45vh' }} />
+        </div>
+      )}
     </div>
   );
 }

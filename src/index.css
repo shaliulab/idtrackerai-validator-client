@@ -593,3 +593,28 @@ button.ov-sheet.ov-sheet-error { border-color: var(--danger); color: var(--dange
 .roi-error { color: var(--danger); }
 .roi-readout { padding: 6px 8px; border-radius: var(--radius); background: var(--surface-2); }
 .roi-warn { background: var(--danger-soft); color: var(--danger); }
+
+/* ── Ethograms tab (EthogramTrack.js) ── */
+.eth-card { margin-bottom: 8px; }
+.eth-toolbar { flex-wrap: wrap; gap: 8px 12px; text-transform: none; letter-spacing: 0; font-weight: 400; font-size: 13px; }
+.eth-toolbar button { padding: 2px 9px; }
+.eth-zooms { display: inline-flex; gap: 4px; }
+.eth-zooms button.active { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+.eth { display: grid; grid-template-columns: 280px minmax(0, 1fr); row-gap: 6px; user-select: none; }
+.eth-labels { display: flex; flex-direction: column; }
+.eth-label { display: flex; align-items: center; gap: 6px; font-size: 13px; padding-right: 8px; box-sizing: border-box; }
+.eth-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.eth-share { color: var(--subtext); font-size: 11px; font-variant-numeric: tabular-nums; width: 32px; text-align: right; }
+.eth-jump { padding: 0 5px; font-size: 10px; line-height: 18px; }
+.eth-swatch { display: inline-block; width: 12px; height: 12px; border-radius: 2px; flex-shrink: 0; vertical-align: -1px; margin-right: 4px; }
+.eth-plot { position: relative; min-width: 0; }
+.eth-overview { cursor: grab; border-radius: 3px; }
+.eth-overview-label { color: var(--subtext); font-size: 12px; padding-left: 24px; }
+.eth-tooltip {
+  position: absolute; z-index: 5; pointer-events: none; width: max-content; max-width: 260px;
+  padding: 6px 8px; border-radius: var(--radius); border: 1px solid var(--border-strong);
+  background: var(--surface); color: var(--text); box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
+  font-size: 12px; line-height: 1.5; font-variant-numeric: tabular-nums;
+}
+.eth-dim { color: var(--subtext); }
+.eth-keys { margin-top: 8px; font-size: 11px; color: var(--subtext); }

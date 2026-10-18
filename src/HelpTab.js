@@ -56,6 +56,10 @@ const SHORTCUTS = [
   ['Ethograms', [
     [<><Key>↑</Key> / <Key>↓</Key></>, 'Previous / next fly'],
     [<><Key>←</Key> / <Key>→</Key></>, 'Move the cursor 1 s (with Shift: 10 s, Ctrl: 60 s, Ctrl+Alt: 10 min)'],
+    [<><Key>+</Key> / <Key>−</Key></>, 'Zoom in / out around the cursor'],
+    [<Key>Space</Key>, 'Play / pause the movie'],
+    ['Wheel on the ethogram', 'Zoom around the pointer (Shift+wheel: pan)'],
+    ['Drag on the ethogram', 'Pan; a click moves the cursor, a double click zooms in'],
   ]],
 ];
 
@@ -293,7 +297,23 @@ export default function HelpTab() {
           </p>
           <ul>
             <li>Choose the fly in the list, with ◀ ▶, or with <Key>↑</Key>/<Key>↓</Key>. Flies without an ethogram are marked.</li>
-            <li>Click the plot or use <Key>←</Key>/<Key>→</Key> to move the cursor.</li>
+            <li>
+              One row per behavior: walk, groom, feed, inactive + micromovement and inactive
+              (<i>inactive + PE</i> and <i>inactive + rejection</i> count as inactive; unclassified
+              seconds are left blank). Zoomed out, the shade of a row is the share of time spent in
+              that behavior, so even a single second shows faintly; zoomed in, each second is a block.
+              The % next to each behavior is its share of the visible window. Hover for the bout under
+              the pointer (start, end, duration, score).
+            </li>
+            <li>
+              Zoom with the wheel, the window buttons (1 min … 6 h, All), <Key>+</Key>/<Key>−</Key> or a
+              double click; pan by dragging, Shift+wheel, or by dragging the window on the
+              <i>Whole recording</i> strip. The window keeps its width while the movie plays, when
+              you jump and when you switch flies.
+            </li>
+            <li>Click the ethogram or use <Key>←</Key>/<Key>→</Key> to move the cursor.</li>
+            <li>◀ ▶ next to a behavior jump to the start of its previous / next bout; <i>skip bouts under</i> ignores shorter ones.</li>
+            <li><i>follow playback</i> moves the window along with the playing movie; <i>shade by score</i> fades seconds the classifier was less sure about.</li>
             <li><i>Go to</i> jumps to a frame number or a ZT time.</li>
             <li><i>Open frame in viewer</i> shows the cursor's frame in the Group viewer.</li>
             <li><b>← sleep bout / sleep bout →</b> jump between sleep bouts.</li>

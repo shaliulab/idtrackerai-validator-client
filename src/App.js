@@ -21,11 +21,10 @@ import ValidationCsvBuilder from './ValidationCsvBuilder';
 import CvatLinks from './CvatLinks';
 import RoiPanel from './RoiPanel';
 import api from './api';
-import { loadPlotly } from './plotly';
 import MessageConsole, { useConsole, useConsoleState, consoleHeight } from './MessageConsole';
 
-// Plotly is ~1.5 MB gzipped: load it (and the tab) off the viewer's critical path.
-const EthogramViewer = lazy(() => loadPlotly().then(() => import('./EthogramViewer')));
+// Loaded (with hls.js) off the viewer's critical path.
+const EthogramViewer = lazy(() => import('./EthogramViewer'));
 
 // ── Theme tokens ──────────────────────────────────────────────────────────
 // Most styling reads the CSS variables in index.css (switched by
@@ -822,6 +821,7 @@ function App() {
             animalMetadata={animalMetadata}
             active={activeTab === 'ethogram'}
             theme={theme}
+            themeName={themeName}
             selectStyle={selectStyle}
             onOpenInViewer={(fn) => {
               setFrameNumber(fn);
