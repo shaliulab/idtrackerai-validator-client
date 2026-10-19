@@ -71,3 +71,24 @@ export const get_30seconds_forward = (value, recordingFramerate) => {
   const max_fn = Math.floor(recordingFramerate*CHUNK_SECONDS*400);
   return Math.min(v + recordingFramerate * 30, max_fn);
 };
+
+// Copy `text` to the clipboard. navigator.clipboard only exists on https or
+// localhost, so on the lab network fall back to a hidden textarea + execCommand.
+export async function copyText(text) {
+  if (navigator.clipboard && window.isSecureContext) {
+    await navigator.clipboard.writeText(text);
+    return;
+  }
+  const area = document.createElement('textarea');
+  area.value = text;
+  area.setAttribute('readonly', '');
+  area.style.position = 'fixed';
+  area.style.opacity = '0';
+  document.body.appendChild(area);
+  area.select();
+  try {
+    if (!document.execCommand('copy')) throw new Error('The browser refused to copy');
+  } finally {
+    document.body.removeChild(area);
+  }
+}

@@ -11,6 +11,7 @@
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import api from './api';
+import CardResizer from './CardResizer';
 import { useConsole } from './MessageConsole';
 
 const unwrap = (data) => (typeof data === 'string' ? JSON.parse(data) : data);
@@ -417,6 +418,7 @@ export default function DataManagementTab({ active, currentExperiment }) {
             </tbody>
           </table>
         </div>
+        <CardResizer id="dm-table" />
       </section>
 
       {toDelete && (

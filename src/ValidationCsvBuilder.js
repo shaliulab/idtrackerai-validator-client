@@ -15,6 +15,7 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import api from './api';
+import CardResizer from './CardResizer';
 import { useConsole } from './MessageConsole';
 
 const COLUMNS = [
@@ -519,6 +520,7 @@ export default function ValidationCsvBuilder({ frameNumber, isPlaying, numberOfA
           )}
         </div>
       )}
+      {open && <CardResizer id="viewer-validation-csv" />}
     </section>
   );
 }

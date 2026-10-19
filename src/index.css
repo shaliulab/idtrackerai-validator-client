@@ -359,6 +359,23 @@ input[type="checkbox"] { accent-color: var(--accent); }
 .splitter-vertical::after { top: 0; bottom: 0; left: 4px; width: 4px; }
 .splitter-horizontal::after { left: 0; right: 0; top: 1px; height: 4px; }
 .splitter:hover::after, .splitter:active::after { background: var(--accent); }
+/* CardResizer.js: bottom edge of a card dragged to set its height; the card's
+   scrolling part (.scroll, .ov-scroll or .card-body) takes the change. */
+.card-resizable { position: relative; }
+.card-resizer { position: absolute; left: 0; right: 0; bottom: 0; height: 7px; cursor: row-resize; touch-action: none; z-index: 2; }
+.card-resizer::after {
+  content: ''; position: absolute; left: 35%; right: 35%; bottom: 1px; height: 3px;
+  border-radius: 2px; background: var(--border-strong); opacity: 0; transition: opacity 0.15s, background 0.15s;
+}
+.card-resizable:hover > .card-resizer::after { opacity: 1; }
+.card-resizer:hover::after, .card-resizer:active::after { background: var(--accent); left: 0; right: 0; }
+.card.card-sized { display: flex; flex-direction: column; flex: none; min-height: 0; overflow: hidden; }
+.card-sized > * { flex: none; }
+.card-sized > .scroll, .card-sized > .ov-scroll, .card-sized > .card-body {
+  flex: 1 1 auto; min-height: 0; max-height: none; overflow: auto;
+}
+details.card-sized:not([open]) { height: auto !important; }
+details:not([open]) > .card-resizer { display: none; }
 /* Keep the resize cursor and stop text selection while dragging. */
 body.resizing-col, body.resizing-col * { cursor: col-resize !important; user-select: none !important; }
 body.resizing-row, body.resizing-row * { cursor: row-resize !important; user-select: none !important; }
@@ -531,6 +548,13 @@ body.resizing-row, body.resizing-row * { cursor: row-resize !important; user-sel
 .ov-query-hint { color: var(--subtext); font-size: 12px; }
 .ov-badge { margin-left: 6px; padding: 0 6px; border-radius: 8px; font-family: var(--font, inherit); font-size: 11px;
   background: var(--surface-2); border: 1px solid var(--border); color: var(--subtext); white-space: nowrap; }
+.ov-badge-loaded { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+.ov-table tbody tr.ov-loaded td.mono { font-weight: 600; }
+.ov-table tbody tr.ov-flash { animation: ov-flash 1.6s ease-out; }
+@keyframes ov-flash {
+  0%, 30% { box-shadow: inset 3px 0 0 var(--accent), inset 0 0 0 2px var(--accent); }
+  100% { box-shadow: inset 3px 0 0 var(--accent); }
+}
 
 /* MetadataUpdate.js dialog */
 .ov-actions { white-space: nowrap; }
@@ -618,3 +642,13 @@ button.ov-sheet.ov-sheet-error { border-color: var(--danger); color: var(--dange
 }
 .eth-dim { color: var(--subtext); }
 .eth-keys { margin-top: 8px; font-size: 11px; color: var(--subtext); }
+
+/* Experiment picker (selectComponent.js): copy buttons and the loaded experiment's basedir */
+.exp-picker { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.exp-copy { border: none; background: none; padding: 2px 4px; color: var(--subtext); line-height: 1; }
+.exp-copy:hover:not(:disabled) { background: var(--btn-hover); color: var(--text); }
+.exp-basedir { display: inline-flex; align-items: center; gap: 2px; min-width: 0; max-width: 32vw; }
+.exp-basedir code {
+  font-size: 12px; color: var(--subtext); user-select: all;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}

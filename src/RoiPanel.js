@@ -5,6 +5,7 @@
 // Which kinds are shown is kept across experiments (fh-rois-shown, fh-rois-segment).
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import api from './api';
+import CardResizer from './CardResizer';
 
 const COLORS = {
   database: '#f59e0b',
@@ -214,6 +215,7 @@ function RoiPanel({ experiment, segmentationSource, setSegmentationSource, onOve
           )}
         </div>
       )}
+      {open && <CardResizer id="viewer-rois" />}
     </section>
   );
 }

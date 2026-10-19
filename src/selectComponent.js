@@ -5,6 +5,7 @@ import CreatableSelect from 'react-select/creatable';
 import api from './api';
 import { FIRST_FRAME } from './constants';
 import { useConsole } from './MessageConsole';
+import { copyText } from './utils';
 
 // Module-level so it isn't a new object on every render (which would make the
 // effect below need it as a dependency).
@@ -51,6 +52,7 @@ const SelectComponent = ({ onExperimentChange }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [isSwitching, setIsSwitching] = useState(false);
   const [current, setCurrent] = useState("");
+  const [paths, setPaths] = useState(null);    // {basedir, realpath} of the loaded experiment
   const { log } = useConsole();
 
   useEffect(() => {
@@ -77,8 +79,9 @@ const SelectComponent = ({ onExperimentChange }) => {
   useEffect(() => {
     api.get('/api/current_experiment')
       .then(r => {
-        const exp = unwrap(r.data)?.experiment;
-        if (exp) setCurrent(exp);
+        const info = unwrap(r.data);
+        if (info?.experiment) setCurrent(info.experiment);
+        if (info?.basedir) setPaths(info);
       })
       .catch(() => {});
   }, []);
@@ -91,6 +94,7 @@ const SelectComponent = ({ onExperimentChange }) => {
     setCurrent(trimmed);
     try {
       const data = await postLoad(trimmed);
+      setPaths(data.basedir ? data : null);
       const firstFrame = data.first_frame ?? FIRST_FRAME;
       log('info', `Loaded ${trimmed}`);
       if (onExperimentChange) onExperimentChange(firstFrame);
@@ -103,21 +107,45 @@ const SelectComponent = ({ onExperimentChange }) => {
     }
   };
 
+  const copy = async (text, what) => {
+    try {
+      await copyText(text);
+      log('info', `Copied ${what}: ${text}`);
+    } catch (err) {
+      log('warning', `Could not copy ${what}: ${err.message}`);
+    }
+  };
+
   // Typing a path not in the list and pressing Enter "creates" it: load it as typed.
   return (
-    <div onKeyDown={e => e.stopPropagation()} title="Experiment: pick one, or type its path and press Enter">
-      <CreatableSelect
-        options={options}
-        value={current ? { value: current, label: current } : null}
-        onChange={(option) => option?.value && option.value !== current && handleLoad(option.value)}
-        onCreateOption={handleLoad}
-        formatCreateLabel={(input) => `Load "${input}"`}
-        isLoading={isLoading || isSwitching}
-        isDisabled={isSwitching}
-        placeholder={defaultOption.label}
-        noOptionsMessage={() => "Type an experiment path, e.g. FlyHostel4/6X/2023-08-31_13-00-00"}
-        styles={selectStyles}
-      />
+    <div className="exp-picker" onKeyDown={e => e.stopPropagation()}>
+      <div title="Experiment: pick one, or type its path and press Enter">
+        <CreatableSelect
+          options={options}
+          value={current ? { value: current, label: current } : null}
+          onChange={(option) => option?.value && option.value !== current && handleLoad(option.value)}
+          onCreateOption={handleLoad}
+          formatCreateLabel={(input) => `Load "${input}"`}
+          isLoading={isLoading || isSwitching}
+          isDisabled={isSwitching}
+          placeholder={defaultOption.label}
+          noOptionsMessage={() => "Type an experiment path, e.g. FlyHostel4/6X/2023-08-31_13-00-00"}
+          styles={selectStyles}
+        />
+      </div>
+      <button className="exp-copy" disabled={!current} onClick={() => copy(current, 'the experiment name')}
+              title="Copy the experiment name">
+        <i className="fa fa-copy" />
+      </button>
+      {paths?.basedir && (
+        <span className="exp-basedir"
+              title={`basedir: ${paths.basedir}${paths.realpath && paths.realpath !== paths.basedir ? `\non disk: ${paths.realpath}` : ''}`}>
+          <code>{paths.basedir}</code>
+          <button className="exp-copy" onClick={() => copy(paths.basedir, 'the basedir')} title="Copy the basedir">
+            <i className="fa fa-copy" />
+          </button>
+        </span>
+      )}
     </div>
   );
 };

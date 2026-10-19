@@ -11,10 +11,11 @@
 // Experiments not analyzed yet (folder but no database) come from the metadata
 // sheets with analyzed: false; "Rebuild index" rewrites index.txt in a server job.
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import api from './api';
 import { useConsole } from './MessageConsole';
 import MetadataUpdate from './MetadataUpdate';
+import CardResizer from './CardResizer';
 
 const MISSING = '(missing)';
 const TOP_N = 12;
@@ -358,6 +359,7 @@ function BarChart({ prop, rows, unit, selected, onToggle, onRemove }) {
           {showAll ? 'Show top 12' : `Show all ${entries.length}`}
         </button>
       )}
+      <CardResizer id={`ov-chart-${prop}`} />
     </section>
   );
 }
@@ -442,6 +444,7 @@ function CrossTab({ rows, unit, rowProp, colProp, props, setRowProp, setColProp 
           <div className="ov-empty">Showing the 20 largest values on each axis.</div>
         )}
       </div>
+      <CardResizer id="ov-crosstab" />
     </section>
   );
 }
@@ -542,6 +545,7 @@ function LightCycleIssues({ rows, onOpen, onUpdateMetadata, sheetStatus }) {
           </tbody>
         </table>
       </div>
+      <CardResizer id="ov-light-cycle-issues" />
     </details>
   );
 }
@@ -561,8 +565,10 @@ function SheetButton({ experiment, onClick, status }) {
   );
 }
 
-function ExperimentTable({ rows, onOpen, current, onUpdateMetadata, sheetStatus, onPredownload, predownloading }) {
+function ExperimentTable({ rows, onOpen, current, active, onUpdateMetadata, sheetStatus, onPredownload, predownloading }) {
+  const { log } = useConsole();
   const [sort, setSort] = useState({ key: 'date', desc: true });
+  const scrollRef = useRef(null);
   const experiments = useMemo(() => {
     const byExp = new Map();
     for (const r of rows) {
@@ -593,6 +599,29 @@ function ExperimentTable({ rows, onOpen, current, onUpdateMetadata, sheetStatus,
     return list;
   }, [rows, sort, sheetStatus]);
   const downloadable = experiments.filter((e) => e.analyzed !== false && !e.error).map((e) => e.experiment);
+  const loadedShown = experiments.some((e) => sameExperiment(e.experiment, current));
+
+  // Scroll the table (not the page) to the loaded experiment's row and flash it.
+  const locate = useCallback((quiet = false) => {
+    const box = scrollRef.current;
+    const row = box?.querySelector('tr.ov-loaded');
+    if (!row) {
+      if (!quiet) log('info', current ? `${current} is not in the table: the search, query or filters hide it` : 'No experiment loaded');
+      return;
+    }
+    if (!box.offsetParent) return;      // hidden tab
+    const top = row.getBoundingClientRect().top - box.getBoundingClientRect().top + box.scrollTop;
+    box.scrollTo({ top: Math.max(0, top - (box.clientHeight - row.offsetHeight) / 2), behavior: quiet ? 'auto' : 'smooth' });
+    row.classList.remove('ov-flash');
+    void row.offsetWidth;               // restart the animation
+    row.classList.add('ov-flash');
+  }, [current, log]);
+
+  // When the tab is shown or another experiment is loaded, bring its row into view.
+  useEffect(() => {
+    if (active) requestAnimationFrame(() => locate(true));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active, current]);
 
   const header = (key, label) => (
     <th key={key} onClick={() => setSort((s) => ({ key, desc: s.key === key ? !s.desc : key === 'date' }))}>
@@ -606,6 +635,11 @@ function ExperimentTable({ rows, onOpen, current, onUpdateMetadata, sheetStatus,
         <span>Experiments</span>
         <span className="ov-count">{experiments.length}</span>
         <span className="spacer" style={{ flex: 1 }} />
+        <button className="ov-normal" disabled={!current} onClick={() => locate()}
+                title={loadedShown ? `Scroll to the loaded experiment (${current})`
+                  : `${current || 'No experiment'} is not in the table (search, query or filters)`}>
+          <i className="fa fa-crosshairs" style={{ marginRight: 6 }} />Loaded experiment
+        </button>
         <button className="ov-normal" disabled={predownloading || !downloadable.length}
                 onClick={() => onPredownload(downloadable)}
                 title={'Download the Google sheet metadata of every experiment in this table (each sheet once), '
@@ -614,17 +648,18 @@ function ExperimentTable({ rows, onOpen, current, onUpdateMetadata, sheetStatus,
           Predownload sheet metadata ({downloadable.length})
         </button>
       </header>
-      <div className="ov-scroll ov-table-scroll">
+      <div className="ov-scroll ov-table-scroll" ref={scrollRef}>
         <table className="pe-table ov-table">
           <thead>
             <tr>{TABLE_COLUMNS.map(([k, l]) => header(k, l))}<th /></tr>
           </thead>
           <tbody>
             {experiments.map((e) => (
-              <tr key={e.experiment} className={sameExperiment(e.experiment, current) ? 'selected' : undefined}
+              <tr key={e.experiment} className={sameExperiment(e.experiment, current) ? 'selected ov-loaded' : undefined}
                   title={e.error ? `Could not read: ${e.error}` : undefined}>
                 <td className="mono">
                   {e.experiment}{e.error && <span className="ov-warn"> ⚠</span>}
+                  {sameExperiment(e.experiment, current) && <span className="ov-badge ov-badge-loaded" title="Loaded in the viewer">loaded</span>}
                   {e.analyzed === false && (
                     <span className="ov-badge" title={`No database yet: listed in the metadata sheet${e.sheets?.length === 1 ? '' : 's'} ${e.sheets?.join(', ')}`}>
                       not analyzed
@@ -662,6 +697,7 @@ function ExperimentTable({ rows, onOpen, current, onUpdateMetadata, sheetStatus,
           </tbody>
         </table>
       </div>
+      <CardResizer id="ov-experiments" />
     </section>
   );
 }
@@ -693,6 +729,7 @@ export default function OverviewTab({ active, currentExperiment, onOpenExperimen
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [reindexing, setReindexing] = useState(false);
+  const [downloadingSheets, setDownloadingSheets] = useState(false);
   const [metadataOf, setMetadataOf] = useState(null);   // experiment whose sheet metadata is being updated
   const [sheetStatus, setSheetStatus] = useState({});    // experiment -> predownloaded sheet metadata status
   const [predownloading, setPredownloading] = useState(false);
@@ -742,6 +779,23 @@ export default function OverviewTab({ active, currentExperiment, onOpenExperimen
       })
       .catch((err) => log('error', `Could not rebuild index.txt: ${err.response?.data?.error || err.message}`))
       .finally(() => setReindexing(false));
+  }, [trackJob, log, fetchData]);
+
+  // download_metadata_sheets on the server: the SHEETS tabs as CSV into $FLYHOSTEL_METADATA,
+  // where the not-analyzed experiments are read from; then reloads.
+  const downloadSheets = useCallback(() => {
+    setDownloadingSheets(true);
+    api.post('/api/metadata/download_sheets')
+      .then((r) => trackJob(unwrap(r.data)))
+      .then((job) => {
+        if (job?.status !== 'done') return;
+        const { files = [], output } = job.result || {};
+        log('success', `${files.length} metadata sheet${files.length === 1 ? '' : 's'} downloaded to ${output}`);
+        files.forEach((f) => log('info', `  ${f}`));
+        fetchData();
+      })
+      .catch((err) => log('error', `Could not download the metadata sheets: ${err.response?.data?.error || err.message}`))
+      .finally(() => setDownloadingSheets(false));
   }, [trackJob, log, fetchData]);
 
   // Predownloaded sheet metadata lives in the server's memory: ask what it has.
@@ -854,6 +908,12 @@ export default function OverviewTab({ active, currentExperiment, onOpenExperimen
                 title="One row per fly matching the current filters, with every metadata column">
           <i className="fa fa-download" style={{ marginRight: 6 }} />CSV
         </button>
+        <button onClick={downloadSheets} disabled={downloadingSheets}
+                title={'Download the metadata sheets (the SHEETS tabs of the googleapi config) as CSV into $FLYHOSTEL_METADATA '
+                  + '(download_metadata_sheets), then reload: the experiments not analyzed yet are read from them. '
+                  + 'Databases are not changed'}>
+          <i className={`fa ${downloadingSheets ? 'fa-spinner fa-spin' : 'fa-table'}`} style={{ marginRight: 6 }} />Download metadata sheets
+        </button>
         <button onClick={reindex} disabled={reindexing || loading}
                 title="Rewrite index.txt with every database now in the videos folder, then reload (runs in the background)">
           <i className={`fa ${reindexing ? 'fa-spinner fa-spin' : 'fa-database'}`} style={{ marginRight: 6 }} />Rebuild index
@@ -909,7 +969,7 @@ export default function OverviewTab({ active, currentExperiment, onOpenExperimen
       <LightCycleIssues rows={filtered} onOpen={onOpenExperiment} onUpdateMetadata={setMetadataOf}
                         sheetStatus={sheetStatus} />
 
-      <ExperimentTable rows={filtered} onOpen={onOpenExperiment} current={currentExperiment}
+      <ExperimentTable rows={filtered} onOpen={onOpenExperiment} current={currentExperiment} active={active}
                        onUpdateMetadata={setMetadataOf} sheetStatus={sheetStatus}
                        onPredownload={predownload} predownloading={predownloading} />
 

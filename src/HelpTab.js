@@ -107,7 +107,10 @@ export default function HelpTab() {
               in the top bar. All tabs follow the loaded experiment. Experiments not analyzed
               yet (no database, listed under <i>No database</i>, or <i>Open</i> in the
               Overview) show their recording and, once idtrackerai has started on them, its
-              blobs; the PE and Ethograms tabs are grayed out for them.
+              blobs; the PE and Ethograms tabs are grayed out for them. Next to the picker,{' '}
+              <i className="fa fa-copy" /> copies the experiment name, and the loaded experiment's
+              folder (basedir) is shown with its own <i className="fa fa-copy" /> (hover it for where
+              the folder really is on disk).
             </li>
             <li>
               <b>Choose the tracking source.</b> Ticking <i>Validated tracking</i> reads
@@ -127,6 +130,12 @@ export default function HelpTab() {
               <b>Watch the console.</b> The panel at the bottom shows messages, errors and the
               progress of long jobs, such as video exports. Click its title to fold it and
               drag its top edge to resize it.
+            </li>
+            <li>
+              <b>Resize cards.</b> Most cards with a list or a table (Tracking, Navigation, ROIs,
+              Validation CSV, the Overview charts and tables, the Data management table) can be
+              made shorter or taller by dragging their bottom edge; the height is remembered.
+              Double click the edge to return to the natural height.
             </li>
           </ol>
           <p className="help-note">
@@ -360,8 +369,11 @@ export default function HelpTab() {
               <b>Not analyzed experiments.</b> Experiments in the metadata sheets (the CSV exports in
               <code>/flyhostel_data/metadata</code> of the sheets listed in the googleapi config) that
               have a folder in the videos directory but no database yet are shown too, marked
-              <i>not analyzed</i> (they cannot be opened). Use the <i>Analyzed</i> chart to show or
+              <i>not analyzed</i>. Use the <i>Analyzed</i> chart to show or
               hide them; their metadata comes from the sheet instead of the database.
+              <i>Download metadata sheets</i> downloads those CSV exports again
+              (<code>download_metadata_sheets</code>, in the background) and reloads the dashboard;
+              databases are not changed.
             </li>
             <li>
               <i>Rebuild index</i> rewrites <code>index.txt</code> with every database now in the videos
@@ -403,7 +415,12 @@ export default function HelpTab() {
             </li>
             <li><i>Add chart</i> lists every metadata column found, with the share of flies that have a value; × removes a chart.</li>
             <li><i>Cross-tabulation</i> counts two properties against each other (e.g. genotype × group size).</li>
-            <li><i>Open</i> in the experiments table loads that experiment in the Group viewer.</li>
+            <li>
+              <i>Open</i> in the experiments table loads that experiment in the Group viewer. The
+              loaded experiment's row is highlighted with a <i>loaded</i> badge, and the table scrolls
+              to it when the tab is shown; <i className="fa fa-crosshairs" /> <i>Loaded experiment</i>{' '}
+              scrolls back to it (or says which search, query or filter hides it).
+            </li>
             <li><i>CSV</i> downloads one row per matching fly with all metadata columns.</li>
           </ul>
           <p className="help-note">

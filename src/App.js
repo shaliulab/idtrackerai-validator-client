@@ -9,6 +9,7 @@ import InteractiveText from './interactiveText';
 import FramePlayer from './framePlayer';
 import { BlobsTable } from './blobs_table';
 import SelectComponent, { postLoad } from './selectComponent';
+import CardResizer from './CardResizer';
 import Splitter from './Splitter';
 
 import { FIRST_FRAME, PLACEHOLDER_IMAGE, LABEL_FIELD } from './constants';
@@ -717,6 +718,7 @@ function App() {
                             onOpenEthogram={openEthogram}
                             ethogramIdentities={ethogramIdentities} />
               </div>
+              <CardResizer id="viewer-tracking" />
             </section>
 
             <section className="card">
@@ -763,6 +765,7 @@ function App() {
                 </div>
                 <CvatLinks experiment={currentExperiment} frameNumber={frameNumber} />
               </div>
+              <CardResizer id="viewer-navigation" />
             </section>
 
             <RoiPanel
