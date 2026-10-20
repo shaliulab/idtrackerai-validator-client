@@ -18,6 +18,7 @@ import DeletePEAnnotations from './DeletePEAnnotations';
 import HelpTab from './HelpTab';
 import OverviewTab from './OverviewTab';
 import DataManagementTab from './DataManagementTab';
+import QcTab from './QcTab';
 import ValidationCsvBuilder from './ValidationCsvBuilder';
 import CvatLinks from './CvatLinks';
 import RoiPanel from './RoiPanel';
@@ -338,7 +339,7 @@ function App() {
 
   useEffect(() => { fetchFlies(); }, [fetchFlies]);
 
-  // Ctrl+1 … Ctrl+6 switch tabs
+  // Ctrl+1 … Ctrl+7 switch tabs
   const hasDatabaseRef = useRef(true);
   hasDatabaseRef.current = experimentInfo.has_database;
   useEffect(() => {
@@ -350,6 +351,7 @@ function App() {
       else if (e.key === '4') { e.preventDefault(); setActiveTab('overview'); }
       else if (e.key === '5') { e.preventDefault(); setActiveTab('data_management'); }
       else if (e.key === '6') { e.preventDefault(); setActiveTab('help'); }
+      else if (e.key === '7') { e.preventDefault(); if (hasDatabaseRef.current) setActiveTab('qc'); }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -514,7 +516,7 @@ function App() {
   // PE and Ethograms need the database
   useEffect(() => {
     if (!experimentInfo.has_database) {
-      setActiveTab((tab) => (tab === 'proboscis_extension' || tab === 'ethogram' ? 'group_viewer' : tab));
+      setActiveTab((tab) => (tab === 'proboscis_extension' || tab === 'ethogram' || tab === 'qc' ? 'group_viewer' : tab));
     }
   }, [experimentInfo]);
 
@@ -660,6 +662,7 @@ function App() {
         <Tab id="group_viewer" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+1">Group viewer</Tab>
         <Tab id="proboscis_extension" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+2" disabled={noDatabase}>Proboscis extension (PE)</Tab>
         <Tab id="ethogram" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+3" disabled={noDatabase}>Ethograms</Tab>
+        <Tab id="qc" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+7" disabled={noDatabase}>QC</Tab>
         <Tab id="overview" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+4">Overview</Tab>
         <Tab id="data_management" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+5">Data management</Tab>
         <Tab id="help" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+6">
@@ -832,6 +835,19 @@ function App() {
             }}
           />
         </Suspense>
+      </div>
+
+      <div className="tab-panel" style={{ display: activeTab === 'qc' ? 'block' : 'none' }}>
+        <QcTab
+          active={activeTab === 'qc'}
+          currentExperiment={currentExperiment}
+          useVal={useVal}
+          onOpenFrame={(fn) => {
+            setIsPlaying(false);
+            setFrameNumber(fn);
+            setActiveTab('group_viewer');
+          }}
+        />
       </div>
 
       <div className="tab-panel" style={{ display: activeTab === 'overview' ? 'block' : 'none' }}>

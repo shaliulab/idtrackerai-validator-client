@@ -12,6 +12,7 @@ const SECTIONS = [
   { id: 'help-viewer', title: 'Group viewer' },
   { id: 'help-pe', title: 'Proboscis extension (PE)' },
   { id: 'help-ethogram', title: 'Ethograms' },
+  { id: 'help-qc', title: 'QC' },
   { id: 'help-overview-tab', title: 'Overview' },
   { id: 'help-data', title: 'Data management' },
   { id: 'help-keys', title: 'Keyboard & mouse' },
@@ -29,7 +30,7 @@ function Section({ id, title, children }) {
 
 const SHORTCUTS = [
   ['Anywhere', [
-    [<><Key>Ctrl</Key>+<Key>1</Key> / <Key>2</Key> / <Key>3</Key> / <Key>4</Key> / <Key>5</Key> / <Key>6</Key></>, 'Switch to Group viewer / PE / Ethograms / Overview / Data management / How to use'],
+    [<><Key>Ctrl</Key>+<Key>1</Key> / <Key>2</Key> / <Key>3</Key> / <Key>4</Key> / <Key>5</Key> / <Key>6</Key> / <Key>7</Key></>, 'Switch to Group viewer / PE / Ethograms / Overview / Data management / How to use / QC'],
   ]],
   ['Group viewer', [
     [<><Key>1</Key> / <Key>7</Key></>, 'Previous / next chunk'],
@@ -91,11 +92,12 @@ export default function HelpTab() {
             <li><b>check identities</b> frame by frame, and find the frames where tracking failed or was corrected (Group viewer);</li>
             <li><b>annotate proboscis extension</b> events picked up by the pose pipeline (PE tab);</li>
             <li><b>browse each fly's behaviour</b> over the whole experiment and export sleep bout videos (Ethograms);</li>
+            <li><b>count the frames that do not track every fly</b> of the loaded experiment, chunk by chunk (QC);</li>
             <li><b>see which experiments exist</b>, by genotype, group size, sex and any other metadata (Overview);</li>
             <li><b>free disk space</b> by deleting experiments that are backed up (Data management).</li>
           </ul>
           <p className="help-note">
-            Each tab name shows its shortcut (<Key>Ctrl</Key>+<Key>1</Key>…<Key>6</Key>).
+            Each tab name shows its shortcut (<Key>Ctrl</Key>+<Key>1</Key>…<Key>7</Key>).
             Hover over a button to see what it does.
           </p>
         </Section>
@@ -340,6 +342,35 @@ export default function HelpTab() {
               downloaded. Saved videos appear as buttons that jump to each bout.
             </li>
           </ul>
+        </Section>
+
+        <Section id="help-qc" title="QC">
+          <p>
+            How many frames of the loaded experiment do <b>not</b> track the expected number of
+            flies. A frame is ok when the tracking table (<code>IDENTITY</code>, or{' '}
+            <code>IDENTITY_VAL</code> with <i>Validated tracking</i>) has exactly one row per fly,
+            each with its own non-zero identity. With a single fly, identity 0 is the fly
+            (flyhostel's convention), so one row of any identity is ok. Every recorded frame between the first and the
+            last tracked chunk is checked, so frames without any row count too. The first visit
+            for an experiment (and table) reads the whole table in the background (~0.1 s per
+            chunk, progress in the console); the result is kept until the database changes, and{' '}
+            <i>Recompute</i> reads it again.
+          </p>
+          <ul>
+            <li><b>Unidentified</b> (groups only): a fly is there but has identity 0.</li>
+            <li><b>Not detected</b>: fewer flies than expected and none without identity.</li>
+            <li><b>Other</b>: extra rows, or the same identity twice.</li>
+          </ul>
+          <p>
+            The chart shows the share of bad frames per chunk (the strip below it: per 10 s).
+            A red ▲ marks a chunk boundary where a fly is not identified on the last frame of
+            one chunk or on the first frame of the next: the concatenation links identities
+            across chunks through those frames, so a fly missed there can leave later chunks
+            without its identity (<i>unidentified</i>) or, with a single fly, without its rows. The <i>Chunks</i> table lists the
+            chunks with problems, how many flies are identified on their first / last frame and
+            the CONCATENATION rows flagged as broken. Click a bar, a strip bin, a chunk or a frame
+            number to open it in the Group viewer.
+          </p>
         </Section>
 
         <Section id="help-overview-tab" title="Overview">

@@ -652,3 +652,69 @@ button.ov-sheet.ov-sheet-error { border-color: var(--danger); color: var(--dange
   font-size: 12px; color: var(--subtext); user-select: all;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
+
+/* ── QC tab (QcTab.js) ── */
+:root {
+  --qc-unidentified: #eb6834;    /* categorical slots 2, 1, 3 */
+  --qc-not-detected: #2a78d6;
+  --qc-other: #1baf7a;
+  --qc-good: #0ca30c;            /* status */
+  --qc-critical: #d03b3b;
+}
+:root[data-theme="dark"] {
+  --qc-unidentified: #d95926;
+  --qc-not-detected: #3987e5;
+  --qc-other: #199e70;
+}
+.qc-verdict { display: flex; align-items: center; gap: 14px; padding: 12px 16px; border-left: 4px solid; }
+.qc-verdict > i { font-size: 30px; }
+.qc-verdict-title { font-size: 18px; font-weight: 600; }
+.qc-verdict-count { font-weight: 400; color: var(--subtext); font-size: 14px; }
+.qc-verdict-sub { font-size: 13px; color: var(--subtext); margin-top: 2px; }
+.qc-verdict-ok { border-left-color: var(--qc-good); }
+.qc-verdict-ok > i { color: var(--qc-good); }
+.qc-verdict-warn { border-left-color: #e07b00; }
+.qc-verdict-warn > i { color: #e07b00; }
+.qc-verdict-bad { border-left-color: var(--qc-critical); background: var(--danger-soft); }
+.qc-verdict-bad > i { color: var(--qc-critical); }
+.qc-tone-ok .ov-stat-value { color: var(--qc-good); }
+.qc-tone-bad .ov-stat-value { color: var(--danger); }
+.qc-swatch { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: 0; }
+.qc-unidentified { fill: var(--qc-unidentified); background: var(--qc-unidentified); }
+.qc-not_detected { fill: var(--qc-not-detected); background: var(--qc-not-detected); }
+.qc-other { fill: var(--qc-other); background: var(--qc-other); }
+.qc-legend { display: inline-flex; flex-wrap: wrap; gap: 4px 14px; text-transform: none; letter-spacing: 0; font-weight: 400; color: var(--text); }
+.qc-mark-legend { color: var(--qc-critical); margin-right: 4px; font-size: 10px; }
+.qc-timeline { position: relative; user-select: none; }
+.qc-svg { display: block; cursor: pointer; overflow: visible; }
+.qc-grid { stroke: var(--border); stroke-width: 1; }
+.qc-axis { fill: var(--subtext); font-size: 10px; font-variant-numeric: tabular-nums; }
+.qc-hit { fill: transparent; }
+.qc-hovered .qc-hit { fill: var(--accent-soft); }
+.qc-mark { fill: var(--qc-critical); }
+.qc-strip-row { display: flex; align-items: center; margin-top: 4px; }
+.qc-strip-label { width: 34px; padding-right: 4px; box-sizing: border-box; text-align: right; font-size: 10px; color: var(--subtext); }
+.qc-strip { display: block; cursor: pointer; border-radius: 2px; background: var(--surface-2); }
+.qc-tooltip { font-size: 12px; line-height: 1.5; }
+.qc-hint { color: var(--subtext); font-size: 11px; margin-top: 2px; }
+.qc-row { display: grid; grid-template-columns: minmax(260px, 1fr) minmax(0, 2fr); gap: 12px; align-items: start; }
+@media (max-width: 900px) { .qc-row { grid-template-columns: 1fr; } }
+.qc-hist { width: 100%; border-collapse: collapse; font-size: 13px; }
+.qc-hist td { padding: 3px 6px; }
+.qc-hist-label { width: 40px; text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.qc-hist-bar { width: 100%; }
+.qc-hist-bar div { height: 14px; min-width: 1px; border-radius: 0 4px 4px 0; }
+.qc-ok-bar { background: var(--qc-good); }
+.qc-bad-bar { background: var(--qc-critical); }
+.qc-num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.qc-muted { color: var(--subtext); font-size: 12px; }
+.qc-ok-text { color: var(--qc-good); font-weight: 600; }
+.qc-bad-text { color: var(--danger); font-weight: 600; }
+.qc-pad { padding: 6px 12px; }
+.qc-scroll { max-height: 50vh; }
+.qc-run-bins { display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 8px; margin-bottom: 10px; }
+.qc-run-bin { padding: 6px 8px; border: 1px solid var(--border); border-radius: var(--radius); }
+.qc-run-bin-label { font-size: 11px; color: var(--subtext); }
+.qc-run-bin-value { font-size: 18px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.qc-flag { margin-right: 4px; padding: 0 6px; border-radius: 8px; font-size: 11px; border: 1px solid var(--border); color: var(--subtext); white-space: nowrap; }
+.qc-flag-bad { color: var(--danger); border-color: var(--danger); background: var(--danger-soft); font-weight: 600; }
