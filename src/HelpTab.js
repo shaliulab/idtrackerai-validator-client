@@ -492,6 +492,24 @@ export default function HelpTab() {
               experiment name to confirm; the server scans it again, deletes the folder (the backup is not
               touched) and removes its database from <code>index.txt</code>.</li>
           </ul>
+          <h3>Restore from Dropbox</h3>
+          <p>
+            Experiments deleted here are still on Dropbox (<code>dropbox:/Data/flyhostel_data/videos</code>).
+            The card below the table lists the experiment folders that are on Dropbox but not in the videos
+            drives, with the deepethogram (DEG) videos made from them (<i>DEG labelled</i>: videos with a
+            labels CSV, in <code>/flyhostel_data/fiftyone/FlyBehaviors/DEG*/*/DATA</code>; hover for the projects).
+          </p>
+          <ul>
+            <li><i>List Dropbox</i> lists Dropbox and the DEG projects again (~30 s) and inspects the candidates with
+              labelled DEG videos: size, raw chunks and whether the database is there. ⓘ inspects another one.</li>
+            <li><i>Show</i>: only the experiments with labelled DEG videos (default), with any DEG video, or all.</li>
+            <li><i>Restore</i> (one row, or the checked rows) shows how much each drive receives and keeps free,
+              then copies the experiments with rclone (one at a time per drive; progress in the console). Each one
+              lands in its usual folder, its database is added to <code>index.txt</code> (it then appears in the
+              experiment picker) and it is scanned. The server refuses when a drive would keep less than 50 GB free.</li>
+            <li><b>partial</b>: an earlier restore stopped half way; restoring again resumes it, copying only the
+              missing files. <b>in backup</b>: its critical files are also in the local backup.</li>
+          </ul>
         </Section>
 
         <Section id="help-keys" title="Keyboard & mouse">

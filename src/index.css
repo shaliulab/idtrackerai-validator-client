@@ -599,6 +599,13 @@ button.ov-sheet.ov-sheet-error { border-color: var(--danger); color: var(--dange
   color: var(--danger); border: 1px solid var(--danger); background: var(--danger-soft); white-space: nowrap; }
 .dm-problems { color: var(--danger); }
 .dm-problems ul { margin: 2px 0 4px; padding-left: 20px; }
+.dm-restore-toolbar { padding: 8px 12px; border-bottom: 1px solid var(--border); }
+.dm-restore-note { padding: 8px 12px; color: var(--subtext); font-size: 12px; }
+.dm-restore-dialog { width: min(980px, 100%); }
+.dm-restore-dialog .mono { font-family: monospace; }
+.dm-restore-plan { margin: 8px 0 12px; }
+.dm-restore-plan td { vertical-align: top; }
+.dm-restore-short { color: var(--danger); font-weight: 600; }
 
 /* ── Group viewer: ROIs & segmentation card (RoiPanel.js) ── */
 .roi-card { flex-shrink: 0; }

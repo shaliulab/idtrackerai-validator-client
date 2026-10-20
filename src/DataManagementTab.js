@@ -8,11 +8,14 @@
 // complete: the dialog needs the experiment name typed, and the server rescans the
 // experiment before deleting its folder. Chunks that are not consecutive (tracking or
 // raw recording) are listed as problems: ⚠ next to the name, details under ▸.
+// Below the table, "Restore from Dropbox" (RestoreFromDropbox.js) brings back
+// experiments that are only on Dropbox.
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import api from './api';
 import CardResizer from './CardResizer';
 import { useConsole } from './MessageConsole';
+import RestoreFromDropbox from './RestoreFromDropbox';
 
 const unwrap = (data) => (typeof data === 'string' ? JSON.parse(data) : data);
 
@@ -420,6 +423,8 @@ export default function DataManagementTab({ active, currentExperiment }) {
         </div>
         <CardResizer id="dm-table" />
       </section>
+
+      <RestoreFromDropbox onRestored={fetchData} />
 
       {toDelete && (
         <DeleteDialog record={toDelete} backupChunks={data.backup_chunks}
