@@ -31,7 +31,7 @@ function Section({ id, title, children }) {
 
 const SHORTCUTS = [
   ['Anywhere', [
-    [<><Key>Ctrl</Key>+<Key>1</Key> / <Key>2</Key> / <Key>3</Key> / <Key>4</Key> / <Key>5</Key> / <Key>6</Key> / <Key>7</Key> / <Key>8</Key></>, 'Switch to Group viewer / PE / Ethograms / Overview / Data management / How to use / QC / Pose'],
+    [<><Key>Ctrl</Key>+<Key>1</Key> / <Key>2</Key> / <Key>3</Key> / <Key>4</Key> / <Key>5</Key> / <Key>6</Key> / <Key>7</Key> / <Key>8</Key></>, 'Switch to Group viewer / PE / Ethograms / QC / Pose / Overview / Data management / How to use (the tabs, left to right)'],
   ]],
   ['Group viewer', [
     [<><Key>1</Key> / <Key>7</Key></>, 'Previous / next chunk'],
@@ -335,7 +335,7 @@ export default function HelpTab() {
             <li>◀ ▶ next to a behavior jump to the start of its previous / next bout; <i>skip bouts under</i> ignores shorter ones.</li>
             <li><i>follow playback</i> moves the window along with the playing movie; <i>shade by score</i> fades seconds the classifier was less sure about.</li>
             <li><i>Go to</i> jumps to a frame number or a ZT time.</li>
-            <li><i>Open frame in viewer</i> shows the cursor's frame in the Group viewer.</li>
+            <li><i>Open frame in viewer</i> shows the cursor's frame in the Group viewer; <i>Open frame in Pose</i> shows this fly's pose at that frame in the Pose tab.</li>
             <li><b>← sleep bout / sleep bout →</b> jump between sleep bouts.</li>
           </ul>
 
@@ -409,7 +409,9 @@ export default function HelpTab() {
             instance score stored by SLEAP. <i>Frames around</i> plots the three measures for
             every frame within the window (± 2, 10 or 60 s); click to go to a frame. The
             buttons move by a chunk, 1 s, 10 or 1 frames; <i>Open in Group viewer</i> shows the
-            same frame there. A fly without a position in a frame (not tracked) has its pose
+            same frame there; <i>Open in Ethograms + Group viewer</i> opens this fly's ethogram at
+            that frame and moves the Group viewer to it as well (grayed out when the fly has no
+            ethogram). A fly without a position in a frame (not tracked) has its pose
             listed but not drawn.
           </p>
         </Section>

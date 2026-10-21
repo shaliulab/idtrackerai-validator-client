@@ -236,7 +236,8 @@ function Traces({ trace, frame, windowFrames, framerate, onSeek, nScored }) {
   );
 }
 
-export default function PoseTab({ active, currentExperiment, request, viewerFrame, framerate, chunksize: viewerChunksize, onOpenInViewer }) {
+export default function PoseTab({ active, currentExperiment, request, viewerFrame, framerate, chunksize: viewerChunksize,
+                                  ethogramFlies = [], onOpenInViewer, onOpenInEthogram }) {
   const [flies, setFlies] = useState([]);
   const [fly, setFly] = useState(null);
   const [frame, setFrame] = useState(null);
@@ -362,6 +363,13 @@ export default function PoseTab({ active, currentExperiment, request, viewerFram
                  onBlur={() => frameInput !== '' && Number(frameInput) !== frame && seek(Number(frameInput))} />
         </label>
         <button onClick={() => frame != null && onOpenInViewer(frame)} title="Show this frame in the Group viewer">Open in Group viewer</button>
+        <button onClick={() => frame != null && onOpenInEthogram(fly, frame)}
+                disabled={!ethogramFlies.some((f) => f.fly === fly && f.available)}
+                title={ethogramFlies.some((f) => f.fly === fly && f.available)
+                  ? "Show this fly's ethogram at this frame, and move the Group viewer to it too"
+                  : 'This fly has no ethogram'}>
+          Open in Ethograms + Group viewer
+        </button>
       </div>
 
       <div className="pose-main">

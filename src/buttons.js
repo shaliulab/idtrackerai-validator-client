@@ -116,7 +116,9 @@ const Buttons = ({ frameNumber, setFrameNumber, isPlaying, setIsPlaying, recordi
       if (tag === 'input' || tag === 'textarea' || editable) {
         return;
       }
-    
+      // Ctrl/Cmd/Alt + digit switch tabs (App.js), not frames
+      if (event.ctrlKey || event.metaKey || event.altKey) return;
+
       switch (event.key) {
         case '1':
           prev_chunk();

@@ -357,11 +357,11 @@ function App() {
       if (e.key === '1') { e.preventDefault(); setActiveTab('group_viewer'); }
       else if (e.key === '2') { e.preventDefault(); if (hasDatabaseRef.current) setActiveTab('proboscis_extension'); }
       else if (e.key === '3') { e.preventDefault(); if (hasDatabaseRef.current) setActiveTab('ethogram'); }
-      else if (e.key === '4') { e.preventDefault(); setActiveTab('overview'); }
-      else if (e.key === '5') { e.preventDefault(); setActiveTab('data_management'); }
-      else if (e.key === '6') { e.preventDefault(); setActiveTab('help'); }
-      else if (e.key === '7') { e.preventDefault(); if (hasDatabaseRef.current) setActiveTab('qc'); }
-      else if (e.key === '8') { e.preventDefault(); if (hasDatabaseRef.current) setActiveTab('pose'); }
+      else if (e.key === '4') { e.preventDefault(); if (hasDatabaseRef.current) setActiveTab('qc'); }
+      else if (e.key === '5') { e.preventDefault(); if (hasDatabaseRef.current) setActiveTab('pose'); }
+      else if (e.key === '6') { e.preventDefault(); setActiveTab('overview'); }
+      else if (e.key === '7') { e.preventDefault(); setActiveTab('data_management'); }
+      else if (e.key === '8') { e.preventDefault(); setActiveTab('help'); }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -672,11 +672,11 @@ function App() {
         <Tab id="group_viewer" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+1">Group viewer</Tab>
         <Tab id="proboscis_extension" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+2" disabled={noDatabase}>Proboscis extension (PE)</Tab>
         <Tab id="ethogram" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+3" disabled={noDatabase}>Ethograms</Tab>
-        <Tab id="qc" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+7" disabled={noDatabase}>QC</Tab>
-        <Tab id="pose" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+8" disabled={noDatabase}>Pose</Tab>
-        <Tab id="overview" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+4">Overview</Tab>
-        <Tab id="data_management" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+5">Data management</Tab>
-        <Tab id="help" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+6">
+        <Tab id="qc" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+4" disabled={noDatabase}>QC</Tab>
+        <Tab id="pose" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+5" disabled={noDatabase}>Pose</Tab>
+        <Tab id="overview" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+6">Overview</Tab>
+        <Tab id="data_management" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+7">Data management</Tab>
+        <Tab id="help" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+8">
           <i className="fa fa-question-circle-o" style={{ marginRight: 6 }} />How to use
         </Tab>
       </nav>
@@ -844,6 +844,7 @@ function App() {
               setFrameNumber(fn);
               setActiveTab('group_viewer');
             }}
+            onOpenInPose={openPose}
           />
         </Suspense>
       </div>
@@ -870,10 +871,16 @@ function App() {
           viewerFrame={frameNumber}
           framerate={recordingFramerate}
           chunksize={chunksize}
+          ethogramFlies={ethogramFlies}
           onOpenInViewer={(fn) => {
             setIsPlaying(false);
             setFrameNumber(fn);
             setActiveTab('group_viewer');
+          }}
+          onOpenInEthogram={(fly, fn) => {
+            // the Group viewer follows too, so both show this frame
+            setFrameNumber(fn);
+            openEthogram(Number(fly.split('__').pop()), fn);
           }}
         />
       </div>

@@ -55,7 +55,7 @@ const readFlag = (key, fallback) => {
 };
 const writeFlag = (key, value) => { try { localStorage.setItem(key, value ? '1' : '0'); } catch { /* ignore */ } };
 
-export default function EthogramViewer({ flies, request, animalMetadata, active, theme, themeName, selectStyle, onOpenInViewer }) {
+export default function EthogramViewer({ flies, request, animalMetadata, active, theme, themeName, selectStyle, onOpenInViewer, onOpenInPose }) {
   const [fly, setFly] = useState(null);
   const [properties, setProperties] = useState(null);
   const [track, setTrack] = useState(null);          // prepareTrack() of the shown fly
@@ -467,6 +467,13 @@ export default function EthogramViewer({ flies, request, animalMetadata, active,
               title="Show this frame in the Idtrackerai viewer tab"
             >
               Open frame in viewer
+            </button>
+            <button
+              style={buttonStyle}
+              onClick={() => onOpenInPose(fly, cursorFrame)}
+              title="Show this fly's pose at this frame in the Pose tab"
+            >
+              Open frame in Pose
             </button>
           </>
         )}
