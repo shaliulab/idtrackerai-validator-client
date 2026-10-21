@@ -606,6 +606,8 @@ button.ov-sheet.ov-sheet-error { border-color: var(--danger); color: var(--dange
 .dm-restore-plan { margin: 8px 0 12px; }
 .dm-restore-plan td { vertical-align: top; }
 .dm-restore-short { color: var(--danger); font-weight: 600; }
+.dbx-invalid { border-color: var(--danger) !important; color: var(--danger); }
+.dbx-preview { max-height: 30vh; overflow: auto; margin: 8px 0 12px; font-size: 12px; }
 
 /* ── Group viewer: ROIs & segmentation card (RoiPanel.js) ── */
 .roi-card { flex-shrink: 0; }

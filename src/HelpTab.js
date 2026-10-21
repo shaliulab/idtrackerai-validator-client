@@ -492,6 +492,30 @@ export default function HelpTab() {
               experiment name to confirm; the server scans it again, deletes the folder (the backup is not
               touched) and removes its database from <code>index.txt</code>.</li>
           </ul>
+          <h3>Files on Dropbox</h3>
+          <p>
+            Lists every file of a folder on Dropbox (☁ in a row of the table, or type a folder relative to{' '}
+            <code>dropbox:/Data/flyhostel_data/videos</code> and press <i>List</i>), next to its local copy:
+            <b> same size</b>, <b>verified</b> (contents hashed earlier), <b>different size / content</b>,{' '}
+            <b>no local copy</b>. The pattern selects the files, as a <i>Glob</i> (<code>*.slp</code>: any
+            file name ending in .slp, in any subfolder; with a <code>/</code> the whole path, e.g.{' '}
+            <code>flyhostel/**/*.slp</code>; <code>?</code> one character, <code>[0-4]</code> a set) or a{' '}
+            <i>Regex</i> (JavaScript, searched in the path in the folder, e.g.{' '}
+            <code>^000[0-4]\d\d\.(mp4|npz)$</code>), together with <i>Local copy</i>; the counts cover every
+            match, the table shows the first 1000.
+          </p>
+          <p>
+            <i>Delete N on Dropbox</i> deletes the selected files that have a local copy of the same size; you type
+            the number of files to confirm. The server hashes each local copy first and deletes a file only when
+            its Dropbox content hash matches and neither copy changed meanwhile; the others are kept and listed in
+            the console. Local copies are never touched. Deleted files can be restored from Dropbox's deleted files
+            for a while and are logged to <code>~/.cache/idtrackerai-validator/deleted_from_dropbox.jsonl</code>.
+          </p>
+          <p>
+            Untick <i>Safe mode</i> (ticked again on every page load) to delete files Dropbox does not need to keep at
+            all: the button then deletes every matching file, also those with no or another local copy, without
+            hashing anything. The dialog says how many of them have no local copy of the same size.
+          </p>
           <h3>Restore from Dropbox</h3>
           <p>
             Experiments deleted here are still on Dropbox (<code>dropbox:/Data/flyhostel_data/videos</code>).

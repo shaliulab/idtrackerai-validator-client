@@ -8,14 +8,16 @@
 // complete: the dialog needs the experiment name typed, and the server rescans the
 // experiment before deleting its folder. Chunks that are not consecutive (tracking or
 // raw recording) are listed as problems: ⚠ next to the name, details under ▸.
-// Below the table, "Restore from Dropbox" (RestoreFromDropbox.js) brings back
-// experiments that are only on Dropbox.
+// Below the table, "Files on Dropbox" (DropboxFiles.js; ☁ per row) lists a folder on
+// Dropbox and deletes regex-selected files there, and "Restore from Dropbox"
+// (RestoreFromDropbox.js) brings back experiments that are only on Dropbox.
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import api from './api';
 import CardResizer from './CardResizer';
 import { useConsole } from './MessageConsole';
 import RestoreFromDropbox from './RestoreFromDropbox';
+import DropboxFiles from './DropboxFiles';
 
 const unwrap = (data) => (typeof data === 'string' ? JSON.parse(data) : data);
 
@@ -190,6 +192,7 @@ export default function DataManagementTab({ active, currentExperiment }) {
   const [sort, setSort] = useState({ key: 'local_bytes', desc: true });
   const [expanded, setExpanded] = useState(null);
   const [toDelete, setToDelete] = useState(null);
+  const [dropboxRequest, setDropboxRequest] = useState(null);
 
   const fetchData = useCallback(() => {
     setLoading(true);
@@ -397,6 +400,10 @@ export default function DataManagementTab({ active, currentExperiment }) {
                       </td>
                       <td>{ago(r.scanned_at)}</td>
                       <td className="ov-actions">
+                        <button onClick={() => setDropboxRequest({ folder: r.experiment })}
+                                title="Show the files of this experiment on Dropbox (Files on Dropbox, below)">
+                          <i className="fa fa-cloud" />
+                        </button>
                         <button disabled={busy || scanningAll} onClick={() => scan([r.experiment])}
                                 title="Scan this experiment again">
                           <i className={`fa fa-refresh${scanning.has(r.experiment) ? ' fa-spin' : ''}`} />
@@ -423,6 +430,8 @@ export default function DataManagementTab({ active, currentExperiment }) {
         </div>
         <CardResizer id="dm-table" />
       </section>
+
+      <DropboxFiles request={dropboxRequest} />
 
       <RestoreFromDropbox onRestored={fetchData} />
 
