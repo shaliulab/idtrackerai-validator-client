@@ -8,13 +8,14 @@
 // so one row of any identity is ok. Bad frames: not detected (fewer flies than
 // expected), unidentified (groups only: a fly with identity 0, e.g. chunks after a
 // broken concatenation) or other (extra rows, an identity twice). Every chart and table jumps the Group viewer to its
-// frame on click.
+// frame on click. Below, the pose quality of every fly (PoseQc.js), which opens the Pose tab.
 
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import api from './api';
 import CardResizer from './CardResizer';
 import { useConsole } from './MessageConsole';
 import { useElementSize } from './layout';
+import PoseQc from './PoseQc';
 
 const unwrap = (data) => (typeof data === 'string' ? JSON.parse(data) : data);
 
@@ -351,7 +352,7 @@ function Chunks({ result, onOpenFrame }) {
   );
 }
 
-export default function QcTab({ active, currentExperiment, useVal, onOpenFrame }) {
+export default function QcTab({ active, currentExperiment, useVal, onOpenFrame, onOpenPose }) {
   const { log, trackJob } = useConsole();
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
@@ -483,6 +484,9 @@ export default function QcTab({ active, currentExperiment, useVal, onOpenFrame }
           </section>
         </>
       )}
+
+      <div className="qc-section-title">Pose</div>
+      <PoseQc active={active} currentExperiment={currentExperiment} onOpenPose={onOpenPose} />
     </div>
   );
 }

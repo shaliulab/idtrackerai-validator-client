@@ -13,6 +13,7 @@ const SECTIONS = [
   { id: 'help-pe', title: 'Proboscis extension (PE)' },
   { id: 'help-ethogram', title: 'Ethograms' },
   { id: 'help-qc', title: 'QC' },
+  { id: 'help-pose', title: 'Pose' },
   { id: 'help-overview-tab', title: 'Overview' },
   { id: 'help-data', title: 'Data management' },
   { id: 'help-keys', title: 'Keyboard & mouse' },
@@ -30,7 +31,7 @@ function Section({ id, title, children }) {
 
 const SHORTCUTS = [
   ['Anywhere', [
-    [<><Key>Ctrl</Key>+<Key>1</Key> / <Key>2</Key> / <Key>3</Key> / <Key>4</Key> / <Key>5</Key> / <Key>6</Key> / <Key>7</Key></>, 'Switch to Group viewer / PE / Ethograms / Overview / Data management / How to use / QC'],
+    [<><Key>Ctrl</Key>+<Key>1</Key> / <Key>2</Key> / <Key>3</Key> / <Key>4</Key> / <Key>5</Key> / <Key>6</Key> / <Key>7</Key> / <Key>8</Key></>, 'Switch to Group viewer / PE / Ethograms / Overview / Data management / How to use / QC / Pose'],
   ]],
   ['Group viewer', [
     [<><Key>1</Key> / <Key>7</Key></>, 'Previous / next chunk'],
@@ -41,6 +42,11 @@ const SHORTCUTS = [
     ['Mouse wheel on the frame', 'Scrub (one notch = "Playback framerate" frames); pauses playback'],
     ['Middle click on the frame', 'Play / pause'],
     ['Hover over the frame', 'Magnifying glass'],
+  ]],
+  ['Pose', [
+    [<><Key>←</Key> / <Key>→</Key></>, 'Previous / next frame (with Shift: 10 frames)'],
+    [<><Key>↑</Key> / <Key>↓</Key></>, 'Previous / next fly'],
+    ['Hover a body part or its table row', 'Its name, confidence and position'],
   ]],
   ['PE', [
     [<><Key>1</Key>–<Key>7</Key></>, 'Verdict for the selected bout: pe, feed, groom, walk, other, merge, unsure (same key again removes it)'],
@@ -92,12 +98,13 @@ export default function HelpTab() {
             <li><b>check identities</b> frame by frame, and find the frames where tracking failed or was corrected (Group viewer);</li>
             <li><b>annotate proboscis extension</b> events picked up by the pose pipeline (PE tab);</li>
             <li><b>browse each fly's behaviour</b> over the whole experiment and export sleep bout videos (Ethograms);</li>
-            <li><b>count the frames that do not track every fly</b> of the loaded experiment, chunk by chunk (QC);</li>
+            <li><b>count the frames that do not track every fly</b> of the loaded experiment, chunk by chunk, and check the quality of each fly's pose (QC);</li>
+            <li><b>inspect the pose of one fly</b> frame by frame, with the confidence of each body part (Pose);</li>
             <li><b>see which experiments exist</b>, by genotype, group size, sex and any other metadata (Overview);</li>
             <li><b>free disk space</b> by deleting experiments that are backed up (Data management).</li>
           </ul>
           <p className="help-note">
-            Each tab name shows its shortcut (<Key>Ctrl</Key>+<Key>1</Key>…<Key>7</Key>).
+            Each tab name shows its shortcut (<Key>Ctrl</Key>+<Key>1</Key>…<Key>8</Key>).
             Hover over a button to see what it does.
           </p>
         </Section>
@@ -370,6 +377,40 @@ export default function HelpTab() {
             chunks with problems, how many flies are identified on their first / last frame and
             the CONCATENATION rows flagged as broken. Click a bar, a strip bin, a chunk or a frame
             number to open it in the Group viewer.
+          </p>
+          <h3>Pose</h3>
+          <p>
+            Below, the quality of each fly's pose (SLEAP), read from its pose file
+            (<code>motionmapper/NN/pose_raw/…h5</code>) in the background the first time (~20 s per
+            fly; a missing pose file is compiled from the chunks only when you press{' '}
+            <i>Recompute pose QC</i>, which takes minutes). Per frame:
+          </p>
+          <ul>
+            <li><b>Body parts detected</b>: how many of the 12 scored parts SLEAP found (confidence ≥ 0.2). The leg joints (<code>*LJ</code>, <code>*RJ</code>) are shown but not scored.</li>
+            <li><b>Confidence</b>: the mean confidence of the parts found.</li>
+            <li><b>Pose score</b>: the sum of the confidences of the parts found (SLEAP's instance score) divided by 12, so 1 = every part found with full confidence. Frames below 0.5 count as <i>poor</i> and are drawn in red.</li>
+          </ul>
+          <p>
+            Click a fly in the table to show its charts: per-chunk means of the three measures
+            (the strips below them: per 10 s), how often each body part is detected per chunk,
+            the distributions per frame and the worst 10 s bins. Clicking any of them opens that
+            frame of the fly in the Pose tab. The proboscis is normally retracted, so it is
+            rarely detected.
+          </p>
+        </Section>
+
+        <Section id="help-pose" title="Pose">
+          <p>
+            One fly at a time: the frame cropped around it (<i>Zoom</i>: in squares of the pose;
+            dashed: the square SLEAP saw) with its body parts coloured by confidence (green ≥ 0.8,
+            orange 0.5–0.8, red &lt; 0.5). Hover a part, or its row in the table, to see its
+            name, confidence and position (frame pixels). The table lists every part, also the
+            ones not detected, with the frame's parts detected, confidence, pose score and the
+            instance score stored by SLEAP. <i>Frames around</i> plots the three measures for
+            every frame within the window (± 2, 10 or 60 s); click to go to a frame. The
+            buttons move by a chunk, 1 s, 10 or 1 frames; <i>Open in Group viewer</i> shows the
+            same frame there. A fly without a position in a frame (not tracked) has its pose
+            listed but not drawn.
           </p>
         </Section>
 

@@ -19,6 +19,7 @@ import HelpTab from './HelpTab';
 import OverviewTab from './OverviewTab';
 import DataManagementTab from './DataManagementTab';
 import QcTab from './QcTab';
+import PoseTab from './PoseTab';
 import ValidationCsvBuilder from './ValidationCsvBuilder';
 import CvatLinks from './CvatLinks';
 import RoiPanel from './RoiPanel';
@@ -314,6 +315,14 @@ function App() {
     setActiveTab('ethogram');
   }, [ethogramFlies, log]);
 
+  // QC tab pose charts: show that fly in the Pose tab (at that frame, if given)
+  const [poseRequest, setPoseRequest] = useState(null);   // { fly, frameNumber, nonce }
+  const openPose = useCallback((fly, frame) => {
+    setIsPlaying(false);
+    setPoseRequest({ fly, frameNumber: frame, nonce: Date.now() });
+    setActiveTab('pose');
+  }, []);
+
   const fetchFramerate = useCallback(async () => {
     try {
       const response = await api.get('/api/framerate');
@@ -339,7 +348,7 @@ function App() {
 
   useEffect(() => { fetchFlies(); }, [fetchFlies]);
 
-  // Ctrl+1 … Ctrl+7 switch tabs
+  // Ctrl+1 … Ctrl+8 switch tabs
   const hasDatabaseRef = useRef(true);
   hasDatabaseRef.current = experimentInfo.has_database;
   useEffect(() => {
@@ -352,6 +361,7 @@ function App() {
       else if (e.key === '5') { e.preventDefault(); setActiveTab('data_management'); }
       else if (e.key === '6') { e.preventDefault(); setActiveTab('help'); }
       else if (e.key === '7') { e.preventDefault(); if (hasDatabaseRef.current) setActiveTab('qc'); }
+      else if (e.key === '8') { e.preventDefault(); if (hasDatabaseRef.current) setActiveTab('pose'); }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -516,7 +526,7 @@ function App() {
   // PE and Ethograms need the database
   useEffect(() => {
     if (!experimentInfo.has_database) {
-      setActiveTab((tab) => (tab === 'proboscis_extension' || tab === 'ethogram' || tab === 'qc' ? 'group_viewer' : tab));
+      setActiveTab((tab) => (tab === 'proboscis_extension' || tab === 'ethogram' || tab === 'qc' || tab === 'pose' ? 'group_viewer' : tab));
     }
   }, [experimentInfo]);
 
@@ -663,6 +673,7 @@ function App() {
         <Tab id="proboscis_extension" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+2" disabled={noDatabase}>Proboscis extension (PE)</Tab>
         <Tab id="ethogram" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+3" disabled={noDatabase}>Ethograms</Tab>
         <Tab id="qc" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+7" disabled={noDatabase}>QC</Tab>
+        <Tab id="pose" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+8" disabled={noDatabase}>Pose</Tab>
         <Tab id="overview" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+4">Overview</Tab>
         <Tab id="data_management" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+5">Data management</Tab>
         <Tab id="help" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+6">
@@ -843,6 +854,23 @@ function App() {
           currentExperiment={currentExperiment}
           useVal={useVal}
           onOpenFrame={(fn) => {
+            setIsPlaying(false);
+            setFrameNumber(fn);
+            setActiveTab('group_viewer');
+          }}
+          onOpenPose={openPose}
+        />
+      </div>
+
+      <div className="tab-panel" style={{ display: activeTab === 'pose' ? 'block' : 'none' }}>
+        <PoseTab
+          active={activeTab === 'pose'}
+          currentExperiment={currentExperiment}
+          request={poseRequest}
+          viewerFrame={frameNumber}
+          framerate={recordingFramerate}
+          chunksize={chunksize}
+          onOpenInViewer={(fn) => {
             setIsPlaying(false);
             setFrameNumber(fn);
             setActiveTab('group_viewer');

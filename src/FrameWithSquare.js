@@ -11,7 +11,7 @@ import {
   LABEL_FIELD_CANDIDATES,
 } from './constants';
 
-const SKELETON = [
+export const SKELETON = [
   ["head", "thorax"],
   ["thorax", "abdomen"],
   ["thorax", "fLL"],

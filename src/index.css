@@ -727,3 +727,37 @@ button.ov-sheet.ov-sheet-error { border-color: var(--danger); color: var(--dange
 .qc-run-bin-value { font-size: 18px; font-weight: 600; font-variant-numeric: tabular-nums; }
 .qc-flag { margin-right: 4px; padding: 0 6px; border-radius: 8px; font-size: 11px; border: 1px solid var(--border); color: var(--subtext); white-space: nowrap; }
 .qc-flag-bad { color: var(--danger); border-color: var(--danger); background: var(--danger-soft); font-weight: 600; }
+.qc-section-title { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--subtext); margin-top: 8px; padding-top: 10px; border-top: 1px solid var(--border-strong); }
+
+/* ── Pose quality (PoseQc.js, QC tab) and Pose tab (PoseTab.js) ── */
+:root { --pose-bar: #2a78d6; }
+:root[data-theme="dark"] { --pose-bar: #3987e5; }
+.pose-metric + .pose-metric { margin-top: 14px; }
+.pose-metric-title { font-size: 12px; color: var(--subtext); margin: 0 0 4px 34px; }
+.pose-bar { fill: var(--pose-bar); }
+.pose-bar-poor { fill: var(--qc-critical); }
+.pose-swatch { background: var(--pose-bar); }
+.pose-low-line { stroke: var(--qc-critical); stroke-width: 1; stroke-dasharray: 3 3; }
+.pose-heat { display: flex; align-items: flex-start; }
+.pose-heat-labels { flex: none; font-size: 10px; line-height: 12px; text-align: right; padding-right: 6px; box-sizing: border-box; }
+.pose-heat-scale { display: flex; align-items: center; gap: 4px; margin: 6px 0 0 70px; font-size: 11px; color: var(--subtext); }
+.pose-heat-step { display: inline-block; width: 14px; height: 10px; }
+.pose-hist-bar { background: var(--pose-bar); }
+.pose-row { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.pose-qc-title { font-weight: 600; }
+.pose-flies tbody tr:hover { background: var(--btn-hover); }
+.pose-selected, .pose-selected:hover { background: var(--accent-soft) !important; }
+.pose-main { display: flex; gap: 12px; align-items: flex-start; flex-wrap: wrap; }
+.pose-view { flex: none; }
+.pose-side { flex: 1 1 360px; min-width: 0; }
+.pose-canvas-wrap { position: relative; border-radius: 4px; overflow: hidden; }
+.pose-canvas-msg { position: absolute; inset: auto 0 0 0; padding: 8px 10px; background: rgba(0, 0, 0, 0.7); color: #fff; font-size: 12px; }
+.pose-bands { margin-top: 8px; font-size: 12px; }
+.pose-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--border); }
+.pose-summary > div { display: flex; flex-direction: column; font-variant-numeric: tabular-nums; }
+.pose-summary b { font-size: 18px; }
+.pose-table td { padding-top: 3px; padding-bottom: 3px; }
+.pose-conf { display: inline-flex; align-items: center; gap: 8px; }
+.pose-conf-bar { display: inline-block; width: 90px; height: 8px; border-radius: 4px; background: var(--surface-2); border: 1px solid var(--border); overflow: hidden; }
+.pose-conf-bar > span { display: block; height: 100%; }
+@media (max-width: 1100px) { .pose-row { grid-template-columns: 1fr; } }
