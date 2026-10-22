@@ -6,12 +6,15 @@
 // position. Below, the per-frame parts detected / confidence / pose score of the
 // frames around (/api/pose/<fly>/trace); click to go there. Its `request` prop
 // ({fly, frameNumber}) opens a fly at a frame: used by the QC tab's pose charts.
+// "Recompile pose" compiles the fly's pose file again from its chunks
+// (POST /api/pose/<fly>/recompile), after the pose pipeline ran again.
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import api, { apiUrl } from './api';
 import { useElementSize, useStoredNumber } from './layout';
 import { SKELETON } from './FrameWithSquare';
 import { METRICS } from './PoseQc';
+import { useConsole } from './MessageConsole';
 
 const unwrap = (data) => (typeof data === 'string' ? JSON.parse(data) : data);
 const fix = (v, d = 2) => (v == null ? '–' : v.toFixed(d));
@@ -251,20 +254,40 @@ export default function PoseTab({ active, currentExperiment, request, viewerFram
   const [showLabels, setShowLabels] = useState(false);
   const [showJoints, setShowJoints] = useState(true);
   const [viewEl, setViewEl] = useState(null);
+  const [recompiling, setRecompiling] = useState(null);   // fly being recompiled
+  const [poseVersion, setPoseVersion] = useState(0);      // bumped when a pose file is recompiled
   const { width: viewWidth } = useElementSize(viewEl);
+  const { log, trackJob } = useConsole();
   const latest = useRef(0);
   const fps = framerate || 150;
   const chunksize = pose?.chunksize || viewerChunksize || 45000;
   const windowFrames = Math.round(windowSeconds * fps);
 
+  const fetchFlies = useCallback(() => api.get('/api/pose/flies').then((r) => {
+    const list = unwrap(r.data);
+    setFlies(list);
+    setFly((f) => (list.some((x) => x.fly === f) ? f : (list.find((x) => x.available) || list[0])?.fly ?? null));
+  }).catch(() => setFlies([])), []);
+
   useEffect(() => {
-    if (!currentExperiment) return;
-    api.get('/api/pose/flies').then((r) => {
-      const list = unwrap(r.data);
-      setFlies(list);
-      setFly((f) => (list.some((x) => x.fly === f) ? f : (list.find((x) => x.available) || list[0])?.fly ?? null));
-    }).catch(() => setFlies([]));
-  }, [currentExperiment]);
+    if (currentExperiment) fetchFlies();
+  }, [currentExperiment, fetchFlies]);
+
+  const recompile = useCallback(() => {
+    const target = fly;
+    setRecompiling(target);
+    api.post(`/api/pose/${target}/recompile`)
+      .then((r) => trackJob(unwrap(r.data)))
+      .then((done) => {
+        if (done?.status === 'failed') log('error', `Recompiling the pose of ${target} failed: ${done.error}`);
+        else if (done) log('success', `Pose of ${target} recompiled`);
+        setTrace(null);
+        setPoseVersion((v) => v + 1);
+        return fetchFlies();
+      })
+      .catch((err) => log('error', `Could not recompile the pose of ${target}: ${err.response?.data?.error || err.message}`))
+      .finally(() => setRecompiling(null));
+  }, [fly, trackJob, log, fetchFlies]);
 
   useEffect(() => {
     if (!request) return;
@@ -289,7 +312,7 @@ export default function PoseTab({ active, currentExperiment, request, viewerFram
     const img = new Image();
     img.onload = () => { if (id === latest.current) setImage(img); };
     img.src = apiUrl(`/api/frame/${frame}`);
-  }, [active, fly, frame]);
+  }, [active, fly, frame, poseVersion]);
 
   // Traces: fetched again when the window leaves what was fetched
   useEffect(() => {
@@ -302,7 +325,7 @@ export default function PoseTab({ active, currentExperiment, request, viewerFram
     api.get(`/api/pose/${fly}/trace`, { params: { start: Math.max(0, from), end: to } })
       .then((r) => setTrace({ ...unwrap(r.data), fly, from, to }))
       .catch(() => setTrace(null));
-  }, [active, fly, frame, windowFrames]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [active, fly, frame, windowFrames, poseVersion]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const seek = useCallback((f) => {
     if (!pose || pose.first_frame == null) { setFrame(Math.max(0, f)); return; }
@@ -331,6 +354,8 @@ export default function PoseTab({ active, currentExperiment, request, viewerFram
     return () => window.removeEventListener('keydown', onKey);
   }, [active, stepFly]);
 
+  const compiledTime = flies.find((f) => f.fly === fly)?.compiled_at;
+  const compiledAt = compiledTime ? new Date(compiledTime * 1000).toLocaleString() : null;
   const size = Math.max(240, Math.min(560, (viewWidth || 900) - 460));
   const shownPose = useMemo(() => (pose && !showJoints ? { ...pose, nodes: pose.nodes.filter((n) => n.scored) } : pose), [pose, showJoints]);
   const nodes = shownPose?.nodes || [];
@@ -370,6 +395,13 @@ export default function PoseTab({ active, currentExperiment, request, viewerFram
                   : 'This fly has no ethogram'}>
           Open in Ethograms + Group viewer
         </button>
+        <span className="toolbar-sep" />
+        <button onClick={recompile} disabled={!fly || recompiling != null}
+                title={`Compile this fly's pose file again from the chunks' .predictions.h5 (minutes), e.g. after the pose pipeline ran again${
+                  compiledAt ? `. Current file compiled ${compiledAt}` : ''}`}>
+          {recompiling === fly ? 'Recompiling…' : 'Recompile pose'}
+        </button>
+        {compiledAt && <span className="ov-count" title="When this fly's pose file was compiled">compiled {compiledAt}</span>}
       </div>
 
       <div className="pose-main">

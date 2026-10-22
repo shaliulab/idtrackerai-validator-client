@@ -412,7 +412,9 @@ export default function HelpTab() {
             same frame there; <i>Open in Ethograms + Group viewer</i> opens this fly's ethogram at
             that frame and moves the Group viewer to it as well (grayed out when the fly has no
             ethogram). A fly without a position in a frame (not tracked) has its pose
-            listed but not drawn.
+            listed but not drawn. After the pose pipeline ran again for a fly, <i>Recompile
+            pose</i> builds its pose file again from the chunks' predictions (about a minute;
+            progress in the console); next to it, when the current file was compiled.
           </p>
         </Section>
 
