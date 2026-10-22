@@ -727,6 +727,7 @@ function App() {
               </div>
               <div className="scroll">
                 <BlobsTable Data={trackingData} setFrameNumber={setFrameNumber}
+                            frameRange={frameRange}
                             number_of_animals={number_of_animals}
                             animalMetadata={animalMetadata}
                             onOpenEthogram={openEthogram}
@@ -760,6 +761,7 @@ function App() {
                   isPlaying={isPlaying}
                   setIsPlaying={setIsPlaying}
                   recordingFramerate={recordingFramerate}
+                  frameRange={frameRange}
                 />
                 <div className="toolbar" style={{ justifyContent: 'center' }}>
                   <InteractiveText

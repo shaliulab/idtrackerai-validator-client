@@ -25,7 +25,7 @@ import {
   TogglePlayButton 
 } from './icons';
 
-const Buttons = ({ frameNumber, setFrameNumber, isPlaying, setIsPlaying, recordingFramerate }) => {
+const Buttons = ({ frameNumber, setFrameNumber, isPlaying, setIsPlaying, recordingFramerate, frameRange }) => {
   const frameRate = recordingFramerate;
 
   const play = () => {
@@ -39,42 +39,42 @@ const Buttons = ({ frameNumber, setFrameNumber, isPlaying, setIsPlaying, recordi
   
   const prev_chunk = () => {
     if (frameRate == null) return;
-    setFrameNumber((prev) => get_prev_chunk(prev, frameRate));
+    setFrameNumber((prev) => get_prev_chunk(prev, frameRate, frameRange));
   };
     
   const next_chunk = () => {
     if (frameRate == null) return;
-    setFrameNumber((prev) => get_next_chunk(prev, frameRate));
+    setFrameNumber((prev) => get_next_chunk(prev, frameRate, frameRange));
   };
   
   const seconds1_back = () => {
     if (frameRate == null) return;
-    setFrameNumber((prev) => get_1seconds_back(prev, frameRate));
+    setFrameNumber((prev) => get_1seconds_back(prev, frameRate, frameRange));
   };
     
   const seconds1_forward = () => {
     if (frameRate == null) return;
-    setFrameNumber((prev) => get_1seconds_forward(prev, frameRate));
+    setFrameNumber((prev) => get_1seconds_forward(prev, frameRate, frameRange));
   };
 
   const seconds10_back = () => {
     if (frameRate == null) return;
-    setFrameNumber((prev) => get_10seconds_back(prev, frameRate));
+    setFrameNumber((prev) => get_10seconds_back(prev, frameRate, frameRange));
   };
     
   const seconds10_forward = () => {
     if (frameRate == null) return;
-    setFrameNumber((prev) => get_10seconds_forward(prev, frameRate));
+    setFrameNumber((prev) => get_10seconds_forward(prev, frameRate, frameRange));
   };
   
   const seconds30_back = () => {
     if (frameRate == null) return;
-    setFrameNumber((prev) => get_30seconds_back(prev, frameRate));
+    setFrameNumber((prev) => get_30seconds_back(prev, frameRate, frameRange));
   };
     
   const seconds30_forward = () => {
     if (frameRate == null) return;
-    setFrameNumber((prev) => get_30seconds_forward(prev, frameRate));
+    setFrameNumber((prev) => get_30seconds_forward(prev, frameRate, frameRange));
   };
 
   const prev_rejection = () => {
@@ -157,7 +157,7 @@ const Buttons = ({ frameNumber, setFrameNumber, isPlaying, setIsPlaying, recordi
       window.removeEventListener('keydown', handleKeyDown);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isPlaying, frameNumber, frameRate]);
+  }, [isPlaying, frameNumber, frameRate, frameRange]);
 
   return (
     <div className="transport">

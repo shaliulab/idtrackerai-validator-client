@@ -58,7 +58,9 @@ const NAVIGATION_COLUMNS = new Set(['sleep', 'ethogram']);
 // ethogramIdentities: identities with an ethogram in the loaded experiment. Identity 0 is
 // an unidentified blob in groups, but the only fly in single-animal (1X) experiments.
 // readOnly: plain cells, no navigation (for the row shown in the PE / Ethograms tabs).
-const BlobsTable = ({ Data, setFrameNumber, number_of_animals, animalMetadata = {}, onOpenEthogram, ethogramIdentities, readOnly = false }) => {
+// frameRange ({min, max}, tracked frames): a chunk that starts before the first
+// tracked frame (e.g. validation starting mid-chunk) opens at that frame instead.
+const BlobsTable = ({ Data, setFrameNumber, number_of_animals, animalMetadata = {}, onOpenEthogram, ethogramIdentities, readOnly = false, frameRange }) => {
   const columns = readOnly ? COLUMNS.filter(c => !NAVIGATION_COLUMNS.has(c.key)) : COLUMNS;
   const [draft, setDraft] = useState('');
   const [editingRow, setEditingRow] = useState(null);
@@ -82,7 +84,9 @@ const BlobsTable = ({ Data, setFrameNumber, number_of_animals, animalMetadata = 
     const chunk = parseInt(val, 10);
     const cs = Number(chunksize);
     if (Number.isFinite(chunk) && chunk >= 0 && Number.isFinite(cs) && cs > 0 && setFrameNumber) {
-      setFrameNumber(chunk * cs);
+      const start = chunk * cs;
+      const beforeTracking = frameRange && start < frameRange.min && start + cs > frameRange.min;
+      setFrameNumber(beforeTracking ? frameRange.min : start);
     }
     setEditingChunkRow(null);
   };
