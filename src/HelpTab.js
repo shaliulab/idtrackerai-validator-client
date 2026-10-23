@@ -16,6 +16,7 @@ const SECTIONS = [
   { id: 'help-pose', title: 'Pose' },
   { id: 'help-overview-tab', title: 'Overview' },
   { id: 'help-data', title: 'Data management' },
+  { id: 'help-monitor', title: 'Monitor' },
   { id: 'help-keys', title: 'Keyboard & mouse' },
   { id: 'help-glossary', title: 'Glossary' },
 ];
@@ -31,7 +32,7 @@ function Section({ id, title, children }) {
 
 const SHORTCUTS = [
   ['Anywhere', [
-    [<><Key>Ctrl</Key>+<Key>1</Key> / <Key>2</Key> / <Key>3</Key> / <Key>4</Key> / <Key>5</Key> / <Key>6</Key> / <Key>7</Key> / <Key>8</Key></>, 'Switch to Group viewer / PE / Ethograms / QC / Pose / Overview / Data management / How to use (the tabs, left to right)'],
+    [<><Key>Ctrl</Key>+<Key>1</Key> / <Key>2</Key> / <Key>3</Key> / <Key>4</Key> / <Key>5</Key> / <Key>6</Key> / <Key>7</Key> / <Key>8</Key> / <Key>9</Key></>, 'Switch to Group viewer / PE / Ethograms / QC / Pose / Overview / Data management / Monitor / How to use (the tabs, left to right)'],
   ]],
   ['Group viewer', [
     [<><Key>1</Key> / <Key>7</Key></>, 'Previous / next chunk'],
@@ -578,6 +579,31 @@ export default function HelpTab() {
               experiment picker) and it is scanned. The server refuses when a drive would keep less than 50 GB free.</li>
             <li><b>partial</b>: an earlier restore stopped half way; restoring again resumes it, copying only the
               missing files. <b>in backup</b>: its critical files are also in the local backup.</li>
+          </ul>
+        </Section>
+
+        <Section id="help-monitor" title="Monitor">
+          <p>
+            What the nextflow pipelines of this computer are doing: <b>idtrackerai</b>{' '}
+            (<code>idtrackerai_v3</code>), <b>pose estimation</b> and <b>behavior prediction</b>, each a folder of{' '}
+            <code>vsc-scripts/nextflow/pipelines</code> with a CSV of experiments (<code>idtrackerai.csv</code>,{' '}
+            <code>videos.csv</code>, <code>animals.csv</code>). Refreshed every 10 s while shown (<i>Auto refresh</i>).
+          </p>
+          <ul>
+            <li><b>running</b>: a nextflow run is going on in the folder. Its tasks per process (done / cached /
+              running / failed) come from the folder's <code>.nextflow.log</code>; each task is matched to its
+              experiment from its script. Failed tasks are listed with their work dir.</li>
+            <li><i>In this run</i>: the CSV rows of the running batch, with their tasks and what runs now.{' '}
+              <b>still marked 1</b>: the run processes it but its row lost the batch stamp (the CSV was saved
+              over, e.g. by an editor with the old version open), so the queue will take it again.{' '}
+              <b>complete</b> (pose estimation): listed in <code>completed/&lt;batch&gt;.txt</code>; its flies are then
+              added to <code>animals.csv</code> marked 1.</li>
+            <li><i>Queued</i>: rows marked 1. With a queue (<code>nohup ./run_queue.sh &gt; run_queue.log 2&gt;&amp;1 &amp;</code>{' '}
+              in the pipeline folder; pose estimation and behavior prediction) they start, in this order, when the
+              current run ends: <i>queue stopped</i> means no <code>run_queue.sh</code> is running there.
+              idtrackerai has no queue: its rows marked 1 are those of the run started by hand.</li>
+            <li><i>Recent batches</i>: the last batch stamps of the CSV; <i>run_queue.log</i>: its last lines.</li>
+            <li><i>Open</i> loads the experiment in the viewer.</li>
           </ul>
         </Section>
 

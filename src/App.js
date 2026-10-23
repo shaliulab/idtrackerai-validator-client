@@ -20,6 +20,7 @@ import OverviewTab from './OverviewTab';
 import DataManagementTab from './DataManagementTab';
 import QcTab from './QcTab';
 import PoseTab from './PoseTab';
+import MonitorTab from './MonitorTab';
 import ValidationCsvBuilder from './ValidationCsvBuilder';
 import CvatLinks from './CvatLinks';
 import RoiPanel from './RoiPanel';
@@ -348,7 +349,7 @@ function App() {
 
   useEffect(() => { fetchFlies(); }, [fetchFlies]);
 
-  // Ctrl+1 … Ctrl+8 switch tabs
+  // Ctrl+1 … Ctrl+9 switch tabs
   const hasDatabaseRef = useRef(true);
   hasDatabaseRef.current = experimentInfo.has_database;
   useEffect(() => {
@@ -361,7 +362,8 @@ function App() {
       else if (e.key === '5') { e.preventDefault(); if (hasDatabaseRef.current) setActiveTab('pose'); }
       else if (e.key === '6') { e.preventDefault(); setActiveTab('overview'); }
       else if (e.key === '7') { e.preventDefault(); setActiveTab('data_management'); }
-      else if (e.key === '8') { e.preventDefault(); setActiveTab('help'); }
+      else if (e.key === '8') { e.preventDefault(); setActiveTab('monitor'); }
+      else if (e.key === '9') { e.preventDefault(); setActiveTab('help'); }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -676,7 +678,8 @@ function App() {
         <Tab id="pose" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+5" disabled={noDatabase}>Pose</Tab>
         <Tab id="overview" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+6">Overview</Tab>
         <Tab id="data_management" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+7">Data management</Tab>
-        <Tab id="help" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+8">
+        <Tab id="monitor" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+8">Monitor</Tab>
+        <Tab id="help" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+9">
           <i className="fa fa-question-circle-o" style={{ marginRight: 6 }} />How to use
         </Tab>
       </nav>
@@ -897,6 +900,10 @@ function App() {
 
       <div className="tab-panel" style={{ display: activeTab === 'data_management' ? 'block' : 'none' }}>
         <DataManagementTab active={activeTab === 'data_management'} currentExperiment={currentExperiment} />
+      </div>
+
+      <div className="tab-panel" style={{ display: activeTab === 'monitor' ? 'block' : 'none' }}>
+        <MonitorTab active={activeTab === 'monitor'} onOpenExperiment={openExperiment} />
       </div>
 
       <div className="tab-panel" style={{ display: activeTab === 'help' ? 'block' : 'none' }}>

@@ -761,3 +761,55 @@ button.ov-sheet.ov-sheet-error { border-color: var(--danger); color: var(--dange
 .pose-conf-bar { display: inline-block; width: 90px; height: 8px; border-radius: 4px; background: var(--surface-2); border: 1px solid var(--border); overflow: hidden; }
 .pose-conf-bar > span { display: block; height: 100%; }
 @media (max-width: 1100px) { .pose-row { grid-template-columns: 1fr; } }
+
+/* ── Monitor tab (MonitorTab.js) ── */
+:root {
+  --mon-done: #2ca02c;
+  --mon-cached: #9fb7a0;
+  --mon-running: #2a78d6;
+  --mon-failed: #d03b3b;
+}
+:root[data-theme="dark"] {
+  --mon-done: #3fb24a;
+  --mon-cached: #4d6650;
+  --mon-running: #3987e5;
+  --mon-failed: #f87171;
+}
+.mon-card { overflow: hidden; }
+.mon-body { display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
+.mon-meta { display: flex; flex-wrap: wrap; gap: 4px 16px; align-items: baseline; }
+.mon-dim { color: var(--subtext); }
+.mon-ok { color: var(--mon-done); }
+.mon-running-badge { color: var(--mon-running); border-color: var(--mon-running); }
+.mon-stat-running { border-left: 3px solid var(--mon-running); }
+.mon-stat-running .ov-stat-value { color: var(--mon-running); }
+.mon-bar { display: inline-flex; height: 10px; border-radius: 5px; overflow: hidden; background: var(--surface-2);
+  border: 1px solid var(--border); vertical-align: middle; flex: none; }
+.mon-seg { display: block; height: 100%; }
+.mon-seg.mon-completed { background: var(--mon-done); }
+.mon-seg.mon-cached { background: var(--mon-cached); }
+.mon-seg.mon-running { background: var(--mon-running); }
+.mon-seg.mon-failed { background: var(--mon-failed); }
+.mon-counts { display: inline-flex; gap: 10px; font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.mon-count-completed { color: var(--mon-done); }
+.mon-count-cached { color: var(--subtext); }
+.mon-count-running { color: var(--mon-running); font-weight: 600; }
+.mon-count-failed { color: var(--mon-failed); font-weight: 600; }
+.mon-processes, .mon-last { display: flex; flex-direction: column; gap: 3px; margin-top: 4px; }
+.mon-last { padding: 4px 12px 8px; }
+.mon-process { display: flex; align-items: center; gap: 10px; font-size: 12px; }
+.mon-process-name { width: 170px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: none; }
+.mon-process-name.mon-wide { width: 330px; }
+.mon-total { border-top: 1px solid var(--border); padding-top: 3px; font-weight: 600; }
+.mon-failed { margin-top: 4px; font-size: 12px; }
+.mon-h { margin: 0; padding: 6px 12px; border-top: 1px solid var(--border); font-size: 12px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.05em; color: var(--subtext); }
+.mon-h .ov-count { text-transform: none; letter-spacing: 0; }
+.mon-table { font-size: 12px; }
+.mon-table td { vertical-align: top; }
+.mon-running { font-size: 11px; white-space: nowrap; }
+.mon-foot { display: flex; gap: 16px; padding: 4px 8px; border-top: 1px solid var(--border); font-size: 12px; }
+.mon-scroll { max-height: 320px; border-top: 1px solid var(--border); }
+.mon-batch { display: flex; flex-wrap: wrap; gap: 2px 14px; white-space: normal; }
+.mon-log { margin: 0; padding: 8px 12px; max-height: 320px; overflow: auto; font-size: 11px; line-height: 1.5;
+  background: var(--surface-2); border-top: 1px solid var(--border); white-space: pre-wrap; }
