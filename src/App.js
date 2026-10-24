@@ -604,6 +604,32 @@ function App() {
     }
   }, [log, onExperimentLoaded]);
 
+  // Monitor tab: load the fly's experiment (unless loaded) and show the fly in the Ethograms or Pose tab,
+  // at the frame the viewer starts at (or the displayed one when the experiment is already loaded)
+  const openFly = useCallback(async (experiment, fly, tab) => {
+    const flat = (name) => (name || '').replace(/\//g, '_').replace(/_arenas_(\d+)$/, '_arena$1');
+    let frame = frameNumber;
+    if (flat(currentExperiment) !== flat(experiment)) {
+      try {
+        const data = await postLoad(experiment);
+        log('info', `Loaded ${experiment}`);
+        setPickerKey((k) => k + 1);
+        frame = data.first_frame ?? FIRST_FRAME;
+        await onExperimentLoaded(frame);
+      } catch (err) {
+        log('error', `Failed to load ${experiment}: ${err.response?.data?.error ?? err.message}`);
+        return;
+      }
+    }
+    setIsPlaying(false);
+    if (tab === 'pose') {
+      setPoseRequest({ fly, frameNumber: frame, nonce: Date.now() });
+    } else {
+      setEthogramRequest({ fly, frameNumber: frame, nonce: Date.now() });
+    }
+    setActiveTab(tab);
+  }, [currentExperiment, frameNumber, log, onExperimentLoaded]);
+
   const switchToFly = useCallback(async (flyId) => {
     const experiment = flyId.split('__')[0];
     const current = selectedFly?.split('__')[0];
@@ -903,7 +929,7 @@ function App() {
       </div>
 
       <div className="tab-panel" style={{ display: activeTab === 'monitor' ? 'block' : 'none' }}>
-        <MonitorTab active={activeTab === 'monitor'} onOpenExperiment={openExperiment} />
+        <MonitorTab active={activeTab === 'monitor'} onOpenExperiment={openExperiment} onOpenFly={openFly} />
       </div>
 
       <div className="tab-panel" style={{ display: activeTab === 'help' ? 'block' : 'none' }}>

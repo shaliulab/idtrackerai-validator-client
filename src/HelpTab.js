@@ -598,6 +598,12 @@ export default function HelpTab() {
               over, e.g. by an editor with the old version open), so the queue will take it again.{' '}
               <b>complete</b> (pose estimation): listed in <code>completed/&lt;batch&gt;.txt</code>; its flies are then
               added to <code>animals.csv</code> marked 1.</li>
+            <li><b>Behavior prediction, per fly</b> (from its files on disk): <b>done</b> = its ethogram figure and sleep
+              were written by this batch (the last steps); <b>explorable</b> = its behavior predictions were written by this
+              batch, so the Ethograms tab already shows them; <b>pending</b> = not yet. The boxes are its outputs in pipeline
+              order (pose, movie, pe, behavior, sleep, ethogram): filled = written by this batch, outlined = an older output,
+              dashed = missing; hover for the time. <i>Ethogram</i> / <i>Pose</i> load the experiment (unless loaded) and show the
+              fly in that tab. In <i>Recent batches</i> the identities are coloured the same way.</li>
             <li><i>Queued</i>: rows marked 1. With a queue (<code>nohup ./run_queue.sh &gt; run_queue.log 2&gt;&amp;1 &amp;</code>{' '}
               in the pipeline folder; pose estimation and behavior prediction) they start, in this order, when the
               current run ends: <i>queue stopped</i> means no <code>run_queue.sh</code> is running there.

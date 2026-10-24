@@ -64,16 +64,64 @@ function StateBadge({ p }) {
 function groupRows(rows) {
   const groups = new Map();
   rows.forEach((r) => {
-    if (!groups.has(r.experiment)) groups.set(r.experiment, { ...r, identities: [], lines: [], unstamped: false });
+    if (!groups.has(r.experiment)) groups.set(r.experiment, { ...r, identities: [], flies: [], lines: [], unstamped: false });
     const g = groups.get(r.experiment);
     if (r.identity != null) g.identities.push(r.identity);
+    if (r.fly) g.flies.push(r);
     g.lines.push(r.line);
     g.unstamped = g.unstamped || r.unstamped;
   });
   return [...groups.values()];
 }
 
-function RowsTable({ rows, perFly, run, now, onOpenExperiment, emptyText }) {
+// behavior_prediction: state of a fly from its outputs on disk (monitor.fly_outputs)
+const FLY_STATE = {
+  done: { label: 'done', cls: 'mon-fly-done', title: 'Ethogram figure and sleep written by this batch: the fly went through the whole pipeline' },
+  explorable: { label: 'explorable', cls: 'mon-fly-explorable',
+    title: 'Behavior predictions written by this batch: the Ethograms tab shows them. The ethogram figure and sleep are still to come' },
+  pending: { label: 'pending', cls: 'mon-fly-pending', title: 'No behavior predictions from this batch yet' },
+};
+
+function stageTitle(stage, o, meta, now) {
+  const what = meta?.description ?? stage;
+  if (!o) return `${what}: missing`;
+  return `${what}: ${o.new ? 'written by this batch' : 'older output'}, ${clock(o.mtime)} (${duration(now - o.mtime)} ago)`;
+}
+
+function FlyLine({ f, meta, now, queued, onOpenFly }) {
+  const state = FLY_STATE[f.state];
+  return (
+    <div className="mon-fly">
+      <span className="mono mon-fly-id">{f.identity}</span>
+      {!queued && <span className={`mon-fly-state ${state.cls}`} title={state.title}>{state.label}</span>}
+      <span className="mon-stages">
+        {(meta ? meta.map((m) => m.stage) : Object.keys(f.outputs)).map((stage) => {
+          const o = f.outputs[stage];
+          const m = meta?.find((x) => x.stage === stage);
+          return (
+            <span key={stage} className={`mon-stage${o ? (o.new ? ' new' : ' old') : ''}`}
+                  title={stageTitle(stage, o, m, now)}>{stage}</span>
+          );
+        })}
+      </span>
+      <button className="mon-fly-btn" disabled={!f.outputs.behavior && !f.outputs.ethogram}
+              onClick={() => onOpenFly(f.experiment, f.fly, 'ethogram')}
+              title={f.outputs.behavior || f.outputs.ethogram
+                ? `Load ${f.experiment} and show ${f.fly} in the Ethograms tab`
+                  + (f.outputs.behavior && !f.outputs.behavior.new && !queued ? ' (older predictions: this batch has not written its own yet)' : '')
+                : 'No behavior predictions yet'}>
+        <i className="fa fa-bar-chart" /> Ethogram
+      </button>
+      <button className="mon-fly-btn" disabled={!f.outputs.pose}
+              onClick={() => onOpenFly(f.experiment, f.fly, 'pose')}
+              title={f.outputs.pose ? `Load ${f.experiment} and show ${f.fly} in the Pose tab` : 'No compiled pose yet'}>
+        Pose
+      </button>
+    </div>
+  );
+}
+
+function RowsTable({ rows, perFly, run, now, onOpenExperiment, onOpenFly, flyMeta, queued, emptyText }) {
   const groups = useMemo(() => groupRows(rows), [rows]);
   if (!groups.length) return <div className="ov-note">{emptyText}</div>;
   const withTasks = !!run?.experiments;
@@ -110,7 +158,13 @@ function RowsTable({ rows, perFly, run, now, onOpenExperiment, emptyText }) {
                 )}
                 {done && <span className="ov-badge" title="Listed in completed/<batch>.txt: every chunk went through the pipeline">complete</span>}
               </td>
-              {perFly && <td className="mono">{g.identities.join(' ')}</td>}
+              {perFly && (
+                <td>
+                  {g.flies.length
+                    ? g.flies.map((f) => <FlyLine key={f.fly} f={f} meta={flyMeta} now={now} queued={queued} onOpenFly={onOpenFly} />)
+                    : <span className="mono">{g.identities.join(' ')}</span>}
+                </td>
+              )}
               {withTasks && <td>{e ? <TaskBar counts={e.summary} width={120} /> : <span className="mon-dim">no task yet</span>}</td>}
               {withTasks && <td>{e && <Counts counts={e.summary} />}</td>}
               {withTasks && (
@@ -141,7 +195,7 @@ function RowsTable({ rows, perFly, run, now, onOpenExperiment, emptyText }) {
   );
 }
 
-function Pipeline({ p, now, onOpenExperiment }) {
+function Pipeline({ p, now, onOpenExperiment, onOpenFly }) {
   const [showLog, setShowLog] = useState(false);
   const [showBatches, setShowBatches] = useState(false);
   const [showTasks, setShowTasks] = useState(false);
@@ -239,6 +293,7 @@ function Pipeline({ p, now, onOpenExperiment }) {
       <h4 className="mon-h">{live ? 'In this run' : 'Last run'}<span className="ov-count"> {groupRows(live ? p.in_run : []).length || ''}</span></h4>
       {live ? (
         <RowsTable rows={p.in_run} perFly={p.per_fly} run={run} now={now} onOpenExperiment={onOpenExperiment}
+                   onOpenFly={onOpenFly} flyMeta={p.fly_outputs}
                    emptyText={run?.batch === '1' ? 'Rows marked 1 when the run started' : `No row of ${p.csv_path.split('/').pop()} holds batch ${run?.batch}`} />
       ) : run?.experiments && Object.keys(run.experiments).some(Boolean) ? (
         <div className="mon-last">
@@ -251,6 +306,13 @@ function Pipeline({ p, now, onOpenExperiment }) {
           ))}
         </div>
       ) : <div className="ov-note">Nothing running</div>}
+      {live && p.per_fly && (
+        <div className="ov-note">
+          Per fly, from its files on disk: <span className="mon-fly-state mon-fly-done">done</span> = ethogram figure and sleep
+          written by this batch; <span className="mon-fly-state mon-fly-explorable">explorable</span> = behavior predictions written
+          (the Ethograms tab works); the boxes are its outputs in pipeline order (filled = written by this batch, outlined = older).
+        </div>
+      )}
       {live && unassigned && (
         <div className="ov-note">{unassigned.summary.running + unassigned.summary.completed + unassigned.summary.failed + unassigned.summary.cached} tasks
           not attributed to an experiment (their script names none: {unassigned.processes.map((x) => x.process).join(', ')})</div>
@@ -260,6 +322,7 @@ function Pipeline({ p, now, onOpenExperiment }) {
         {p.has_queue && p.queued.length > 0 && <span className="ov-count mon-dim"> — marked 1, taken by the next round of run_queue.sh, in this order</span>}
       </h4>
       <RowsTable rows={p.queued} perFly={p.per_fly} now={now} onOpenExperiment={onOpenExperiment}
+                 onOpenFly={onOpenFly} flyMeta={p.fly_outputs} queued
                  emptyText={p.has_queue ? 'No row marked 1' : (live ? 'No queue' : 'No row marked 1')} />
 
       <div className="mon-foot">
@@ -308,7 +371,15 @@ function Pipeline({ p, now, onOpenExperiment }) {
                     {groupRows(b.rows).map((g) => (
                       <span key={g.experiment} className={b.completed?.includes(g.experiment) ? 'mon-ok' : undefined}
                             title={b.completed ? (b.completed.includes(g.experiment) ? 'complete' : 'not in completed/<batch>.txt') : undefined}>
-                        {g.experiment}{p.per_fly ? ` (${g.identities.join(' ')})` : ''}
+                        {g.experiment}
+                        {g.flies.length > 0 ? (
+                          <> ({g.flies.map((f, k) => (
+                            <React.Fragment key={f.fly}>
+                              {k > 0 && ' '}
+                              <span className={FLY_STATE[f.state].cls} title={`${f.fly}: ${FLY_STATE[f.state].title}`}>{f.identity}</span>
+                            </React.Fragment>
+                          ))})</>
+                        ) : p.per_fly ? ` (${g.identities.join(' ')})` : ''}
                       </span>
                     ))}
                   </div></td>
@@ -323,7 +394,7 @@ function Pipeline({ p, now, onOpenExperiment }) {
   );
 }
 
-export default function MonitorTab({ active, onOpenExperiment }) {
+export default function MonitorTab({ active, onOpenExperiment, onOpenFly }) {
   const { log } = useConsole();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -393,6 +464,10 @@ export default function MonitorTab({ active, onOpenExperiment }) {
               {!p.error && (
                 <div className="ov-stat-sub">
                   {p.running && `${groupRows(p.in_run).length} experiments, ${p.run?.n_running_tasks ?? 0} tasks running · `}
+                  {p.per_fly && p.running && (() => {
+                    const n = (s) => p.in_run.filter((r) => r.state === s).length;
+                    return `${n('done')} flies done, ${n('explorable')} explorable · `;
+                  })()}
                   {groupRows(p.queued).length} queued
                   {p.has_queue && !p.queue_runner?.pids.length ? ' (queue not running)' : ''}
                 </div>
@@ -403,7 +478,7 @@ export default function MonitorTab({ active, onOpenExperiment }) {
       )}
 
       {!data && !error && <div className="ov-loading">Reading the pipelines…</div>}
-      {pipelines.map((p) => <Pipeline key={p.id} p={p} now={now} onOpenExperiment={onOpenExperiment} />)}
+      {pipelines.map((p) => <Pipeline key={p.id} p={p} now={now} onOpenExperiment={onOpenExperiment} onOpenFly={onOpenFly} />)}
     </div>
   );
 }

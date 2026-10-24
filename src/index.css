@@ -813,3 +813,16 @@ button.ov-sheet.ov-sheet-error { border-color: var(--danger); color: var(--dange
 .mon-batch { display: flex; flex-wrap: wrap; gap: 2px 14px; white-space: normal; }
 .mon-log { margin: 0; padding: 8px 12px; max-height: 320px; overflow: auto; font-size: 11px; line-height: 1.5;
   background: var(--surface-2); border-top: 1px solid var(--border); white-space: pre-wrap; }
+.mon-fly { display: flex; align-items: center; gap: 8px; white-space: nowrap; padding: 1px 0; }
+.mon-fly-id { width: 20px; }
+.mon-fly-state { font-size: 11px; font-weight: 600; padding: 0 6px; border-radius: 8px; border: 1px solid; min-width: 62px; text-align: center; }
+.ov-note .mon-fly-state { min-width: 0; }
+.mon-fly-done { color: var(--mon-done); border-color: var(--mon-done); }
+.mon-fly-explorable { color: var(--mon-running); border-color: var(--mon-running); }
+.mon-fly-pending { color: var(--subtext); border-color: var(--border); font-weight: 400; }
+.mon-batch .mon-fly-done, .mon-batch .mon-fly-explorable { font-weight: 600; }
+.mon-stages { display: inline-flex; gap: 2px; }
+.mon-stage { font-size: 10px; padding: 0 4px; border-radius: 3px; border: 1px dashed var(--border); color: var(--subtext); opacity: 0.6; }
+.mon-stage.old { border-style: solid; border-color: var(--border-strong); opacity: 1; }
+.mon-stage.new { border-style: solid; border-color: var(--mon-done); background: var(--mon-done); color: #fff; opacity: 1; }
+.mon-fly-btn { font-size: 11px; padding: 1px 6px; }
