@@ -58,6 +58,37 @@ function Counts({ counts }) {
   );
 }
 
+// work dir of each failed task of an experiment (where .command.err is): the end of the
+// path shown, the full path copied on click
+function FailedWorkDirs({ failed }) {
+  const { log } = useConsole();
+  const [copied, setCopied] = useState(null);
+  if (!failed?.length) return null;
+  const copy = async (dir) => {
+    try {
+      await copyText(dir);
+      setCopied(dir);
+      setTimeout(() => setCopied(null), 1500);
+    } catch (err) {
+      log('warning', `Could not copy: ${err.message}; ${dir}`);
+    }
+  };
+  return (
+    <div className="mon-failed-dirs">
+      {failed.map((t) => (
+        <div key={t.work_dir || t.name} title={`${t.name} exit ${t.exit}\n${t.work_dir || 'work dir unknown'}`}>
+          <span className="mon-count-failed">{t.process.split(':').pop()}</span>{' '}
+          {t.work_dir ? (
+            <button className="ov-link mono" onClick={() => copy(t.work_dir)} title={`Copy ${t.work_dir}`}>
+              {copied === t.work_dir ? 'copied' : t.work_dir.split('/').slice(-3).join('/')}
+            </button>
+          ) : <span className="mon-dim">work dir unknown</span>}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function StateBadge({ p }) {
   if (p.error) return <span className="dm-status dm-bad">error</span>;
   if (p.running) return <span className="dm-status mon-running-badge"><i className="fa fa-circle-o-notch fa-spin" /> running</span>;
@@ -171,7 +202,7 @@ function RowsTable({ rows, perFly, run, now, onOpenExperiment, onOpenFly, flyMet
                 </td>
               )}
               {withTasks && <td>{e ? <TaskBar counts={e.summary} width={120} /> : <span className="mon-dim">no task yet</span>}</td>}
-              {withTasks && <td>{e && <Counts counts={e.summary} />}</td>}
+              {withTasks && <td>{e && <><Counts counts={e.summary} /><FailedWorkDirs failed={e.failed} /></>}</td>}
               {withTasks && (
                 <td className="mon-running">
                   {[...new Set(running.map((t) => t.process))].map((proc) => {
@@ -281,6 +312,7 @@ function RelaunchFailed({ p, relaunch, now, onChanged }) {
                   <td>
                     <span className="mono mon-exception">{t.exception || t.error[t.error.length - 1] || <span className="mon-dim">no output</span>}</span>
                     {t.where && <div className="mono mon-dim">{t.where[0]}</div>}
+                    {t.work_dir && <FailedWorkDirs failed={[t]} />}
                     {t.error.length > 0 && (
                       <button className="ov-link" onClick={() => setOpen((o) => ({ ...o, [t.work_dir]: !o[t.work_dir] }))}>
                         {open[t.work_dir] ? '▾' : '▸'} end of .command.err
@@ -289,7 +321,6 @@ function RelaunchFailed({ p, relaunch, now, onChanged }) {
                     {open[t.work_dir] && (
                       <>
                         <pre className="mon-log">{t.error.join('\n')}</pre>
-                        <div className="mono mon-dim">{t.work_dir}</div>
                       </>
                     )}
                   </td>
@@ -478,6 +509,7 @@ function Pipeline({ p, now, onOpenExperiment, onOpenFly, onChanged }) {
               <span className="mono mon-process-name mon-wide" title={k}>{k}</span>
               <TaskBar counts={e.summary} width={120} />
               <Counts counts={e.summary} />
+              <FailedWorkDirs failed={e.failed} />
             </div>
           ))}
         </div>

@@ -815,6 +815,8 @@ button.ov-sheet.ov-sheet-error { border-color: var(--danger); color: var(--dange
 .mon-process-name.mon-wide { width: 330px; }
 .mon-total { border-top: 1px solid var(--border); padding-top: 3px; font-weight: 600; }
 .mon-failed { margin-top: 4px; font-size: 12px; }
+.mon-failed-dirs { font-size: 12px; margin-top: 2px; }
+.mon-failed-dirs .ov-link { padding: 0; }
 .mon-relaunch { margin-top: 6px; padding: 8px 10px; border: 1px solid var(--mon-failed); border-radius: var(--radius);
   display: flex; flex-direction: column; gap: 8px; font-size: 12px; }
 .mon-relaunch-head { font-size: 13px; }
