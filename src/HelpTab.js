@@ -643,6 +643,15 @@ export default function HelpTab() {
               in the pipeline folder; pose estimation and behavior prediction) they start, in this order, when the
               current run ends: <i>queue stopped</i> means no <code>run_queue.sh</code> is running there.
               idtrackerai has no queue: its rows marked 1 are those of the run started by hand.</li>
+            <li><b>Relaunch failed tasks</b> (pose estimation, behavior prediction): nextflow ignores failed tasks, so a run
+              ends normally and their fly / experiment just stops there. For every batch whose last run had failures, and whose
+              rows were not re-queued since, it lists each failed task with the error it ended on and the deepest frame of our
+              own code (▸ for the end of its <code>.command.err</code>). When they all failed with the same error, fix that
+              first: relaunching would fail the same way. Then press <b>Re-queue</b>: it marks their rows 1 again (as <code>run_queue.sh</code> expects, under its lock) so the
+              queue takes them in its next round; with a same-cause warning it asks for a second click. Or copy{' '}
+              <i>Run batch … again now</i> (<code>nextflow run … -resume &lt;session&gt; --batch …</code>) into a terminal, only
+              when no run is going on in the folder (not started from the app: a run started by the server would stop with it).
+              Both resume the nextflow session: what completed before is reused from the cache.</li>
             <li><i>Recent batches</i>: the last batch stamps of the CSV; <i>run_queue.log</i>: its last lines.</li>
             <li><i>Open</i> loads the experiment in the viewer.</li>
           </ul>

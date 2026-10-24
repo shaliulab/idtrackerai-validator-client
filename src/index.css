@@ -815,6 +815,19 @@ button.ov-sheet.ov-sheet-error { border-color: var(--danger); color: var(--dange
 .mon-process-name.mon-wide { width: 330px; }
 .mon-total { border-top: 1px solid var(--border); padding-top: 3px; font-weight: 600; }
 .mon-failed { margin-top: 4px; font-size: 12px; }
+.mon-relaunch { margin-top: 6px; padding: 8px 10px; border: 1px solid var(--mon-failed); border-radius: var(--radius);
+  display: flex; flex-direction: column; gap: 8px; font-size: 12px; }
+.mon-relaunch-head { font-size: 13px; }
+.mon-relaunch-batch { display: flex; flex-direction: column; gap: 6px; }
+.mon-relaunch-cause { font-size: 12px; }
+.mon-relaunch-option { display: flex; flex-direction: column; gap: 4px; }
+.mon-exception { white-space: pre-wrap; margin: 2px 0; font-size: 11px; }
+.mon-requeue { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.mon-requeue button { flex: none; }
+.mon-requeue button.mon-requeue-armed { background: var(--danger-soft); border-color: var(--danger); color: var(--danger); }
+.mon-command { display: flex; gap: 6px; align-items: flex-start; }
+.mon-command pre { flex: 1; min-width: 0; margin: 0; padding: 6px 8px; border-radius: var(--radius); background: var(--surface-2);
+  border: 1px solid var(--border); font-size: 11px; white-space: pre-wrap; word-break: break-all; user-select: all; }
 .mon-h { margin: 0; padding: 6px 12px; border-top: 1px solid var(--border); font-size: 12px; font-weight: 600;
   text-transform: uppercase; letter-spacing: 0.05em; color: var(--subtext); }
 .mon-h .ov-count { text-transform: none; letter-spacing: 0; }

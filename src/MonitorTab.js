@@ -5,11 +5,16 @@
 // its folder (tasks per process, per experiment, the tasks running now, failures), the
 // rows of its CSV being processed and those waiting in the queue (marked 1, picked up
 // by run_queue.sh when the run ends), the last batches and the end of run_queue.log.
+// "Relaunch failed tasks" (RelaunchFailed) lists, per batch, the failed tasks whose rows
+// were not re-queued since, why they failed, a Re-queue button (POST
+// /api/monitor/<pipeline>/requeue: marks their rows 1 again for run_queue.sh) and the
+// command running the batch again by hand.
 // Refreshed every REFRESH_MS while the tab is shown and "Auto refresh" is ticked.
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import api from './api';
 import { useConsole } from './MessageConsole';
+import { copyText } from './utils';
 
 const unwrap = (data) => (typeof data === 'string' ? JSON.parse(data) : data);
 const REFRESH_MS = 10000;
@@ -195,7 +200,176 @@ function RowsTable({ rows, perFly, run, now, onOpenExperiment, onOpenFly, flyMet
   );
 }
 
-function Pipeline({ p, now, onOpenExperiment, onOpenFly }) {
+function CopyCommand({ command }) {
+  const { log } = useConsole();
+  const [copied, setCopied] = useState(false);
+  const copy = async () => {
+    try {
+      await copyText(command);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch (err) {
+      log('warning', `Could not copy: ${err.message}; select the command instead`);
+    }
+  };
+  return (
+    <div className="mon-command">
+      <pre className="mono">{command}</pre>
+      <button onClick={copy} title="Copy to the clipboard">{copied ? 'Copied' : 'Copy'}</button>
+    </div>
+  );
+}
+
+// Failed tasks still to be finished and how to run them again (monitor.relaunch_info).
+function RelaunchFailed({ p, relaunch, now, onChanged }) {
+  const { log } = useConsole();
+  const [open, setOpen] = useState({});      // work dir -> traceback shown
+  const [armed, setArmed] = useState(false);   // same-cause warning acknowledged once
+  const [busy, setBusy] = useState(false);
+  const sameCause = relaunch.batches.some((b) => b.same_error);
+  const requeue = async () => {
+    if (sameCause && !armed) { setArmed(true); return; }
+    setBusy(true);
+    try {
+      const { data } = await api.post(`/api/monitor/${p.id}/requeue`, {});
+      const r = unwrap(data);
+      log('success', `${p.label}: re-queued ${r.rows} row${r.rows === 1 ? '' : 's'} of ${r.csv} (lines ${r.lines.join(', ')})`
+        + (!r.queue_running ? ': start run_queue.sh to run them'
+          : r.next_check ? `: run_queue.sh takes them at its next check, ${clock(r.next_check)} (or press "Check now")`
+            : ': run_queue.sh takes them when the current run ends'));
+      onChanged();
+    } catch (err) {
+      log('error', `${p.label}: could not re-queue: ${err.response?.data?.error || err.message}`);
+    } finally {
+      setBusy(false);
+      setArmed(false);
+    }
+  };
+  const csv = p.csv_path.split('/').pop();
+  const runner = p.queue_runner;
+  const nFlies = relaunch.batches.reduce((n, b) => n + b.flies.length, 0);
+  const what = p.per_fly ? 'fl' + (nFlies === 1 ? 'y' : 'ies') : 'experiment' + (nFlies === 1 ? '' : 's');
+  return (
+    <div className="mon-relaunch">
+      <div className="mon-relaunch-head">
+        <b>Relaunch failed tasks</b> — {nFlies} {what} stopped at a failed task. nextflow ignores failures
+        (<span className="mono">errorStrategy "ignore"</span>), so the run ended normally and the rest of the pipeline never
+        ran for them.
+      </div>
+      {relaunch.batches.map((b) => (
+        <div key={b.batch} className="mon-relaunch-batch">
+          <div>
+            Batch <b className="mono">{b.batch}</b> · run <span className="mono">{b.run_name}</span>
+            {b.ended ? <> · ended {clock(b.ended)}</> : null} · {b.n_failed} failed task{b.n_failed === 1 ? '' : 's'}
+          </div>
+          {b.same_error && (
+            <div className="banner-danger mon-relaunch-cause">
+              <div>
+                All of them failed with the same error. That looks like one cause: relaunching will fail the same way until it is fixed.
+                <pre className="mono mon-exception">{b.same_error}</pre>
+                {b.tasks[0]?.where && <div className="mono mon-dim">{b.tasks[0].where.join('  →  ')}</div>}
+              </div>
+            </div>
+          )}
+          <table className="pe-table ov-table mon-table">
+            <thead><tr><th>{p.per_fly ? 'Fly' : 'Experiment'}</th><th>Failed task</th><th>Error</th></tr></thead>
+            <tbody>
+              {b.tasks.map((t) => (
+                <tr key={t.work_dir || t.name}>
+                  <td className="mono">{t.experiment ? `${t.experiment}${t.identity ? `__${t.identity}` : ''}` : <span className="mon-dim">?</span>}</td>
+                  <td className="mono">{t.name} <span className="mon-dim">exit {t.exit}</span></td>
+                  <td>
+                    <span className="mono mon-exception">{t.exception || t.error[t.error.length - 1] || <span className="mon-dim">no output</span>}</span>
+                    {t.where && <div className="mono mon-dim">{t.where[0]}</div>}
+                    {t.error.length > 0 && (
+                      <button className="ov-link" onClick={() => setOpen((o) => ({ ...o, [t.work_dir]: !o[t.work_dir] }))}>
+                        {open[t.work_dir] ? '▾' : '▸'} end of .command.err
+                      </button>
+                    )}
+                    {open[t.work_dir] && (
+                      <>
+                        <pre className="mon-log">{t.error.join('\n')}</pre>
+                        <div className="mono mon-dim">{t.work_dir}</div>
+                      </>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {b.command && (
+            <div className="mon-relaunch-option">
+              <div>
+                <b>Run batch {b.batch} again now</b>, resuming its nextflow session (
+                <span className="mono">{b.session.slice(0, 8)}</span>): the tasks it completed are taken from the cache and
+                only the failed ones and those after them run.
+                {relaunch.live
+                  ? <span className="ov-warn"> A run is going on in this folder: wait for it to end (two runs cannot share the folder), or re-queue instead.</span>
+                  : null}
+              </div>
+              <CopyCommand command={b.command} />
+            </div>
+          )}
+        </div>
+      ))}
+      <div className="mon-relaunch-option">
+        <div className="mon-requeue">
+          <button className={armed ? 'mon-requeue-armed' : ''} onClick={requeue} disabled={busy}>
+            {busy ? 'Re-queueing…' : armed ? `Re-queue anyway (same error everywhere)` : `Re-queue ${nFlies === 1 ? 'it' : `the ${nFlies}`}`}
+          </button>
+          {armed && <button onClick={() => setArmed(false)}>Cancel</button>}
+          <span>
+            marks {nFlies === 1 ? 'its row' : 'their rows'} of <span className="mono">{csv}</span> 1 again (under the same
+            lock as run_queue.sh), so{' '}
+            {p.has_queue && runner?.pids.length
+              ? (runner.next_check
+                ? <>run_queue.sh takes them at its next check, {clock(runner.next_check)} (<NextCheck p={p} now={now} onChanged={onChanged} />)</>
+                : 'run_queue.sh takes them when the current run ends')
+              : <span className="ov-warn">run_queue.sh would take them, but it is not running (start it with <span className="mono">nohup ./run_queue.sh &gt; run_queue.log 2&gt;&amp;1 &amp;</span>)</span>}
+            , as a new batch launched with <span className="mono">-resume</span>, which reuses what completed.
+          </span>
+        </div>
+        {relaunch.requeue && (
+          <details className="mon-dim">
+            <summary>Same as a shell command</summary>
+            <CopyCommand command={relaunch.requeue} />
+          </details>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// "run_queue.sh checks again at …" with a button ending its wait (POST /api/monitor/<pipeline>/check_now)
+function NextCheck({ p, now, onChanged }) {
+  const { log } = useConsole();
+  const [busy, setBusy] = useState(false);
+  const next = p.queue_runner?.next_check;
+  if (!next) return null;
+  const checkNow = async () => {
+    setBusy(true);
+    try {
+      await api.post(`/api/monitor/${p.id}/check_now`);
+      log('info', `${p.label}: run_queue.sh is looking at the queue now`);
+      setTimeout(onChanged, 3000);
+    } catch (err) {
+      log('error', `${p.label}: ${err.response?.data?.error || err.message}`);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <span>
+      · next check of the queue {clock(next)} ({next > now ? `in ${duration(next - now)}` : 'now'}){' '}
+      <button className="ov-link" onClick={checkNow} disabled={busy}
+              title="End run_queue.sh's wait between checks, so it starts the rows marked 1 now">
+        {busy ? 'waking…' : 'Check now'}
+      </button>
+    </span>
+  );
+}
+
+function Pipeline({ p, now, onOpenExperiment, onOpenFly, onChanged }) {
   const [showLog, setShowLog] = useState(false);
   const [showBatches, setShowBatches] = useState(false);
   const [showTasks, setShowTasks] = useState(false);
@@ -249,7 +423,8 @@ function Pipeline({ p, now, onOpenExperiment, onOpenFly }) {
         <div className="mon-meta">
           {p.has_queue ? (
             runner.pids.length
-              ? <span><i className="fa fa-check mon-ok" /> run_queue.sh running (pid {runner.pids.join(', ')}): rows marked 1 start when the run ends</span>
+              ? <span><i className="fa fa-check mon-ok" /> run_queue.sh running (pid {runner.pids.join(', ')}): rows marked 1 start when the run ends
+                  {' '}<NextCheck p={p} now={now} onChanged={onChanged} /></span>
               : <span className="ov-warn"><i className="fa fa-exclamation-triangle" /> run_queue.sh is not running: rows marked 1 wait until it is started
                   (<span className="mono">nohup ./run_queue.sh &gt; run_queue.log 2&gt;&amp;1 &amp;</span>)</span>
           ) : (
@@ -288,6 +463,7 @@ function Pipeline({ p, now, onOpenExperiment, onOpenFly }) {
             </div>
           </div>
         )}
+        {p.relaunch && <RelaunchFailed p={p} relaunch={p.relaunch} now={now} onChanged={onChanged} />}
       </div>
 
       <h4 className="mon-h">{live ? 'In this run' : 'Last run'}<span className="ov-count"> {groupRows(live ? p.in_run : []).length || ''}</span></h4>
@@ -478,7 +654,7 @@ export default function MonitorTab({ active, onOpenExperiment, onOpenFly }) {
       )}
 
       {!data && !error && <div className="ov-loading">Reading the pipelines…</div>}
-      {pipelines.map((p) => <Pipeline key={p.id} p={p} now={now} onOpenExperiment={onOpenExperiment} onOpenFly={onOpenFly} />)}
+      {pipelines.map((p) => <Pipeline key={p.id} p={p} now={now} onOpenExperiment={onOpenExperiment} onOpenFly={onOpenFly} onChanged={fetchData} />)}
     </div>
   );
 }
