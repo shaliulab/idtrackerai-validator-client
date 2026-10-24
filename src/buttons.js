@@ -25,7 +25,7 @@ import {
   TogglePlayButton 
 } from './icons';
 
-const Buttons = ({ frameNumber, setFrameNumber, isPlaying, setIsPlaying, recordingFramerate, frameRange }) => {
+const Buttons = ({ frameNumber, setFrameNumber, isPlaying, setIsPlaying, recordingFramerate, frameRange, active = true }) => {
   const frameRate = recordingFramerate;
 
   const play = () => {
@@ -108,7 +108,10 @@ const Buttons = ({ frameNumber, setFrameNumber, isPlaying, setIsPlaying, recordi
   // Keyboard shortcuts
   // Deps are the values the handlers actually close over: everything else is
   // either an updater-form setState or a stable prop.
+  // Only while the Group viewer is shown: the tab stays mounted when hidden, and its
+  // state updates would also re-render (and unsubscribe mid-event) other tabs' handlers.
   useEffect(() => {
+    if (!active) return undefined;
     const handleKeyDown = (event) => {
       const tag = event.target.tagName.toLowerCase();
       const editable = event.target.isContentEditable;
@@ -157,7 +160,7 @@ const Buttons = ({ frameNumber, setFrameNumber, isPlaying, setIsPlaying, recordi
       window.removeEventListener('keydown', handleKeyDown);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isPlaying, frameNumber, frameRate, frameRange]);
+  }, [active, isPlaying, frameNumber, frameRate, frameRange]);
 
   return (
     <div className="transport">

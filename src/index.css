@@ -659,6 +659,11 @@ button.ov-sheet.ov-sheet-error { border-color: var(--danger); color: var(--dange
 .deg-small { padding: 0 6px; margin-left: 6px; line-height: 18px; }
 .deg-custom summary { cursor: pointer; color: var(--subtext); padding-bottom: 6px; }
 .deg-error { color: var(--danger); }
+.deg-buttons button.deg-last { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.deg-buttons button.deg-painting, .deg-buttons button.deg-painting:disabled { background: var(--danger-soft); border-color: var(--danger); color: var(--danger); opacity: 1; cursor: default; }
+.deg-none-swatch { border: 1px dashed var(--subtext); box-sizing: border-box; }
+.deg-rec { color: var(--danger); animation: deg-blink 1s steps(2, start) infinite; }
+@keyframes deg-blink { to { visibility: hidden; } }
 
 /* Experiment picker (selectComponent.js): copy buttons and the loaded experiment's basedir */
 .exp-picker { display: flex; align-items: center; gap: 6px; min-width: 0; }

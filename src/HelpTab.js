@@ -70,7 +70,7 @@ const SHORTCUTS = [
     ['Drag on the ethogram', 'Pan; a click moves the cursor, a double click zooms in'],
     [<><Key>Shift</Key>+drag on the ethogram</>, 'Select seconds to label for deepethogram'],
     [<><Key>[</Key> / <Key>]</Key></>, 'Start / end the selection at the cursor (Esc drops it)'],
-    [<><Key>1</Key> … <Key>7</Key></>, 'Label the selection with a DEG preset (inactive … background); Delete clears it'],
+    [<><Key>1</Key> … <Key>6</Key>, <Key>0</Key></>, 'Label the selection (else the cursor\'s second) for DEG: 1 walk, 2 groom, 3 feed, 4 inactive + micromovement, 5 inactive, 6 inactive + PE, 0 background; Delete = None, removes its labels'],
   ]],
 ];
 
@@ -364,16 +364,25 @@ export default function HelpTab() {
             </li>
             <li>
               Select seconds with <Key>Shift</Key>+drag on the ethogram, or with <Key>[</Key>/<Key>]</Key>{' '}
-              at the cursor; without a selection the buttons label the cursor's second. A preset
-              (<i>inactive</i>, <i>inactive + micromovement</i>, <i>inactive + PE</i>, <i>feed</i>,{' '}
-              <i>groom</i>, <i>walk</i>, <i>background</i>) or a custom set of columns is set to 1 and
-              every other column to 0 for all frames of those seconds; <i>Clear</i> sets them back to
-              not labelled (-1).
+              at the cursor; without a selection the buttons and keys label the cursor's second. A preset
+              (keys <Key>1</Key> <i>walk</i>, <Key>2</Key> <i>groom</i>, <Key>3</Key> <i>feed</i>,{' '}
+              <Key>4</Key> <i>inactive + micromovement</i>, <Key>5</Key> <i>inactive</i>,{' '}
+              <Key>6</Key> <i>inactive + PE</i>, <Key>0</Key> <i>background</i>) or a custom set of columns is set to 1 and
+              every other column to 0 for all frames of those seconds; <i>None (remove)</i>{' '}
+              (<Key>Delete</Key>) sets them back to not labelled (-1), removing whatever was written there.
+            </li>
+            <li>
+              <b>● Label while moving</b> gives every second the cursor enters (playing the movie, <Key>←</Key>/<Key>→</Key>)
+              the last label applied, shown next to the buttons; a label key switches it on the fly. With{' '}
+              <i>None</i> as the last label, it removes the labels of the seconds it passes instead. A jump of up to 10 s
+              forward (fast playback, Shift+<Key>→</Key>) also labels the seconds in between; clicking elsewhere labels only the
+              second reached. <b>■ Stop labelling</b> turns it off (so does switching fly).
             </li>
             <li>
               Labels go to <code>&lt;chunk&gt;_labels.csv</code> of the fly's video folder of each chunk
               (<code>DATA/&lt;experiment&gt;_&lt;chunk&gt;_&lt;local identity&gt;/</code>). A chunk without
-              folder gets one made with deepethogram from its single-animal video, which takes ~30 s.
+              folder gets one made with deepethogram from its single-animal video, which takes ~30 s;
+              its progress shows in the console, and the labels are written when it is done.
             </li>
           </ul>
         </Section>

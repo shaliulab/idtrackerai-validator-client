@@ -791,6 +791,7 @@ function App() {
                   setIsPlaying={setIsPlaying}
                   recordingFramerate={recordingFramerate}
                   frameRange={frameRange}
+                  active={activeTab === 'group_viewer'}
                 />
                 <div className="toolbar" style={{ justifyContent: 'center' }}>
                   <InteractiveText
