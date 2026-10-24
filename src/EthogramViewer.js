@@ -6,6 +6,7 @@
 // the ethogram cursor are kept in sync: the x axis is seconds since the start of
 // the movie. The visible window is only ever moved, never reset: playback pages
 // it along (with "follow"), jumps center it, and its width is kept per browser.
+// Below the ethogram, the fly's deepethogram labels and the card writing them (DegLabels).
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import Hls from 'hls.js/light';
@@ -14,6 +15,7 @@ import { useConsole } from './MessageConsole';
 import { FlyRow } from './blobs_table';
 import { useStoredNumber } from './layout';
 import EthogramTrack, { prepareTrack, clampView, formatClock, MIN_VIEW_WIDTH } from './EthogramTrack';
+import DegLabels from './DegLabels';
 
 const API = '/api/ethogram';
 
@@ -76,6 +78,8 @@ export default function EthogramViewer({ flies, request, animalMetadata, active,
   const [capturingAll, setCapturingAll] = useState(false);
   const [saveOnServer, setSaveOnServer] = useState(false);   // all-bouts export: save vs download
   const [savedVideos, setSavedVideos] = useState(null);   // { directory, videos: [{name, t0, t1, duration, movie_time}] }
+  const [degLabels, setDegLabels] = useState(null);       // /deg_labels of the shown fly
+  const [selection, setSelection] = useState(null);       // [start, end) s being labelled
 
   const videoRef = useRef(null);
   const trackCache = useRef(new Map());               // fly -> prepared track
@@ -326,7 +330,18 @@ export default function EthogramViewer({ flies, request, animalMetadata, active,
   );
   const cursorFrame = frameOf(cursorT);
 
-  useEffect(() => { setNotice(null); setActionError(null); }, [fly]);
+  useEffect(() => { setNotice(null); setActionError(null); setSelection(null); }, [fly]);
+
+  // ── DEG labels of the fly ──
+  useEffect(() => {
+    if (!active || !fly) return undefined;
+    let cancelled = false;
+    setDegLabels(null);
+    api.get(`${API}/${fly}/deg_labels`)
+      .then(({ data }) => { if (!cancelled) setDegLabels(unwrap(data)); })
+      .catch(async (err) => { if (!cancelled) log('warning', `${fly}: no DEG labels (${await errorMessage(err)})`); });
+    return () => { cancelled = true; };
+  }, [fly, active, log]);
 
   // Errors show under the controls and in the console.
   const reportError = useCallback((message) => {
@@ -652,6 +667,10 @@ export default function EthogramViewer({ flies, request, animalMetadata, active,
               shade={shade}
               minBout={minBout}
               themeName={themeName}
+              labelRuns={degLabels?.runs}
+              labelClasses={degLabels?.classes}
+              selection={selection}
+              onSelect={setSelection}
             />
             <div className="eth-keys">
               Wheel: zoom · Shift+wheel or drag: pan · click: move the cursor · double click: zoom in ·
@@ -660,6 +679,20 @@ export default function EthogramViewer({ flies, request, animalMetadata, active,
             </div>
           </div>
         </div>
+      )}
+
+      {track && (
+        <DegLabels
+          fly={fly}
+          labels={degLabels}
+          onLabels={setDegLabels}
+          selection={selection}
+          onSelect={setSelection}
+          cursorT={cursorT}
+          track={track}
+          seek={seek}
+          active={active}
+        />
       )}
 
       {hasMovie && (

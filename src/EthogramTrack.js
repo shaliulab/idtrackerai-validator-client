@@ -8,6 +8,9 @@
 // Zoomed out, each pixel column of a row is shaded by the share of its seconds
 // spent in that behavior (a single second still shows faintly); zoomed in, each
 // second is a block, optionally shaded by the classifier's score.
+//
+// Below the rows, the fly's deepethogram (DEG) labels (runs of movie seconds, see
+// deg_labels.py) and the selection being labelled: Shift+drag selects seconds.
 
 import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { useElementSize } from './layout';
@@ -22,9 +25,21 @@ export const BEHAVIOR_STYLE = {
 };
 const styleOf = (behavior) => BEHAVIOR_STYLE[behavior] || { label: behavior, color: '#888888' };
 
+// Classes of the DEG label strip (deg_labels.CLASSES): the RF classes, any other
+// combination of columns, and seconds whose frames disagree.
+export const LABEL_STYLE = {
+  ...BEHAVIOR_STYLE,
+  'inactive+pe': { label: 'inactive + PE', color: '#CC79A7' },
+  background: { label: 'background', color: '#A0A0A0' },
+  other: { label: 'other combination', color: '#5A5A5A' },
+  mixed: { label: 'mixed (frames differ)', color: '#F0E442' },
+};
+export const labelStyleOf = (cls) => LABEL_STYLE[cls] || { label: cls, color: '#888888' };
+
 const ROW_H = 30;
 const AXIS_H = 24;
 const OVERVIEW_H = 26;
+const LABELS_H = 22;
 export const MIN_VIEW_WIDTH = 10;     // s
 const DRAG_THRESHOLD = 4;             // px moved before a press is a pan, not a click
 
@@ -125,10 +140,13 @@ function useCanvas(canvas, width, height) {
 
 export default function EthogramTrack({
   data, view, onView, cursorT, onSeek, frameOf, shade, minBout, themeName,
+  labelRuns, labelClasses, selection, onSelect,
 }) {
   const [plotEl, setPlotEl] = useState(null);
   const [mainCanvas, setMainCanvas] = useState(null);
   const [overviewCanvas, setOverviewCanvas] = useState(null);
+  const [labelsCanvas, setLabelsCanvas] = useState(null);
+  const [labelHover, setLabelHover] = useState(null);  // x on the label strip
   const { width } = useElementSize(plotEl);
   const [hover, setHover] = useState(null);           // { x, row } (t follows the view)
   const viewRef = useRef(view);
@@ -138,6 +156,7 @@ export default function EthogramTrack({
   const mainH = rows.length * ROW_H + AXIS_H;
   const mainCtx = useCanvas(mainCanvas, width, mainH);
   const overviewCtx = useCanvas(overviewCanvas, width, OVERVIEW_H);
+  const labelsCtx = useCanvas(labelsCanvas, width, LABELS_H);
 
   const [t0, t1] = view;
   const pps = width ? width / (t1 - t0) : 1;           // pixels per second
@@ -232,6 +251,19 @@ export default function EthogramTrack({
         ctx.fillText(label, Math.max(half, Math.min(width - half, x)), axisY + 6);
       }
 
+      // selection being labelled
+      if (selection) {
+        const xa = (selection[0] - t0) * pps;
+        const xb = (selection[1] - t0) * pps;
+        ctx.globalAlpha = 0.14;
+        ctx.fillStyle = accent;
+        ctx.fillRect(xa, 0, Math.max(2, xb - xa), axisY);
+        ctx.globalAlpha = 0.8;
+        ctx.fillRect(Math.round(xa), 0, 1, axisY);
+        ctx.fillRect(Math.round(Math.max(xb, xa + 2)), 0, 1, axisY);
+        ctx.globalAlpha = 1;
+      }
+
       // hover line
       if (hover) {
         ctx.fillStyle = text;
@@ -251,7 +283,38 @@ export default function EthogramTrack({
         }
       }
     }
-  }, [mainCtx, data, rows, width, mainH, t0, t1, pps, cursorT, hover, shade, themeName]);
+  }, [mainCtx, data, rows, width, mainH, t0, t1, pps, cursorT, hover, shade, selection, themeName]);
+
+  // ── DEG labels: one block per run (labels are sparse) ──
+  useEffect(() => {
+    const id = requestAnimationFrame(() => drawLabels());
+    return () => cancelAnimationFrame(id);
+    function drawLabels() {
+      const ctx = labelsCtx();
+      if (!ctx || !data) return;
+      const accent = cssVar('--accent', '#2563eb');
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = cssVar('--surface-2', '#f8fafc');
+      ctx.fillRect(0, 0, width, LABELS_H);
+      for (const [a, b, code] of labelRuns || []) {
+        if (b < t0 || a > t1) continue;
+        const xa = (a - t0) * pps;
+        ctx.fillStyle = labelStyleOf(labelClasses?.[code]).color;
+        ctx.fillRect(xa, 3, Math.max(1, (b - a) * pps - (pps > 6 ? 1 : 0)), LABELS_H - 6);
+      }
+      if (selection) {
+        const xa = (selection[0] - t0) * pps;
+        const xb = (selection[1] - t0) * pps;
+        ctx.strokeStyle = accent;
+        ctx.lineWidth = 2;
+        ctx.strokeRect(xa, 1, Math.max(2, xb - xa), LABELS_H - 2);
+      }
+      if (cursorT != null) {
+        ctx.fillStyle = accent;
+        ctx.fillRect(Math.round((cursorT - t0) * pps) - 1, 0, 2, LABELS_H);
+      }
+    }
+  }, [labelsCtx, data, width, t0, t1, pps, cursorT, labelRuns, labelClasses, selection, themeName]);
 
   // ── overview: dominant behavior of each pixel over the whole recording ──
   const overviewImage = useMemo(() => {
@@ -339,16 +402,26 @@ export default function EthogramTrack({
 
   // ── main canvas: drag pans, click moves the cursor, double click zooms in ──
   const dragRef = useRef(null);
+  const localX = (e) => e.clientX - e.currentTarget.getBoundingClientRect().left;
+  // whole seconds from the press to the pointer
+  const selectTo = (drag, x) => {
+    const a = Math.max(0, Math.min(data.n - 1, Math.floor(Math.min(drag.t, tOf(x)))));
+    const b = Math.max(a + 1, Math.min(data.n, Math.ceil(Math.max(drag.t, tOf(x)))));
+    onSelect([a, b]);
+  };
   const onPointerDown = (e) => {
     if (e.button !== 0) return;
     e.currentTarget.setPointerCapture(e.pointerId);
-    dragRef.current = { x: e.clientX, view: viewRef.current, moved: false };
+    const select = e.shiftKey && Boolean(onSelect);
+    dragRef.current = { x: e.clientX, view: viewRef.current, moved: false, select, t: tOf(localX(e)) };
+    if (select) selectTo(dragRef.current, localX(e));
   };
-  const localX = (e) => e.clientX - e.currentTarget.getBoundingClientRect().left;
   const onPointerMove = (e) => {
     const x = localX(e);
     const drag = dragRef.current;
-    if (drag) {
+    if (drag?.select) {
+      selectTo(drag, x);
+    } else if (drag) {
       const dx = e.clientX - drag.x;
       if (Math.abs(dx) > DRAG_THRESHOLD) drag.moved = true;
       if (drag.moved) {
@@ -363,7 +436,14 @@ export default function EthogramTrack({
   const onPointerUp = (e) => {
     const drag = dragRef.current;
     dragRef.current = null;
-    if (drag && !drag.moved) onSeek(Math.max(0, Math.min(data.n, tOf(localX(e)))));
+    if (drag && !drag.moved && !drag.select) onSeek(Math.max(0, Math.min(data.n, tOf(localX(e)))));
+  };
+  // label strip: same gestures, its own tooltip
+  const onLabelsMove = (e) => {
+    const drag = dragRef.current;
+    if (drag?.select) selectTo(drag, localX(e));
+    else if (drag) onPointerMove(e);
+    setLabelHover(localX(e));
   };
   const onDoubleClick = (e) => {
     const t = tOf(localX(e));
@@ -421,6 +501,26 @@ export default function EthogramTrack({
     );
   }
 
+  let labelTooltip = null;
+  if (labelHover != null && !dragRef.current) {
+    const t = t0 + labelHover / pps;
+    const run = (labelRuns || []).find(([a, b]) => t >= a && t < b);
+    const zt = (s) => (data.zt0 != null ? `ZT ${formatClock(data.zt0 + s)}` : `${formatClock(s)} (movie)`);
+    labelTooltip = (
+      <div className="eth-tooltip" style={{ left: Math.min(labelHover + 14, Math.max(0, width - 250)), top: LABELS_H + 4 }}>
+        {run ? (
+          <>
+            <div>
+              <span className="eth-swatch" style={{ background: labelStyleOf(labelClasses?.[run[2]]).color }} />
+              <b>{labelStyleOf(labelClasses?.[run[2]]).label}</b>
+            </div>
+            <div className="eth-dim">{zt(run[0])} – {zt(run[1])} ({formatDuration(run[1] - run[0])})</div>
+          </>
+        ) : <div className="eth-dim">not labelled · {zt(t)}</div>}
+      </div>
+    );
+  }
+
   const inView = shares(data, t0, t1);
 
   return (
@@ -457,6 +557,22 @@ export default function EthogramTrack({
         />
         {tooltip}
       </div>
+      {labelRuns && (
+        <>
+          <div className="eth-label eth-overview-label" style={{ height: LABELS_H }} title="deepethogram labels of this fly">DEG labels</div>
+          <div className="eth-plot">
+            <canvas
+              ref={setLabelsCanvas}
+              style={{ width: '100%', height: LABELS_H, display: 'block', cursor: 'crosshair', touchAction: 'none' }}
+              onPointerDown={onPointerDown}
+              onPointerMove={onLabelsMove}
+              onPointerUp={onPointerUp}
+              onPointerLeave={() => setLabelHover(null)}
+            />
+            {labelTooltip}
+          </div>
+        </>
+      )}
       <div className="eth-label eth-overview-label" style={{ height: OVERVIEW_H }}>Whole recording</div>
       <canvas
         ref={setOverviewCanvas}

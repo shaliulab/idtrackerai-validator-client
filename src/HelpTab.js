@@ -68,6 +68,9 @@ const SHORTCUTS = [
     [<Key>Space</Key>, 'Play / pause the movie'],
     ['Wheel on the ethogram', 'Zoom around the pointer (Shift+wheel: pan)'],
     ['Drag on the ethogram', 'Pan; a click moves the cursor, a double click zooms in'],
+    [<><Key>Shift</Key>+drag on the ethogram</>, 'Select seconds to label for deepethogram'],
+    [<><Key>[</Key> / <Key>]</Key></>, 'Start / end the selection at the cursor (Esc drops it)'],
+    [<><Key>1</Key> … <Key>7</Key></>, 'Label the selection with a DEG preset (inactive … background); Delete clears it'],
   ]],
 ];
 
@@ -348,6 +351,29 @@ export default function HelpTab() {
               With <i>save on server</i>, videos are written to{' '}
               <code>&lt;experiment&gt;/flyhostel/videos/&lt;fly&gt;/</code> instead of being
               downloaded. Saved videos appear as buttons that jump to each bout.
+            </li>
+          </ul>
+
+          <h3>DEG labels (training data for the behavior classifier)</h3>
+          <ul>
+            <li>
+              The <i>DEG labels</i> strip under the ethogram shows the fly's labels in its deepethogram
+              project (<code>FlyHostel_deepethogram</code> for 150 fps recordings, <code>…_47fps</code>{' '}
+              otherwise), the labels the classifier is trained on. Yellow = a second whose frames carry
+              different labels (e.g. labelled frame by frame in the DEG GUI).
+            </li>
+            <li>
+              Select seconds with <Key>Shift</Key>+drag on the ethogram, or with <Key>[</Key>/<Key>]</Key>{' '}
+              at the cursor; without a selection the buttons label the cursor's second. A preset
+              (<i>inactive</i>, <i>inactive + micromovement</i>, <i>inactive + PE</i>, <i>feed</i>,{' '}
+              <i>groom</i>, <i>walk</i>, <i>background</i>) or a custom set of columns is set to 1 and
+              every other column to 0 for all frames of those seconds; <i>Clear</i> sets them back to
+              not labelled (-1).
+            </li>
+            <li>
+              Labels go to <code>&lt;chunk&gt;_labels.csv</code> of the fly's video folder of each chunk
+              (<code>DATA/&lt;experiment&gt;_&lt;chunk&gt;_&lt;local identity&gt;/</code>). A chunk without
+              folder gets one made with deepethogram from its single-animal video, which takes ~30 s.
             </li>
           </ul>
         </Section>

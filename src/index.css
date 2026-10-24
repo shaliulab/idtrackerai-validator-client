@@ -651,6 +651,14 @@ button.ov-sheet.ov-sheet-error { border-color: var(--danger); color: var(--dange
 }
 .eth-dim { color: var(--subtext); }
 .eth-keys { margin-top: 8px; font-size: 11px; color: var(--subtext); }
+/* DEG labels card (DegLabels.js) */
+.deg-body { display: flex; flex-direction: column; gap: 8px; font-size: 13px; }
+.deg-target { font-variant-numeric: tabular-nums; }
+.deg-buttons { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.deg-buttons button { padding: 2px 9px; }
+.deg-small { padding: 0 6px; margin-left: 6px; line-height: 18px; }
+.deg-custom summary { cursor: pointer; color: var(--subtext); padding-bottom: 6px; }
+.deg-error { color: var(--danger); }
 
 /* Experiment picker (selectComponent.js): copy buttons and the loaded experiment's basedir */
 .exp-picker { display: flex; align-items: center; gap: 6px; min-width: 0; }
