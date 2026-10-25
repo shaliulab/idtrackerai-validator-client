@@ -78,6 +78,7 @@ function FailedWorkDirs({ failed }) {
       {failed.map((t) => (
         <div key={t.work_dir || t.name} title={`${t.name} exit ${t.exit}\n${t.work_dir || 'work dir unknown'}`}>
           <span className="mon-count-failed">{t.process.split(':').pop()}</span>{' '}
+          {t.ended && <span className="mon-dim" title="When the task failed">{clock(t.ended)}</span>}{' '}
           {t.work_dir ? (
             <button className="ov-link mono" onClick={() => copy(t.work_dir)} title={`Copy ${t.work_dir}`}>
               {copied === t.work_dir ? 'copied' : t.work_dir.split('/').slice(-3).join('/')}
@@ -488,6 +489,7 @@ function Pipeline({ p, now, onOpenExperiment, onOpenFly, onChanged }) {
               <ul>
                 {run.failed_tasks.map((t) => (
                   <li key={t.work_dir || t.name}><span className="mono">{t.name}</span> exit {t.exit}{' '}
+                    {t.ended && <span className="mon-dim">at {clock(t.ended)} </span>}
                     <span className="mono mon-dim">{t.work_dir}</span></li>
                 ))}
               </ul>

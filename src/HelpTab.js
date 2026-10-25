@@ -649,7 +649,8 @@ export default function HelpTab() {
             <li><b>Relaunch failed tasks</b> (pose estimation, behavior prediction): nextflow ignores failed tasks, so a run
               ends normally and their fly / experiment just stops there. For every batch whose last run had failures, and whose
               rows were not re-queued since, it lists each failed task with the error it ended on and the deepest frame of our
-              own code (▸ for the end of its <code>.command.err</code>). When they all failed with the same error, fix that
+              own code (▸ for the end of its <code>.command.err</code>), with the time it failed next to its work dir (to tell
+              failures before a fix from those after it). When they all failed with the same error, fix that
               first: relaunching would fail the same way. Then press <b>Re-queue</b>: it marks their rows 1 again (as <code>run_queue.sh</code> expects, under its lock) so the
               queue takes them in its next round; with a same-cause warning it asks for a second click. Or copy{' '}
               <i>Run batch … again now</i> (<code>nextflow run … -resume &lt;session&gt; --batch …</code>) into a terminal, only
