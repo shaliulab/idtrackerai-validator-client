@@ -238,7 +238,12 @@ input[type="checkbox"] { accent-color: var(--accent); }
 .ov { display: flex; flex-direction: column; gap: 12px; }
 .ov-loading { padding: 24px; color: var(--subtext); }
 .ov-controls { padding: 8px 12px; gap: 8px 18px; }
-.ov-filters { flex-basis: 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.ov-banner { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; padding: 8px 12px;
+  background: var(--accent-soft); border: 1px solid var(--accent); border-left-width: 4px; }
+.ov-banner-title { font-weight: 600; margin-right: 6px; }
+.ov-banner-title .fa { color: var(--accent); margin-right: 8px; }
+.ov-banner .ov-filter { background: var(--surface); }
+.ov-banner-clear { margin-left: auto; background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
 .ov-filter { cursor: pointer; background: var(--accent-soft); border-color: var(--accent); }
 .ov-filter b { font-weight: 600; }
 .ov-link { border: none; background: none; color: var(--accent); padding: 2px 4px; }

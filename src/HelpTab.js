@@ -517,7 +517,10 @@ export default function HelpTab() {
             <li><i>Count</i> switches every chart between experiments and flies.</li>
             <li>
               <b>Click a bar to filter</b> on that value; click more bars to add values.
-              Filters show as chips above the charts (click one to remove it). A chart
+              Whenever a search, a <i>Find experiments</i> query (kept between visits) or a bar filter
+              is on, a blue banner above the charts says how many experiments they hide (and whether the
+              loaded one is among them), with one chip per restriction (click one to remove it) and{' '}
+              <i>Clear all</i>. A chart
               ignores its own filter, so the other values of that property stay visible.
             </li>
             <li>

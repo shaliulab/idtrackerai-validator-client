@@ -724,6 +724,44 @@ function downloadCsv(rows, columns) {
   URL.revokeObjectURL(url);
 }
 
+const QUERY_LABELS = { genotype: 'genotype', nGenotype: 'its flies', cohoused: 'living with', nCohoused: 'how many',
+  from: 'from', to: 'to' };
+
+// Everything that hides experiments (search, the stored query, bar filters) in one
+// banner, so a restriction left over from earlier is not missed.
+function FilterBanner({ search, setSearch, query, setQuery, filters, toggle, clearAll, stats, totals, loadedHidden }) {
+  const active = Object.entries(filters);
+  if (!search.trim() && !queryActive(query) && !active.length) return null;
+  const hidden = totals.experiments - stats.experiments;
+  return (
+    <div className="card ov-banner">
+      <span className="ov-banner-title">
+        <i className="fa fa-filter" />
+        {hidden > 0 ? <>Filters hide <b>{hidden}</b> of {totals.experiments} experiments</> : 'Filters active (nothing hidden)'}
+        {loadedHidden && <span className="ov-warn"> — including the loaded experiment</span>}
+      </span>
+      {search.trim() && (
+        <button className="chip ov-filter" onClick={() => setSearch('')} title="Clear the search">
+          Search = <b>{search.trim()}</b> ×
+        </button>
+      )}
+      {queryActive(query) && (
+        <button className="chip ov-filter" onClick={() => setQuery(EMPTY_QUERY)}
+                title="Clear the Find experiments query (it is kept between visits)">
+          Find experiments: <b>{Object.entries(query).filter(([, v]) => v)
+            .map(([k, v]) => `${QUERY_LABELS[k] || k} ${v}`).join(', ')}</b> ×
+        </button>
+      )}
+      {active.map(([prop, values]) => values.map((v) => (
+        <button key={`${prop}=${v}`} className="chip ov-filter" onClick={() => toggle(prop, v)} title="Remove this filter">
+          {labelOf(prop)} = <b>{v}</b> ×
+        </button>
+      )))}
+      <button className="ov-banner-clear" onClick={clearAll}>Clear all</button>
+    </div>
+  );
+}
+
 export default function OverviewTab({ active, currentExperiment, onOpenExperiment }) {
   const { log, trackJob } = useConsole();
   const [data, setData] = useState(null);
@@ -861,7 +899,9 @@ export default function OverviewTab({ active, currentExperiment, onOpenExperimen
     });
   }, []);
 
-  const activeFilters = Object.entries(filters);
+  const loadedHidden = !!currentExperiment
+    && allRows.some((r) => sameExperiment(r._exp.experiment, currentExperiment))
+    && !filtered.some((r) => sameExperiment(r._exp.experiment, currentExperiment));
   const available = allProps.filter((p) => !charts.includes(p));
   const of = (n, total) => (n === total ? undefined : `of ${total}`);
 
@@ -921,18 +961,12 @@ export default function OverviewTab({ active, currentExperiment, onOpenExperimen
         <button onClick={() => fetchData(true)} disabled={loading} title="Re-read every database">
           <i className={`fa fa-refresh${loading ? ' fa-spin' : ''}`} style={{ marginRight: 6 }} />Refresh
         </button>
-
-        {activeFilters.length > 0 && (
-          <div className="ov-filters">
-            {activeFilters.map(([prop, values]) => values.map((v) => (
-              <button key={`${prop}=${v}`} className="chip ov-filter" onClick={() => toggle(prop, v)} title="Remove this filter">
-                {labelOf(prop)} = <b>{v}</b> ×
-              </button>
-            )))}
-            <button className="ov-link" onClick={() => setFilters({})}>Clear all</button>
-          </div>
-        )}
       </div>
+
+      <FilterBanner search={search} setSearch={setSearch} query={query} setQuery={setQuery}
+                    filters={filters} toggle={toggle} stats={stats} totals={totals}
+                    loadedHidden={loadedHidden}
+                    clearAll={() => { setSearch(''); setQuery(EMPTY_QUERY); setFilters({}); }} />
 
       <QueryPanel rows={unqueried}
                   query={query} setQuery={setQuery} stats={stats} dateRange={totals} />
