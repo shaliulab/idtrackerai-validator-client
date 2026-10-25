@@ -2,9 +2,9 @@
 //
 // Shows the ethogram of one fly of the loaded experiment at a time (EthogramTrack,
 // drawn from /api/ethogram/<fly>/track), with a dropdown + prev/next buttons to
-// switch between flies of the group. When the fly has an HLS movie, the video and
-// the ethogram cursor are kept in sync: the x axis is seconds since the start of
-// the movie. The visible window is only ever moved, never reset: playback pages
+// switch between flies of the group. When the fly has an HLS movie (shown above the
+// ethogram), the video and the ethogram cursor are kept in sync: the x axis is
+// seconds since the start of the movie. The visible window is only ever moved, never reset: playback pages
 // it along (with "follow"), jumps center it, and its width is kept per browser.
 // Below the ethogram, the fly's deepethogram labels and the card writing them (DegLabels).
 
@@ -619,6 +619,12 @@ export default function EthogramViewer({ flies, request, animalMetadata, active,
       {error && <div style={{ color: '#d62728', padding: '4px 0' }}>{error}</div>}
       {actionError && <div style={{ color: '#d62728', padding: '4px 0' }}>{actionError}</div>}
 
+      {hasMovie && (
+        <div style={{ display: 'flex', justifyContent: 'center', padding: '8px 0' }}>
+          <video ref={videoRef} controls muted style={{ maxWidth: '100%', maxHeight: '45vh' }} />
+        </div>
+      )}
+
       {track && (
         <div className="card eth-card">
           <div className="card-header eth-toolbar">
@@ -695,11 +701,6 @@ export default function EthogramViewer({ flies, request, animalMetadata, active,
         />
       )}
 
-      {hasMovie && (
-        <div style={{ display: 'flex', justifyContent: 'center', padding: '8px 0' }}>
-          <video ref={videoRef} controls muted style={{ maxWidth: '100%', maxHeight: '45vh' }} />
-        </div>
-      )}
     </div>
   );
 }

@@ -316,7 +316,7 @@ export default function HelpTab() {
 
         <Section id="help-ethogram" title="Ethograms">
           <p>
-            Shows one fly's behaviour over the whole experiment, next to a movie of the fly.
+            Shows one fly's behaviour over the whole experiment, below a movie of the fly.
             The cursor, the movie and the fly's row of the tracking table stay in sync.
           </p>
           <ul>
