@@ -7,7 +7,7 @@
 // at least one such fly. Clicking a bar toggles a filter on that value; each
 // chart ignores its own filter so the other values of that property stay visible.
 // The "Find experiments" panel (QueryPanel) adds a genotype / cohoused genotype /
-// date range query applied before those filters.
+// date range query, and the Analyzed / Validated toggles, applied before those filters.
 // Experiments not analyzed yet (folder but no database) come from the metadata
 // sheets with analyzed: false; "Rebuild index" rewrites index.txt in a server job.
 
@@ -139,7 +139,18 @@ function applyFilters(rows, filters, except) {
 // ALONE = the only fly of the experiment), in experiments recorded between `from`
 // and `to` (inclusive, YYYY-MM-DD). `nGenotype` / `nCohoused`: exact number of
 // flies of each of the two genotypes in the experiment (any if empty).
-const EMPTY_QUERY = { genotype: '', cohoused: '', nGenotype: '', nCohoused: '', from: '', to: '' };
+// `analyzed` / `validated` / `deg`: 'yes' keeps only, 'no' excludes those experiments (any if empty).
+const EMPTY_QUERY = { genotype: '', cohoused: '', nGenotype: '', nCohoused: '', from: '', to: '',
+  analyzed: '', validated: '', deg: '' };
+
+// Validated: _VAL tables, or a single fly (never validated: its tracking is final).
+// The NX of an arena's path is the recording's, so an arena counts its metadata rows.
+const isAnalyzed = (e) => e.analyzed !== false;
+const isSingleFly = (e) => (e.arena != null ? e.flies.length : e.group_size) === 1;
+const isValidated = (e) => isAnalyzed(e) && (e.has_val || isSingleFly(e));
+// DEG labels: at least one fly has labelled frames in a DEG project (ground truth ethogram).
+const hasDegLabels = (e) => e.deg_videos > 0;
+const matches = (want, value) => !want || (want === 'yes') === value;
 const queryActive = (q) => Object.values(q).some(Boolean);
 
 function applyQuery(rows, q) {
@@ -149,6 +160,9 @@ function applyQuery(rows, q) {
     if ((q.from || q.to) && !date) return false;
     if (q.from && date < q.from) return false;
     if (q.to && date > q.to) return false;
+    if (!matches(q.analyzed, isAnalyzed(row._exp))) return false;
+    if (!matches(q.validated, isValidated(row._exp))) return false;
+    if (!matches(q.deg, hasDegLabels(row._exp))) return false;
     if ((q.genotype || q.cohoused) && row._noFly) return false;
     if (q.genotype && row.genotype !== q.genotype) return false;
     if (q.genotype && q.nGenotype && (row._counts[q.genotype] || 0) !== Number(q.nGenotype)) return false;
@@ -222,6 +236,9 @@ function QueryPanel({ rows, query, setQuery, stats, dateRange }) {
     parts.push(<> {query.genotype ? 'living with' : 'with a fly living with'}{' '}
       {query.nCohoused ? `${query.nCohoused} ` : ''}<b>{query.cohoused}</b></>);
   }
+  if (query.analyzed) parts.push(<> {query.analyzed === 'yes' ? 'analyzed' : 'not analyzed'}</>);
+  if (query.validated) parts.push(<> {query.validated === 'yes' ? 'validated' : 'not validated'}</>);
+  if (query.deg) parts.push(<> {query.deg === 'yes' ? 'with' : 'without'} DEG labels</>);
   if (query.from || query.to) parts.push(<> recorded {query.from ? `from ${query.from}` : ''} {query.to ? `to ${query.to}` : ''}</>);
 
   return (
@@ -268,6 +285,12 @@ function QueryPanel({ rows, query, setQuery, stats, dateRange }) {
         <input type="date" value={query.to} min={dateRange.first} max={dateRange.last}
                onChange={set('to')} onKeyDown={(e) => e.stopPropagation()} />
       </label>
+      <Toggle label="Analyzed" value={query.analyzed} onChange={(v) => setQuery((q) => ({ ...q, analyzed: v }))}
+              title="Experiments with a database (analyzed) or only a folder and sheet metadata (not analyzed)" />
+      <Toggle label="Validated" value={query.validated} onChange={(v) => setQuery((q) => ({ ...q, validated: v }))}
+              title="Validated: analyzed with _VAL tables, or with a single fly (never validated, its tracking is final)" />
+      <Toggle label="DEG labels" value={query.deg} onChange={(v) => setQuery((q) => ({ ...q, deg: v }))}
+              title="At least one fly has labelled frames in a deepethogram project (ground truth ethogram)" />
       {queryActive(query) && <button className="ov-link" onClick={() => setQuery(EMPTY_QUERY)}>Clear</button>}
       {queryActive(query) && (
         <div className="ov-query-result">
@@ -278,6 +301,21 @@ function QueryPanel({ rows, query, setQuery, stats, dateRange }) {
         </div>
       )}
     </div>
+  );
+}
+
+// any / only / exclude, as '' / 'yes' / 'no'.
+const TOGGLE_OPTIONS = [['', 'any'], ['yes', 'only'], ['no', 'exclude']];
+function Toggle({ label, value, onChange, title }) {
+  return (
+    <span className="field" title={title}>
+      {label}
+      <span className="ov-seg">
+        {TOGGLE_OPTIONS.map(([v, text]) => (
+          <button key={v} className={value === v ? 'on' : ''} onClick={() => onChange(v)}>{text}</button>
+        ))}
+      </span>
+    </span>
   );
 }
 
@@ -458,6 +496,7 @@ const TABLE_COLUMNS = [
   ['duration_h', 'Duration (h)'],
   ['light_cycle', 'Light cycle'],
   ['has_val', 'Validated'],
+  ['deg_videos', 'DEG'],
   ['sheet', 'Sheet'],
 ];
 
@@ -675,6 +714,9 @@ function ExperimentTable({ rows, onOpen, current, active, onUpdateMetadata, shee
                   {e.light_cycle}{e.light_cycle_flags?.length > 0 && <span className="ov-warn"> ⚠</span>}
                 </td>
                 <td>{e.has_val ? '✓' : ''}</td>
+                <td title={e.deg_videos ? `${e.deg_videos} DEG videos (chunk of a fly) with labelled frames` : undefined}>
+                  {e.deg_videos || ''}
+                </td>
                 <td title={sheetStatus[e.experiment] ? sheetTitle(sheetStatus[e.experiment]) : undefined}>
                   {sheetStatus[e.experiment] && (
                     <span className={`ov-sheet-status ov-sheet-${SHEET_STATUS[sheetStatus[e.experiment].status]?.cls}`}>
@@ -724,8 +766,9 @@ function downloadCsv(rows, columns) {
   URL.revokeObjectURL(url);
 }
 
+const TOGGLE_TEXT = { yes: 'only', no: 'excluded' };
 const QUERY_LABELS = { genotype: 'genotype', nGenotype: 'its flies', cohoused: 'living with', nCohoused: 'how many',
-  from: 'from', to: 'to' };
+  from: 'from', to: 'to', analyzed: 'analyzed', validated: 'validated', deg: 'DEG labels' };
 
 // Everything that hides experiments (search, the stored query, bar filters) in one
 // banner, so a restriction left over from earlier is not missed.
@@ -749,7 +792,7 @@ function FilterBanner({ search, setSearch, query, setQuery, filters, toggle, cle
         <button className="chip ov-filter" onClick={() => setQuery(EMPTY_QUERY)}
                 title="Clear the Find experiments query (it is kept between visits)">
           Find experiments: <b>{Object.entries(query).filter(([, v]) => v)
-            .map(([k, v]) => `${QUERY_LABELS[k] || k} ${v}`).join(', ')}</b> ×
+            .map(([k, v]) => `${QUERY_LABELS[k] || k} ${TOGGLE_TEXT[v] || v}`).join(', ')}</b> ×
         </button>
       )}
       {active.map(([prop, values]) => values.map((v) => (

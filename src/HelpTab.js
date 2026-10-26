@@ -14,7 +14,7 @@ const SECTIONS = [
   { id: 'help-ethogram', title: 'Ethograms' },
   { id: 'help-qc', title: 'QC' },
   { id: 'help-pose', title: 'Pose' },
-  { id: 'help-overview-tab', title: 'Overview' },
+  { id: 'help-overview-tab', title: 'Metadata overview' },
   { id: 'help-data', title: 'Data management' },
   { id: 'help-monitor', title: 'Monitor' },
   { id: 'help-keys', title: 'Keyboard & mouse' },
@@ -32,7 +32,7 @@ function Section({ id, title, children }) {
 
 const SHORTCUTS = [
   ['Anywhere', [
-    [<><Key>Ctrl</Key>+<Key>1</Key> / <Key>2</Key> / <Key>3</Key> / <Key>4</Key> / <Key>5</Key> / <Key>6</Key> / <Key>7</Key> / <Key>8</Key> / <Key>9</Key></>, 'Switch to Group viewer / PE / Ethograms / QC / Pose / Overview / Data management / Monitor / How to use (the tabs, left to right)'],
+    [<><Key>Ctrl</Key>+<Key>1</Key> / <Key>2</Key> / <Key>3</Key> / <Key>4</Key> / <Key>5</Key> / <Key>6</Key> / <Key>7</Key> / <Key>8</Key> / <Key>9</Key></>, 'Switch to Group viewer / PE / Ethograms / QC / Pose / Metadata overview / Data management / Monitor / How to use (the tabs, left to right)'],
   ]],
   ['Group viewer', [
     [<><Key>1</Key> / <Key>7</Key></>, 'Previous / next chunk'],
@@ -454,7 +454,7 @@ export default function HelpTab() {
           </p>
         </Section>
 
-        <Section id="help-overview-tab" title="Overview">
+        <Section id="help-overview-tab" title="Metadata overview">
           <p>
             A dashboard of every experiment listed in <code>index.txt</code>, built from the
             <code>ethoscope_metadata</code> of each database (one row per fly). It does not
@@ -472,6 +472,12 @@ export default function HelpTab() {
               iso31xmz19 living with 1 nAChRalpha4rye). Any of them can be left empty. The number of matching experiments is shown below, and every chart and
               the table are restricted to them. Each list shows only the choices that still give
               results, with their number of experiments.
+              <i>Analyzed</i> and <i>Validated</i> (any / only / exclude) keep or drop the experiments
+              with a database, and the validated ones: with <code>_VAL</code> tables, or with a single
+              fly (those are never validated, their tracking is final). <i>DEG labels</i> does the same for
+              experiments where at least one fly has labelled frames in a deepethogram project (the
+              ground truth ethograms, e.g. made in the Ethograms tab); the <i>DEG</i> column of the
+              table counts those videos (one per chunk of a fly).
             </li>
             <li>
               <i>Cohoused with (other genotypes)</i> is the genotypes of the other flies of a fly's
@@ -481,7 +487,7 @@ export default function HelpTab() {
               <b>Not analyzed experiments.</b> Experiments in the metadata sheets (the CSV exports in
               <code>/flyhostel_data/metadata</code> of the sheets listed in the googleapi config) that
               have a folder in the videos directory but no database yet are shown too, marked
-              <i>not analyzed</i>. Use the <i>Analyzed</i> chart to show or
+              <i>not analyzed</i>. Use the <i>Analyzed</i> toggle of <i>Find experiments</i> or chart to show or
               hide them; their metadata comes from the sheet instead of the database.
               <i>Download metadata sheets</i> downloads those CSV exports again
               (<code>download_metadata_sheets</code>, in the background) and reloads the dashboard;

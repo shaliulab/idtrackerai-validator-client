@@ -702,7 +702,7 @@ function App() {
         <Tab id="ethogram" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+3" disabled={noDatabase}>Ethograms</Tab>
         <Tab id="qc" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+4" disabled={noDatabase}>QC</Tab>
         <Tab id="pose" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+5" disabled={noDatabase}>Pose</Tab>
-        <Tab id="overview" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+6">Overview</Tab>
+        <Tab id="overview" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+6">Metadata overview</Tab>
         <Tab id="data_management" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+7">Data management</Tab>
         <Tab id="monitor" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+8">Monitor</Tab>
         <Tab id="help" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+9">
