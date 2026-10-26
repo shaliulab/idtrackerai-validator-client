@@ -71,6 +71,8 @@ const SHORTCUTS = [
     [<><Key>Shift</Key>+drag on the ethogram</>, 'Select seconds to label for deepethogram'],
     [<><Key>[</Key> / <Key>]</Key></>, 'Start / end the selection at the cursor (Esc drops it)'],
     [<><Key>1</Key> … <Key>6</Key>, <Key>0</Key></>, 'Label the selection (else the cursor\'s second) for DEG: 1 walk, 2 groom, 3 feed, 4 inactive + micromovement, 5 inactive, 6 inactive + PE, 0 background; Delete = None, removes its labels'],
+    [<><Key>Ctrl</Key>+<Key>Z</Key></>, 'Ethograms: undo the last DEG label applied'],
+    [<><Key>Ctrl</Key>+<Key>Y</Key>, <Key>Ctrl</Key>+<Key>Shift</Key>+<Key>Z</Key></>, 'Ethograms: redo the last DEG label undone'],
   ]],
 ];
 
@@ -377,6 +379,17 @@ export default function HelpTab() {
               <i>None</i> as the last label, it removes the labels of the seconds it passes instead. A jump of up to 10 s
               forward (fast playback, Shift+<Key>→</Key>) also labels the seconds in between; clicking elsewhere labels only the
               second reached. <b>■ Stop labelling</b> turns it off (so does switching fly).
+            </li>
+            <li>
+              <b>↶ Undo</b> (<Key>Ctrl</Key>+<Key>Z</Key>) restores the frames the last label applied had
+              replaced (hover the button to see which); press it again to go further back. Each label
+              applied is one step; with <i>Label while moving</i>, everything painted with a label is
+              part of that label's step, so one undo removes the whole stretch (and stops labelling while
+              moving). Undo is kept by the server until it restarts, and refuses when those frames were
+              changed elsewhere (e.g. in the deepethogram GUI) since. A DEG folder made for a label stays,
+              with its frames back to not labelled.
+              <b>↷ Redo</b> (<Key>Ctrl</Key>+<Key>Y</Key> or <Key>Ctrl</Key>+<Key>Shift</Key>+<Key>Z</Key>)
+              writes the last undone step again, until a new label is applied.
             </li>
             <li>
               Labels go to <code>&lt;chunk&gt;_labels.csv</code> of the fly's video folder of each chunk

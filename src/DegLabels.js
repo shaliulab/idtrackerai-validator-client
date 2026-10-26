@@ -13,6 +13,12 @@
 // last label applied, None included (labels are then removed as it moves), until stopped. Writes go through one queue, sent in order;
 // contiguous seconds of the same label waiting in it are merged into one write. A write
 // that needs a new DEG folder runs as a job (progress in the console).
+//
+// Undo (Ctrl+Z) goes through the same queue and restores the rows of the fly's last
+// action (POST .../deg_labels/undo, kept by the server until it restarts). Each label
+// applied is one action, sent as `action` with its writes; the seconds Label while
+// moving paints join the action of the label it paints with (a new one when started).
+// Redo (Ctrl+Y, Ctrl+Shift+Z) writes the last undone action again, until a new label.
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import api from './api';
@@ -23,6 +29,9 @@ const API = '/api/ethogram';
 // While labelling on the move, a jump forward of at most this many seconds (fast playback,
 // Shift+→) also labels the seconds skipped; longer jumps label only the second reached.
 const MAX_FILL = 10;
+
+let actionCount = 0;
+const newAction = () => `${Date.now().toString(36)}-${(actionCount += 1)}`;
 
 const unwrap = (data) => (typeof data === 'string' ? JSON.parse(data) : data);
 
@@ -47,12 +56,28 @@ export default function DegLabels({ fly, labels, onLabels, selection, onSelect, 
   // ── Write queue ──
   const flyRef = useRef(fly);        // the fly shown now (the queue may outlive a switch)
   flyRef.current = fly;
-  const queue = useRef([]);          // { fly, start, end, behaviors, name, quiet }
+  const queue = useRef([]);          // { fly, start, end, behaviors, name, action, quiet } or { fly, step: 'undo' | 'redo' }
   const sending = useRef(false);
+  const actionRef = useRef(null);    // action of the last label applied
 
-  const send = useCallback(async ({ fly: f, start, end, behaviors, name, quiet }) => {
+  const sendStep = useCallback(async (f, step) => {
     try {
-      const response = await api.post(`${API}/${f}/deg_labels`, { start, end, behaviors });
+      const result = unwrap((await api.post(`${API}/${f}/deg_labels/${step}`)).data);
+      if (f === flyRef.current) onLabels(result);
+      const { start, end, behaviors } = result[step === 'undo' ? 'undone' : 'redone'];
+      log('info', `${f}: ${step === 'undo' ? 'undid' : 'redid'} ${behaviors ? `label ${behaviors.join('+')}` : 'label removal'}`
+        + ` of ${formatClock(start)}–${formatClock(end)} (movie)`);
+    } catch (err) {
+      const message = err.response?.data?.error || err.message;
+      setError(message);
+      log('error', `${f}: could not ${step}: ${message}`);
+    }
+  }, [onLabels, log]);
+
+  const send = useCallback(async ({ fly: f, start, end, behaviors, name, action, quiet, step }) => {
+    if (step) return sendStep(f, step);
+    try {
+      const response = await api.post(`${API}/${f}/deg_labels`, { start, end, behaviors, action });
       let result = unwrap(response.data);
       if (response.status === 202) {
         // new DEG folders are being made by deepethogram: the console shows their progress
@@ -72,7 +97,7 @@ export default function DegLabels({ fly, labels, onLabels, selection, onSelect, 
       setError(message);
       log('error', `${f}: could not write DEG labels ${formatClock(start)}–${formatClock(end)} (movie): ${message}`);
     }
-  }, [onLabels, log, trackJob]);
+  }, [onLabels, log, trackJob, sendStep]);
 
   const pump = useCallback(async () => {
     if (sending.current) return;
@@ -92,8 +117,8 @@ export default function DegLabels({ fly, labels, onLabels, selection, onSelect, 
 
   const enqueue = useCallback((item) => {
     const last = queue.current[queue.current.length - 1];
-    const same = last && last.fly === item.fly && last.end === item.start
-      && JSON.stringify(last.behaviors) === JSON.stringify(item.behaviors);
+    const same = last && !last.step && !item.step && last.fly === item.fly && last.end === item.start
+      && last.action === item.action && JSON.stringify(last.behaviors) === JSON.stringify(item.behaviors);
     if (same) last.end = item.end;          // not sent yet: one write for both
     else queue.current.push(item);
     setError(null);
@@ -107,7 +132,8 @@ export default function DegLabels({ fly, labels, onLabels, selection, onSelect, 
 
   const write = useCallback((behaviors, name) => {
     if (!fly || !target) return;
-    enqueue({ fly, start: target[0], end: target[1], behaviors, name });
+    actionRef.current = newAction();
+    enqueue({ fly, start: target[0], end: target[1], behaviors, name, action: actionRef.current });
     setLastLabel({ name: behaviors ? name : NONE, columns: behaviors });
     onSelect(null);
   }, [fly, target, enqueue, onSelect]);
@@ -124,11 +150,13 @@ export default function DegLabels({ fly, labels, onLabels, selection, onSelect, 
     if (prev === second) return;
     const start = prev != null && second > prev && second - prev <= MAX_FILL ? prev + 1 : second;
     paintedRef.current = second;
-    enqueue({ fly, start, end: second + 1, behaviors: lastLabel.columns, name: lastLabel.name, quiet: true });
+    enqueue({ fly, start, end: second + 1, behaviors: lastLabel.columns, name: lastLabel.name,
+              action: actionRef.current, quiet: true });
   }, [painting, lastLabel, cursorT, track, fly, enqueue]);
 
   const startPainting = () => {
     if (!lastLabel) return;
+    actionRef.current = newAction();
     setPainting(true);
     log('info', `${fly}: labelling ${lastLabel.name} while the cursor moves`);
   };
@@ -137,6 +165,20 @@ export default function DegLabels({ fly, labels, onLabels, selection, onSelect, 
     log('info', `${fly}: stopped labelling while moving`);
   };
 
+  // Undo / redo the last action (after the writes queued before it). Moving would label
+  // again at once, so they also stop Label while moving.
+  const history = useCallback((step) => {
+    if (!fly) return;
+    if (painting) {
+      setPainting(false);
+      log('info', `${fly}: stopped labelling while moving`);
+    }
+    actionRef.current = null;
+    enqueue({ fly, step });
+  }, [fly, painting, enqueue, log]);
+  const undo = useCallback(() => history('undo'), [history]);
+  const redo = useCallback(() => history('redo'), [history]);
+
   const presets = labels ? labels.presets : [];   // [name, columns]
 
   // ── Keyboard: [ / ] selection start / end at the cursor, Esc drops it,
@@ -144,13 +186,22 @@ export default function DegLabels({ fly, labels, onLabels, selection, onSelect, 
   // Subscribed once, reading the current state from a ref: a listener re-added on every
   // render is dropped by the browser when another keydown listener re-renders us first.
   const keyState = useRef({});
-  keyState.current = { active, labels, cursorT, track, selection, presets, onSelect, write };
+  keyState.current = { active, labels, cursorT, track, selection, presets, onSelect, write, undo, redo };
   useEffect(() => {
     const onKey = (e) => {
-      const { active, labels, cursorT, track, selection, presets, onSelect, write } = keyState.current;
+      const { active, labels, cursorT, track, selection, presets, onSelect, write, undo, redo } = keyState.current;
       if (!active || !labels) return;
       const tag = e.target?.tagName;
       if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
+      if (e.ctrlKey && !e.metaKey && !e.altKey) {
+        const key = e.key.toLowerCase();
+        if (key === 'z' || key === 'y') {
+          e.preventDefault();
+          if (key === 'z' && !e.shiftKey) undo();
+          else redo();
+          return;
+        }
+      }
       if (e.ctrlKey || e.metaKey || e.altKey) return;
       // physical digit row / numpad, so AZERTY layouts need no Shift
       const digit = /^(?:Digit|Numpad)([0-9])$/.exec(e.code)?.[1] ?? (/^[0-9]$/.test(e.key) ? e.key : null);
@@ -203,6 +254,22 @@ export default function DegLabels({ fly, labels, onLabels, selection, onSelect, 
           {project} · {labels.files} labelled video{labels.files === 1 ? '' : 's'} of this fly · {formatDuration(labelled)} labelled
         </span>
         <span className="spacer" />
+        <button onClick={undo} disabled={!labels.undo && !pending}
+                title={labels.undo
+                  ? `Undo the last label applied (Ctrl+Z): ${labels.undo.behaviors ? labels.undo.behaviors.join(' + ') : 'removal'}`
+                    + ` of ${zt(labels.undo.start)} – ${zt(labels.undo.end)}; ${labels.undo.actions} action${labels.undo.actions === 1 ? '' : 's'}`
+                    + ' can be undone (until the server restarts)'
+                  : 'Nothing to undo (Ctrl+Z)'}>
+          ↶ Undo{labels.undo?.actions > 1 ? <span className="eth-dim"> {labels.undo.actions}</span> : null}
+        </button>
+        <button onClick={redo} disabled={!labels.redo && !pending}
+                title={labels.redo
+                  ? `Redo the last label undone (Ctrl+Y or Ctrl+Shift+Z): ${labels.redo.behaviors ? labels.redo.behaviors.join(' + ') : 'removal'}`
+                    + ` of ${zt(labels.redo.start)} – ${zt(labels.redo.end)}; ${labels.redo.actions} action${labels.redo.actions === 1 ? '' : 's'}`
+                    + ' can be redone (until a new label is applied)'
+                  : 'Nothing to redo (Ctrl+Y or Ctrl+Shift+Z)'}>
+          ↷ Redo{labels.redo?.actions > 1 ? <span className="eth-dim"> {labels.redo.actions}</span> : null}
+        </button>
         <button onClick={() => jump('prev')} disabled={!labels.runs.length} title="Previous labelled stretch">◀ labelled</button>
         <button onClick={() => jump('next')} disabled={!labels.runs.length} title="Next labelled stretch">labelled ▶</button>
       </div>
@@ -297,7 +364,7 @@ export default function DegLabels({ fly, labels, onLabels, selection, onSelect, 
         <div className="eth-keys">
           <b>Shift+drag</b> on the ethogram: select seconds · <b>[ ]</b> selection start / end at the cursor ·
           <b> 1–{Math.min(9, presets.filter(([n]) => n !== 'background').length)}</b>, <b>0</b> background: label the selection, or the cursor's second without one ·
-          <b> Delete</b> None: remove its labels · <b>Esc</b> drop the selection · <b>Label while moving</b>: the movie or ←/→ label each second
+          <b> Delete</b> None: remove its labels · <b>Ctrl+Z</b> / <b>Ctrl+Y</b> undo / redo the last label applied · <b>Esc</b> drop the selection · <b>Label while moving</b>: the movie or ←/→ label each second
           they reach with the last label (a label key switches it).
           Each second writes {framerate} rows of its chunk's labels.csv; missing video folders are made with deepethogram.
         </div>
