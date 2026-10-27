@@ -29,6 +29,7 @@ import MessageConsole, { useConsole, useConsoleState, consoleHeight } from './Me
 
 // Loaded (with hls.js) off the viewer's critical path.
 const EthogramViewer = lazy(() => import('./EthogramViewer'));
+const DataCollectorTab = lazy(() => import('./DataCollectorTab'));
 
 // ── Theme tokens ──────────────────────────────────────────────────────────
 // Most styling reads the CSS variables in index.css (switched by
@@ -177,6 +178,9 @@ function App() {
   const FrameWithSquareRef = useRef(null);
   const [number_of_animals, setNumberOfAnimals] = useState(6);
   const [activeTab, setActiveTab] = useState('group_viewer');
+  // the Data collector tab is lazy-loaded and mounted once first shown
+  const [visitedCollector, setVisitedCollector] = useState(false);
+  useEffect(() => { if (activeTab === 'data_collector') setVisitedCollector(true); }, [activeTab]);
   // Loaded experiment (slash form), shown in the Overview table; bumped key remounts
   // the experiment picker after a load from elsewhere so it shows the new one.
   const [currentExperiment, setCurrentExperiment] = useState(null);
@@ -364,6 +368,7 @@ function App() {
       else if (e.key === '7') { e.preventDefault(); setActiveTab('data_management'); }
       else if (e.key === '8') { e.preventDefault(); setActiveTab('monitor'); }
       else if (e.key === '9') { e.preventDefault(); setActiveTab('help'); }
+      else if (e.key === '0') { e.preventDefault(); setActiveTab('data_collector'); }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -697,6 +702,7 @@ function App() {
 
       {/* ── Tabs ── */}
       <nav className="tabs">
+        <Tab id="data_collector" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+0">Data collector</Tab>
         <Tab id="group_viewer" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+1">Group viewer</Tab>
         <Tab id="proboscis_extension" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+2" disabled={noDatabase}>Proboscis extension (PE)</Tab>
         <Tab id="ethogram" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+3" disabled={noDatabase}>Ethograms</Tab>
@@ -931,6 +937,14 @@ function App() {
 
       <div className="tab-panel" style={{ display: activeTab === 'monitor' ? 'block' : 'none' }}>
         <MonitorTab active={activeTab === 'monitor'} onOpenExperiment={openExperiment} onOpenFly={openFly} />
+      </div>
+
+      <div className="tab-panel" style={{ display: activeTab === 'data_collector' ? 'block' : 'none' }}>
+        {visitedCollector && (
+          <Suspense fallback={<div className="card card-body">Loading…</div>}>
+            <DataCollectorTab active={activeTab === 'data_collector'} onOpenExperiment={openExperiment} />
+          </Suspense>
+        )}
       </div>
 
       <div className="tab-panel" style={{ display: activeTab === 'help' ? 'block' : 'none' }}>

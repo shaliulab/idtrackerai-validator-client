@@ -17,6 +17,7 @@ const SECTIONS = [
   { id: 'help-overview-tab', title: 'Metadata overview' },
   { id: 'help-data', title: 'Data management' },
   { id: 'help-monitor', title: 'Monitor' },
+  { id: 'help-collector', title: 'Data collector' },
   { id: 'help-keys', title: 'Keyboard & mouse' },
   { id: 'help-glossary', title: 'Glossary' },
 ];
@@ -32,7 +33,15 @@ function Section({ id, title, children }) {
 
 const SHORTCUTS = [
   ['Anywhere', [
-    [<><Key>Ctrl</Key>+<Key>1</Key> / <Key>2</Key> / <Key>3</Key> / <Key>4</Key> / <Key>5</Key> / <Key>6</Key> / <Key>7</Key> / <Key>8</Key> / <Key>9</Key></>, 'Switch to Group viewer / PE / Ethograms / QC / Pose / Metadata overview / Data management / Monitor / How to use (the tabs, left to right)'],
+    [<><Key>Ctrl</Key>+<Key>0</Key> / <Key>1</Key> / <Key>2</Key> / <Key>3</Key> / <Key>4</Key> / <Key>5</Key> / <Key>6</Key> / <Key>7</Key> / <Key>8</Key> / <Key>9</Key></>, 'Switch to Data collector / Group viewer / PE / Ethograms / QC / Pose / Metadata overview / Data management / Monitor / How to use (the tabs, left to right)'],
+  ]],
+  ['Data collector', [
+    ['Click on the frame (while adding a ROI)', 'Add a point; right click removes the nearest one'],
+    [<Key>Enter</Key>, 'Finish the ROI being drawn'],
+    [<Key>Esc</Key>, 'Cancel the ROI being drawn'],
+    [<><Key>←</Key> / <Key>→</Key></>, 'Previous / next frame (with Shift: 10 s)'],
+    [<><Key>Ctrl</Key>+<Key>S</Key></>, 'Save the settings file'],
+    ['Wheel / drag / double click on the frame', 'Zoom / pan / fit'],
   ]],
   ['Group viewer', [
     [<><Key>1</Key> / <Key>7</Key></>, 'Previous / next chunk'],
@@ -692,6 +701,39 @@ export default function HelpTab() {
               Both resume the nextflow session: what completed before is reused from the cache.</li>
             <li><i>Recent batches</i>: the last batch stamps of the CSV; <i>run_queue.log</i>: its last lines.</li>
             <li><i>Open</i> loads the experiment in the viewer.</li>
+          </ul>
+        </Section>
+
+        <Section id="help-collector" title="Data collector">
+          <p>
+            From a new recording on <b>cv2</b> (the recording computer) to idtrackerai settings that work, in three cards.
+          </p>
+          <ul>
+            <li><b>Fetch from cv2</b>: pick the day it was <i>Recorded on</i>; the table lists that day's experiments on cv2:
+              when they started (UTC) and at which ZT, how much cv2 has, what a fetch copies (<i>Up to ZT30</i>: the folder's
+              files and the chunks starting before ZT 30, i.e. the first day and a buffer; later chunks are not needed) and how
+              much of it is <i>here</i> already. ZT0 is the experiment's <code>reference_hour</code> in the metadata sheets
+              (12:00, marked *, while the sheets do not have it). <b>Fetch N selected</b> copies the missing files with rsync
+              (resumable; files written in the last 10 min are skipped, so it can run while cv2 still records); the console
+              shows the progress. A drive must keep 50 GB free. <a href="http://10.43.205.5:8000" target="_blank" rel="noreferrer">10.43.205.5:8000</a>{' '}
+              shows cv2's folders in the browser.</li>
+            <li><b>Segmentation settings</b> (<i>Settings ▸</i> on a row, <i>arena K</i> for the arenas cropped out of an arena
+              experiment): <b>Propose with roi-proposer</b> writes <code>&lt;date&gt;.toml</code> and <code>landmarks.toml</code>{' '}
+              (<code>arenas.toml</code> for an arena experiment): ROIs found by its model, the other settings copied from the latest
+              experiment recorded with the same camera. They are marked <i>AI proposed</i> until saved here. Adjust them as in
+              idtrackerai's segmentation app: <b>Regions of interest</b> (+ Add: + / − polygon or ellipse, click points on the frame,
+              Enter; click a ROI to highlight it, ↑ ↓ ✕ to move or delete it, double click to edit its text), <b>number of
+              animals</b>, <b>intensity thresholds</b> (dark animals: pixels below <i>max</i>) and <b>area thresholds</b>. The frame
+              shows the ROIs in red and, in blue, the blobs idtrackerai would find with these settings; the box under the thresholds
+              turns red when their number is not the number of animals. Check several frames (Random, ←/→, chunk).{' '}
+              <b>Save</b> (Ctrl+S) writes the file (the previous version goes to <code>toml_backups/</code>) and converts{' '}
+              <code>&lt;date&gt;.toml</code> into the <code>&lt;date&gt;.conf</code> tracking and preprocess-sample read.</li>
+            <li><b>preprocess-sample</b>: checks the saved <code>.conf</code> on a sample of frames of every chunk (default: 20 per
+              chunk, up to chunk 299) and lists the frames where the blobs are not the number of animals in{' '}
+              <code>preprocess_sample.csv</code>. It runs for hours in the background (also after a server restart; <i>Stop</i> ends it).
+              The strip shows the problematic frames per chunk and the table lists them; click one to see it in the editor with the
+              CSV's blob centres marked in orange. A few frames with fewer blobs are flies touching each other; many, or frames with
+              more blobs, mean the thresholds or ROIs need changing.</li>
           </ul>
         </Section>
 
