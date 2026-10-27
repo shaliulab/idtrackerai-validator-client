@@ -139,7 +139,7 @@ function useCanvas(canvas, width, height) {
 }
 
 export default function EthogramTrack({
-  data, view, onView, cursorT, onSeek, frameOf, shade, minBout, themeName,
+  data, view, onView, cursorT, onSeek, frameOf, chunksize, shade, minBout, themeName,
   labelRuns, labelClasses, labelVideos, selection, onSelect,
 }) {
   const [plotEl, setPlotEl] = useState(null);
@@ -385,9 +385,11 @@ export default function EthogramTrack({
     }
   }, [overviewCtx, overviewImage, data, width, t0, t1, cursorT, themeName]);
 
-  // ── wheel: zoom around the pointer (Shift / horizontal scroll: pan) ──
+  // ── wheel on the ethogram or the DEG labels strip: zoom around the pointer
+  // (Shift / horizontal scroll: pan) ──
   useEffect(() => {
     if (!mainCanvas || !data) return undefined;
+    const canvases = [mainCanvas, labelsCanvas].filter(Boolean);
     const onWheel = (e) => {
       e.preventDefault();
       const unit = e.deltaMode === 1 ? 33 : e.deltaMode === 2 ? 400 : 1;
@@ -400,14 +402,14 @@ export default function EthogramTrack({
         onView(clampView(a + d, b + d, data.n));
         return;
       }
-      const rect = mainCanvas.getBoundingClientRect();
+      const rect = e.currentTarget.getBoundingClientRect();
       const anchor = a + (e.clientX - rect.left) * spp;
       const factor = Math.exp(dy * 0.0015);
       onView(clampView(anchor - (anchor - a) * factor, anchor + (b - anchor) * factor, data.n));
     };
-    mainCanvas.addEventListener('wheel', onWheel, { passive: false });
-    return () => mainCanvas.removeEventListener('wheel', onWheel);
-  }, [mainCanvas, data, width, onView]);
+    canvases.forEach((c) => c.addEventListener('wheel', onWheel, { passive: false }));
+    return () => canvases.forEach((c) => c.removeEventListener('wheel', onWheel));
+  }, [mainCanvas, labelsCanvas, data, width, onView]);
 
   // ── main canvas: drag pans, click moves the cursor, double click zooms in ──
   const dragRef = useRef(null);
@@ -484,6 +486,17 @@ export default function EthogramTrack({
 
   if (!data) return null;
 
+  // " · chunk C · frame N" of movie second t (empty without the fly's properties)
+  const frameInfo = (t) => {
+    const frame = frameOf?.(t);
+    if (frame == null) return null;
+    return (
+      <span className="eth-dim">
+        {chunksize ? ` · chunk ${Math.floor(frame / chunksize)}` : ''} · frame {frame}
+      </span>
+    );
+  };
+
   // tooltip: the run under the pointer
   let tooltip = null;
   const hoverT = hover ? t0 + hover.x / pps : null;
@@ -493,7 +506,6 @@ export default function EthogramTrack({
     const s = data.runStart[i];
     const e = data.runEnd[i];
     const zt = (t) => (data.zt0 != null ? `ZT ${formatClock(data.zt0 + t)}` : `${formatClock(t)} (movie)`);
-    const frame = frameOf?.(hoverT);
     tooltip = (
       <div
         className="eth-tooltip"
@@ -504,7 +516,7 @@ export default function EthogramTrack({
           <b>{c >= 0 ? styleOf(data.behaviors[c]).label : 'not classified'}</b>
           {c >= 0 && <span className="eth-dim"> · score {data.scores[i]}%</span>}
         </div>
-        <div>{zt(hoverT)}{frame != null && <span className="eth-dim"> · frame {frame}</span>}</div>
+        <div>{zt(hoverT)}{frameInfo(hoverT)}</div>
         <div className="eth-dim">bout {zt(s)} – {zt(e)} ({formatDuration(e - s)})</div>
       </div>
     );
@@ -525,8 +537,9 @@ export default function EthogramTrack({
               <b>{labelStyleOf(labelClasses?.[run[2]]).label}</b>
             </div>
             <div className="eth-dim">{zt(run[0])} – {zt(run[1])} ({formatDuration(run[1] - run[0])})</div>
+            <div>{zt(t)}{frameInfo(t)}</div>
           </>
-        ) : <div className="eth-dim">not labelled · {zt(t)}</div>}
+        ) : <div><span className="eth-dim">not labelled · </span>{zt(t)}{frameInfo(t)}</div>}
         <div className="eth-dim">{video ? 'DEG video made (black edge): ready for labelling' : 'no DEG video yet'}</div>
       </div>
     );

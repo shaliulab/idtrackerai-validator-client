@@ -283,6 +283,7 @@ export default function SegmentationEditor({ experiment, active, highlight, fram
   const [editing, setEditing] = useState(null);    // {index, text}
   const [force, setForce] = useState(false);
   const [nArenas, setNArenas] = useState(4);
+  const [sizeStep, setSizeStep] = useState(2);     // % per click of Size − / +
   const [busy, setBusy] = useState(false);
 
   const store = info?.store;
@@ -510,6 +511,21 @@ export default function SegmentationEditor({ experiment, active, highlight, fram
     set({ roi_list: draft.roi_list.filter((_, k) => k !== i) });
     setSelectedRoi(null);
   };
+  // grow / shrink the selected ROI (or all) by a factor, around its center
+  const resizeRois = (factor) => {
+    const list = draft.roi_list.map((label, i) => {
+      const roi = parsedRois?.[i];
+      if (!roi || (selectedRoi != null && selectedRoi !== i)) return label;
+      const type = `${roi.sign} ${roi.shape}`;
+      if (roi.shape === 'Ellipse') {
+        return ellipseLabel(type, { ...roi, axes: roi.axes.map((a) => Math.max(1, Math.round(a * factor))) });
+      }
+      const cx = roi.points.reduce((t, p) => t + p[0], 0) / roi.points.length;
+      const cy = roi.points.reduce((t, p) => t + p[1], 0) / roi.points.length;
+      return polygonLabel(type, roi.points.map(([x, y]) => [cx + (x - cx) * factor, cy + (y - cy) * factor]));
+    });
+    set({ roi_list: list });
+  };
   const commitEdit = () => {
     try {
       parseRoi(editing.text);
@@ -627,6 +643,17 @@ export default function SegmentationEditor({ experiment, active, highlight, fram
                 ))}
                 {!draft.roi_list.length && <li className="sc-muted">No ROI: + Add</li>}
               </ul>
+            )}
+            {draft.roi_enabled && draft.roi_list.length > 0 && (
+              <div className="sc-row" title="Make the ROIs a little bigger or smaller, keeping their centers">
+                <span className="sc-muted">Size of {selectedRoi != null ? `ROI ${selectedRoi + 1}` : 'all ROIs'}</span>
+                <button onClick={() => resizeRois(1 - sizeStep / 100)} title={`Shrink by ${sizeStep}%`}>−</button>
+                <button onClick={() => resizeRois(1 + sizeStep / 100)} title={`Grow by ${sizeStep}%`}>+</button>
+                <span className="sc-muted">by</span>
+                <input type="number" min={0.5} max={50} step={0.5} value={sizeStep} style={{ width: 55 }}
+                       onChange={(e) => setSizeStep(Math.max(0.5, Math.min(50, Number(e.target.value) || 2)))} />
+                <span className="sc-muted">%</span>
+              </div>
             )}
             {draft.roi_enabled && draft.roi_list.length > 1 && (
               <label className="check field" style={{ alignSelf: 'flex-end' }}>

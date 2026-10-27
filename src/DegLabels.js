@@ -47,6 +47,12 @@ const unwrap = (data) => (typeof data === 'string' ? JSON.parse(data) : data);
 // key of the i-th preset: background on 0, the others 1, 2, ... in order
 const keyOf = (name, i) => (name === 'background' ? '0' : i < 9 ? String(i + 1) : null);
 
+// keys typed into a text / number field are not shortcuts; a focused fly dropdown or
+// checkbox (focus stays there after a click) must not swallow the label keys
+const NOT_TYPED = new Set(['checkbox', 'radio', 'button', 'submit', 'reset', 'range', 'color', 'file']);
+const isTyping = (el) => !!el && (el.tagName === 'TEXTAREA' || el.isContentEditable
+  || (el.tagName === 'INPUT' && !NOT_TYPED.has(el.type)));
+
 // the label that removes labels (behaviors null)
 const NONE = 'none';
 const styleOf = (name) => (name === NONE ? { label: 'None (remove)', color: 'transparent', none: true } : labelStyleOf(name));
@@ -232,8 +238,7 @@ export default function DegLabels({ fly, labels, onLabels, selection, onSelect, 
     const onKey = (e) => {
       const { active, labels, cursorT, track, selection, presets, onSelect, write, undo, redo } = keyState.current;
       if (!active || !labels) return;
-      const tag = e.target?.tagName;
-      if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
+      if (isTyping(e.target)) return;
       if (e.ctrlKey && !e.metaKey && !e.altKey) {
         const key = e.key.toLowerCase();
         if (key === 'z' || key === 'y') {

@@ -75,7 +75,7 @@ const SHORTCUTS = [
     [<><Key>←</Key> / <Key>→</Key></>, 'Move the cursor 1 s (with Shift: 10 s, Ctrl: 60 s, Ctrl+Alt: 10 min)'],
     [<><Key>+</Key> / <Key>−</Key></>, 'Zoom in / out around the cursor'],
     [<Key>Space</Key>, 'Play / pause the movie'],
-    ['Wheel on the ethogram', 'Zoom around the pointer (Shift+wheel: pan)'],
+    ['Wheel on the ethogram or the DEG labels strip', 'Zoom around the pointer (Shift+wheel: pan)'],
     ['Drag on the ethogram', 'Pan; a click moves the cursor, a double click zooms in'],
     [<><Key>Shift</Key>+drag on the ethogram</>, 'Select seconds to label for deepethogram'],
     [<><Key>[</Key> / <Key>]</Key></>, 'Start / end the selection at the cursor (Esc drops it)'],
@@ -724,7 +724,8 @@ export default function HelpTab() {
               experiment recorded with the same camera. They are marked <i>AI proposed</i> until saved here.{' '}
               <b>Split into N arenas → Make arenas.toml</b> (whole recordings only) opens a new, unsaved{' '}
               <code>arenas.toml</code> with one ellipse per arena (the regions the recording is cropped into): found on the frame
-              shown when the arena detector finds exactly N, otherwise laid out on a grid for you to adjust. Adjust them as in
+              shown when the arena detector finds exactly N, otherwise laid out on a grid for you to adjust. <b>Size − / +</b>{' '}
+              under the ROI list shrinks / grows the selected ROI (or all of them) by the given % around its center. Adjust them as in
               idtrackerai's segmentation app: <b>Regions of interest</b> (+ Add: + / − polygon or ellipse, click points on the frame,
               Enter; click a ROI to highlight it, ↑ ↓ ✕ to move or delete it, double click to edit its text), <b>number of
               animals</b>, <b>intensity thresholds</b> (dark animals: pixels below <i>max</i>) and <b>area thresholds</b>. The frame
@@ -732,6 +733,11 @@ export default function HelpTab() {
               turns red when their number is not the number of animals. Check several frames (Random, ←/→, chunk).{' '}
               <b>Save</b> (Ctrl+S) writes the file (the previous version goes to <code>toml_backups/</code>) and converts{' '}
               <code>&lt;date&gt;.toml</code> into the <code>&lt;date&gt;.conf</code> tracking and preprocess-sample read.</li>
+            <li><b>Crop arenas</b> (whole recordings with a saved <code>arenas.toml</code>): runs{' '}
+              <code>imgstore-crop-arenas --input metadata.yaml --arenas arenas.toml --jobs 3 --gpu --size 1024</code> in the
+              background (it survives server restarts): one recording per arena in <code>arenas/1</code>, <code>arenas/2</code>, …,
+              whose settings roi-proposer then proposes. Progress in chunks and <code>crop_arenas.log</code>; the arena buttons open
+              an arena's settings in the editor. Running it again overwrites the arena folders (you are asked first).</li>
             <li><b>preprocess-sample</b>: checks the saved <code>.conf</code> on a sample of frames of every chunk (default: 20 per
               chunk, up to chunk 299) and lists the frames where the blobs are not the number of animals in{' '}
               <code>preprocess_sample.csv</code>. It runs for hours in the background (also after a server restart; <i>Stop</i> ends it).

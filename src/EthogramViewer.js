@@ -670,6 +670,7 @@ export default function EthogramViewer({ flies, request, animalMetadata, active,
               cursorT={cursorT}
               onSeek={seek}
               frameOf={frameOf}
+              chunksize={properties?.chunksize}
               shade={shade}
               minBout={minBout}
               themeName={themeName}

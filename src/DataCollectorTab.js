@@ -2,7 +2,8 @@
 //   1. Fetch from cv2: the experiments of a date on cv2 and what a fetch copies (chunks before
 //      ZT `zt_limit`, fh-collector-zt), rsync as a job (/api/collector/*, data_collector.py).
 //   2. Segmentation settings: roi-proposer + the editor (SegmentationEditor.js).
-//   3. preprocess-sample: started / stopped here, its preprocess_sample.csv as a table and a
+//   3. Crop arenas: imgstore-crop-arenas once arenas.toml is saved (recordings split into arenas).
+//   4. preprocess-sample: started / stopped here, its preprocess_sample.csv as a table and a
 //      per-chunk strip; a row opens the frame in the editor with the CSV's centroids.
 // The experiment edited is kept in fh-collector-experiment, the date in fh-collector-date.
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -378,6 +379,120 @@ function PreprocessCard({ experiment, active, refreshKey, onShowFrame, shownFram
   );
 }
 
+// imgstore-crop-arenas on the recording once its arenas.toml is saved: arenas/1, 2, ...
+function CropArenasCard({ experiment, active, refreshKey, onEdit }) {
+  const { log } = useConsole();
+  const [status, setStatus] = useState(null);
+  const [error, setError] = useState(null);
+  const [showLog, setShowLog] = useState(false);
+
+  const fetchStatus = useCallback(async () => {
+    if (!experiment) { setStatus(null); return; }
+    try {
+      setStatus(unwrap((await api.get('/api/collector/crop_arenas', { params: { experiment } })).data));
+      setError(null);
+    } catch (err) {
+      setStatus(null);
+      setError(errorOf(err));
+    }
+  }, [experiment]);
+
+  useEffect(() => { if (active) fetchStatus(); }, [active, fetchStatus, refreshKey]);
+  useEffect(() => {
+    if (!active || !status?.running) return undefined;
+    const timer = setInterval(fetchStatus, 10000);
+    return () => clearInterval(timer);
+  }, [active, status?.running, fetchStatus]);
+
+  const start = async () => {
+    if (status.arenas.length && !window.confirm(`arenas/ already holds ${status.arenas.length} arena folder${status.arenas.length === 1 ? '' : 's'}: `
+        + 'crop them again from arenas.toml? Their videos and metadata.yaml are overwritten and roi-proposer proposes their tomls again.')) return;
+    try {
+      const data = unwrap((await api.post('/api/collector/crop_arenas', { experiment })).data);
+      log('info', `imgstore-crop-arenas started on ${experiment} (pid ${data.pid})`);
+      setShowLog(true);
+      setTimeout(fetchStatus, 1500);
+    } catch (err) {
+      log('error', `imgstore-crop-arenas: ${errorOf(err)}`);
+    }
+  };
+  const stop = async () => {
+    if (!window.confirm('Stop imgstore-crop-arenas? The chunks being encoded are left incomplete.')) return;
+    try {
+      await api.post('/api/collector/crop_arenas/stop', { experiment });
+      log('info', 'imgstore-crop-arenas stopped');
+      setTimeout(fetchStatus, 1000);
+    } catch (err) {
+      log('error', `Stop: ${errorOf(err)}`);
+    }
+  };
+
+  if (status?.arena) return null;
+  const progress = status?.progress;
+  return (
+    <section className="card">
+      <div className="card-header">
+        Crop arenas
+        <span className="spacer" />
+        {status?.running && (
+          <span className="ov-normal sc-badge sc-rec">
+            running{progress ? ` · ${progress.done}/${progress.total} chunks` : ''}
+          </span>
+        )}
+      </div>
+      <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {!experiment && <div className="sc-muted">Choose an experiment above.</div>}
+        {error && <div className="ov-warn">{error}</div>}
+        {status && (
+          <>
+            <div className="sc-muted">
+              Splits the recording into one recording per arena of <code>arenas.toml</code> (<code>arenas/1</code>, <code>arenas/2</code>, …),
+              then proposes their settings with roi-proposer: <code className="mono">{status.command}</code>.
+              It runs in the background and keeps running if the server restarts.
+            </div>
+            <div className="toolbar">
+              {status.running ? (
+                <button onClick={stop}><i className="fa fa-stop" style={{ marginRight: 6 }} />Stop</button>
+              ) : (
+                <button className="btn-primary" onClick={start} disabled={!status.has_arenas_toml}
+                        title={status.has_arenas_toml ? 'Crop the arenas of arenas.toml out of every chunk (GPU, 3 at once)'
+                          : 'Make arenas.toml first ("Split into N arenas" in the editor above) and save it'}>
+                  <i className="fa fa-crop" style={{ marginRight: 6 }} />Crop arenas
+                </button>
+              )}
+              <button onClick={fetchStatus}><i className="fa fa-refresh" style={{ marginRight: 6 }} />Refresh</button>
+              {!status.has_arenas_toml && <span className="sc-muted">No arenas.toml saved yet</span>}
+              {status.arenas.length > 0 && (
+                <span>
+                  Arenas:
+                  {status.arenas.map((a) => (
+                    <button key={a} style={{ marginLeft: 4 }} onClick={() => onEdit(`${experiment}/arenas/${a}`)}
+                            title={`Edit the settings of arenas/${a}`}>{a}</button>
+                  ))}
+                </span>
+              )}
+            </div>
+            {status.running && progress && progress.total > 0 && (
+              <div className="sc-progress"><div style={{ width: `${(100 * progress.done / progress.total).toFixed(1)}%` }} /></div>
+            )}
+            {status.running && !status.log && <div className="sc-muted">Started outside the validator: no crop_arenas.log to follow.</div>}
+            {status.exit_code != null && status.exit_code !== 0 && <div className="ov-warn">Last run failed (exit code {status.exit_code}): see the log.</div>}
+            {status.exit_code === 0 && <div className="sc-muted">Last run finished.</div>}
+            {status.log && (
+              <div>
+                <button className="ov-more" style={{ border: 'none', padding: 0, background: 'none' }} onClick={() => setShowLog((v) => !v)}>
+                  {showLog ? '▾' : '▸'} crop_arenas.log · {new Date(status.log.mtime * 1000).toLocaleString()}
+                </button>
+                {showLog && <pre className="sc-log">{status.log.tail.join('\n')}</pre>}
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </section>
+  );
+}
+
 export default function DataCollectorTab({ active, onOpenExperiment }) {
   const [experiment, setExperiment] = useState(() => stored('fh-collector-experiment', null));
   const [highlight, setHighlight] = useState(null);    // CSV frame shown in the editor
@@ -412,6 +527,8 @@ export default function DataCollectorTab({ active, onOpenExperiment }) {
         <SegmentationEditor experiment={experiment} active={active} highlight={highlight} frameRequest={highlight}
                             onSaved={() => setSavedKey((k) => k + 1)} />
       </section>
+
+      <CropArenasCard experiment={experiment} active={active} refreshKey={savedKey} onEdit={edit} />
 
       <PreprocessCard experiment={experiment} active={active} refreshKey={savedKey}
                       onShowFrame={showFrame} shownFrame={highlight?.frame_number} />
