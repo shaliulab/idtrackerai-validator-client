@@ -9,12 +9,14 @@
 // were not re-queued since, why they failed, a Re-queue button (POST
 // /api/monitor/<pipeline>/requeue: marks their rows 1 again for run_queue.sh) and the
 // command running the batch again by hand.
+// Above them, "Server resources" (ServerResources.js): RAM, CPU and GPU usage.
 // Refreshed every REFRESH_MS while the tab is shown and "Auto refresh" is ticked.
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import api from './api';
 import { useConsole } from './MessageConsole';
 import { copyText } from './utils';
+import ServerResources from './ServerResources';
 
 const unwrap = (data) => (typeof data === 'string' ? JSON.parse(data) : data);
 const REFRESH_MS = 10000;
@@ -664,6 +666,8 @@ export default function MonitorTab({ active, onOpenExperiment, onOpenFly }) {
         <span className="spacer" style={{ flex: 1 }} />
         {data && <span className="ov-count">Pipelines: <span className="mono">{data.pipelines_dir}</span></span>}
       </div>
+
+      <ServerResources active={active} auto={auto} />
 
       {data && (
         <div className="ov-stats">

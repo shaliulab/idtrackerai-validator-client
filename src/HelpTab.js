@@ -651,6 +651,16 @@ export default function HelpTab() {
             <code>vsc-scripts/nextflow/pipelines</code> with a CSV of experiments (<code>idtrackerai.csv</code>,{' '}
             <code>videos.csv</code>, <code>animals.csv</code>). Refreshed every 10 s while shown (<i>Auto refresh</i>).
           </p>
+          <p>
+            <b>Server resources</b> (top card, every 5 s): how busy this computer is. <b>RAM</b>: used of total and what
+            is still available (the cache is given back when programs need it), swap. <b>CPU</b>: average use of all
+            threads, how many threads that amounts to, load average (1 / 5 / 15 min), time waiting for the disks, and one
+            cell per thread (darker = busier). <b>GPU</b>: compute and memory use, temperature, power, number of
+            processes. A tile turns amber from 80 % (<b>busy</b>) and red from 95 % (<b>full</b>); the line under each is
+            the last hour (hover for the value at a time; the server keeps it while running).{' '}
+            <i>Busiest processes</i> lists those using the most CPU or RAM and every GPU process (click a column to sort;
+            CPU in cores, so 2.0 = two threads fully used).
+          </p>
           <ul>
             <li><b>running</b>: a nextflow run is going on in the folder. Its tasks per process (done / cached /
               running / failed) come from the folder's <code>.nextflow.log</code>; each task is matched to its

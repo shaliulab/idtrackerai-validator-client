@@ -860,3 +860,35 @@ button.ov-sheet.ov-sheet-error { border-color: var(--danger); color: var(--dange
 .mon-stage.old { border-style: solid; border-color: var(--border-strong); opacity: 1; }
 .mon-stage.new { border-style: solid; border-color: var(--mon-done); background: var(--mon-done); color: #fff; opacity: 1; }
 .mon-fly-btn { font-size: 11px; padding: 1px 6px; }
+
+/* ── Server resources card (ServerResources.js) ── */
+:root { --res-busy: #c27c0e; }
+:root[data-theme="dark"] { --res-busy: #f0a92e; }
+.res-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; }
+.res-tile { padding: 10px 14px; display: flex; flex-direction: column; gap: 4px; box-shadow: none; }
+.res-tile.res-busy { border-left: 3px solid var(--res-busy); }
+.res-tile.res-full { border-left: 3px solid var(--mon-failed); }
+.res-head { display: flex; align-items: baseline; gap: 8px; }
+.res-badge { font-size: 11px; font-weight: 600; padding: 0 6px; border-radius: 8px; border: 1px solid; text-transform: uppercase; }
+.res-badge.res-busy { color: var(--res-busy); }
+.res-badge.res-full { color: var(--mon-failed); }
+.res-meter-row { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+.res-meter-label { width: 56px; color: var(--subtext); flex: none; }
+.res-meter { flex: 1; height: 10px; border-radius: 5px; overflow: hidden; background: var(--surface-2); border: 1px solid var(--border); }
+.res-meter-fill { display: block; height: 100%; background: var(--mon-running); border-radius: 0 4px 4px 0; transition: width 0.4s; }
+.res-meter-fill.res-busy { background: var(--res-busy); }
+.res-meter-fill.res-full { background: var(--mon-failed); }
+.res-meter-value { width: 40px; text-align: right; font-variant-numeric: tabular-nums; flex: none; }
+.res-cores { display: grid; grid-template-columns: repeat(auto-fill, minmax(12px, 1fr)); gap: 2px; margin: 2px 0; }
+.res-core { height: 12px; border-radius: 2px; border: 1px solid var(--border); }
+.res-spark { margin-top: 4px; cursor: crosshair; }
+.res-spark svg { display: block; background: var(--surface-2); border-radius: 4px; }
+.res-spark-line { fill: none; stroke: var(--mon-running); stroke-width: 2; }
+.res-spark-busy { stroke: var(--res-busy); stroke-width: 1; stroke-dasharray: 3 3; opacity: 0.6; }
+.res-spark-cursor { stroke: var(--subtext); stroke-width: 1; }
+.res-spark-axis { display: flex; justify-content: space-between; font-size: 11px; color: var(--subtext); font-variant-numeric: tabular-nums; }
+.res-toggle { cursor: pointer; user-select: none; }
+.res-processes { overflow: auto; }
+.res-processes th.res-sortable.on { color: var(--accent); }
+.res-num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.res-command { max-width: 700px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
