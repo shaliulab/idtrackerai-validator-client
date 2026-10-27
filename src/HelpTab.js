@@ -392,6 +392,11 @@ export default function HelpTab() {
               writes the last undone step again, until a new label is applied.
             </li>
             <li>
+              <b>Make DEG videos</b> of the cursor's chunk and the next <i>N</i> chunks (<b>after ▶</b>) or the
+              previous <i>N</i> (<b>◀ before</b>) prepares their DEG video folders ahead (~30 s each, progress in
+              the console), so labelling there does not wait. Chunks already made, or without a video of the fly, are skipped.
+            </li>
+            <li>
               Labels go to <code>&lt;chunk&gt;_labels.csv</code> of the fly's video folder of each chunk
               (<code>DATA/&lt;experiment&gt;_&lt;chunk&gt;_&lt;local identity&gt;/</code>). A chunk without
               folder gets one made with deepethogram from its single-animal video, which takes ~30 s;

@@ -19,6 +19,9 @@
 // applied is one action, sent as `action` with its writes; the seconds Label while
 // moving paints join the action of the label it paints with (a new one when started).
 // Redo (Ctrl+Y, Ctrl+Shift+Z) writes the last undone action again, until a new label.
+//
+// "Make DEG videos" premakes the folders of the cursor's chunk and the N chunks before or
+// after it (POST .../deg_videos, a job), so labelling there does not wait for deepethogram.
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import api from './api';
@@ -29,6 +32,12 @@ const API = '/api/ethogram';
 // While labelling on the move, a jump forward of at most this many seconds (fast playback,
 // Shift+→) also labels the seconds skipped; longer jumps label only the second reached.
 const MAX_FILL = 10;
+const MAX_PREMAKE = 50;   // deg_labels.MAX_PREMAKE
+
+const storedPremake = () => {
+  try { return Math.max(1, Math.min(MAX_PREMAKE, parseInt(localStorage.getItem('fh-deg-premake'), 10) || 3)); }
+  catch { return 3; }
+};
 
 let actionCount = 0;
 const newAction = () => `${Date.now().toString(36)}-${(actionCount += 1)}`;
@@ -50,6 +59,12 @@ export default function DegLabels({ fly, labels, onLabels, selection, onSelect, 
   const [custom, setCustom] = useState([]);        // columns of the custom label
   const [lastLabel, setLastLabel] = useState(null);   // { name, columns }: what moving labels with
   const [painting, setPainting] = useState(false);
+  const [premakeN, setPremakeN] = useState(storedPremake);   // chunks to premake on one side
+  const [premaking, setPremaking] = useState(false);
+
+  useEffect(() => {
+    try { localStorage.setItem('fh-deg-premake', String(premakeN)); } catch { /* ignore */ }
+  }, [premakeN]);
 
   useEffect(() => { setError(null); setCustom([]); setPainting(false); }, [fly]);
 
@@ -178,6 +193,32 @@ export default function DegLabels({ fly, labels, onLabels, selection, onSelect, 
   }, [fly, painting, enqueue, log]);
   const undo = useCallback(() => history('undo'), [history]);
   const redo = useCallback(() => history('redo'), [history]);
+
+  // ── Premake the DEG videos of the cursor's chunk and N chunks before / after it ──
+  const premake = async (direction) => {
+    if (!fly || cursorT == null) return;
+    const f = fly;
+    setPremaking(true);
+    try {
+      const response = await api.post(`${API}/${f}/deg_videos`,
+        { t: Math.floor(cursorT), n: premakeN, direction });
+      const job = await trackJob(unwrap(response.data));
+      if (job.status !== 'done') throw new Error(job.error || `job ${job.status}`);
+      const { chunks, made } = job.result;
+      if (f === flyRef.current) onLabels(job.result);
+      const failed = job.items.filter((item) => item.status === 'skipped' && item.error !== 'already made');
+      log(failed.length ? 'warning' : 'info',
+        `${f}: DEG videos of chunks ${chunks[0]}–${chunks[chunks.length - 1]}: ${made.length} made,`
+        + ` ${chunks.length - made.length - failed.length} already there`
+        + (failed.length ? `, ${failed.length} not possible (${failed.map((item) => item.error).join('; ')})` : ''));
+    } catch (err) {
+      const message = err.response?.data?.error || err.message;
+      setError(message);
+      log('error', `${f}: could not make DEG videos: ${message}`);
+    } finally {
+      setPremaking(false);
+    }
+  };
 
   const presets = labels ? labels.presets : [];   // [name, columns]
 
@@ -338,6 +379,24 @@ export default function DegLabels({ fly, labels, onLabels, selection, onSelect, 
               {lastLabel ? <>last label: <Swatch style={lastStyle} />{lastStyle.label}</> : 'no label applied yet'}
             </span>
           )}
+        </div>
+        <div className="deg-buttons">
+          <span>Make DEG videos of the cursor's chunk and</span>
+          <input
+            type="number" className="deg-premake-n" min={1} max={MAX_PREMAKE} step={1} value={premakeN}
+            onChange={(e) => setPremakeN(Math.max(1, Math.min(MAX_PREMAKE, parseInt(e.target.value, 10) || 1)))}
+            title={`Number of chunks (1–${MAX_PREMAKE}); each new DEG folder takes ~30 s`}
+          />
+          <span>chunk{premakeN === 1 ? '' : 's'}</span>
+          <button onClick={() => premake('before')} disabled={premaking || cursorT == null}
+                  title="Make the missing DEG video folders of the cursor's chunk and the chunks before it (progress in the console)">
+            ◀ before
+          </button>
+          <button onClick={() => premake('after')} disabled={premaking || cursorT == null}
+                  title="Make the missing DEG video folders of the cursor's chunk and the chunks after it (progress in the console)">
+            after ▶
+          </button>
+          {premaking && <span className="eth-dim">making DEG videos… (progress in the console)</span>}
         </div>
         <details className="deg-custom">
           <summary>Custom combination of the project's columns</summary>
