@@ -675,6 +675,7 @@ export default function EthogramViewer({ flies, request, animalMetadata, active,
               themeName={themeName}
               labelRuns={degLabels?.runs}
               labelClasses={degLabels?.classes}
+              labelVideos={degLabels?.videos}
               selection={selection}
               onSelect={setSelection}
             />

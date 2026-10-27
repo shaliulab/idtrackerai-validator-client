@@ -371,7 +371,8 @@ export default function HelpTab() {
               The <i>DEG labels</i> strip under the ethogram shows the fly's labels in its deepethogram
               project (<code>FlyHostel_deepethogram</code> for 150 fps recordings, <code>…_47fps</code>{' '}
               otherwise), the labels the classifier is trained on. Yellow = a second whose frames carry
-              different labels (e.g. labelled frame by frame in the DEG GUI).
+              different labels (e.g. labelled frame by frame in the DEG GUI). A black edge marks the
+              stretches whose DEG video is already made, ready for labelling without waiting.
             </li>
             <li>
               Select seconds with <Key>Shift</Key>+drag on the ethogram, or with <Key>[</Key>/<Key>]</Key>{' '}
@@ -720,7 +721,10 @@ export default function HelpTab() {
             <li><b>Segmentation settings</b> (<i>Settings ▸</i> on a row, <i>arena K</i> for the arenas cropped out of an arena
               experiment): <b>Propose with roi-proposer</b> writes <code>&lt;date&gt;.toml</code> and <code>landmarks.toml</code>{' '}
               (<code>arenas.toml</code> for an arena experiment): ROIs found by its model, the other settings copied from the latest
-              experiment recorded with the same camera. They are marked <i>AI proposed</i> until saved here. Adjust them as in
+              experiment recorded with the same camera. They are marked <i>AI proposed</i> until saved here.{' '}
+              <b>Split into N arenas → Make arenas.toml</b> (whole recordings only) opens a new, unsaved{' '}
+              <code>arenas.toml</code> with one ellipse per arena (the regions the recording is cropped into): found on the frame
+              shown when the arena detector finds exactly N, otherwise laid out on a grid for you to adjust. Adjust them as in
               idtrackerai's segmentation app: <b>Regions of interest</b> (+ Add: + / − polygon or ellipse, click points on the frame,
               Enter; click a ROI to highlight it, ↑ ↓ ✕ to move or delete it, double click to edit its text), <b>number of
               animals</b>, <b>intensity thresholds</b> (dark animals: pixels below <i>max</i>) and <b>area thresholds</b>. The frame

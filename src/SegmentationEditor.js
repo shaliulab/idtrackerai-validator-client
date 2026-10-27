@@ -282,6 +282,7 @@ export default function SegmentationEditor({ experiment, active, highlight, fram
   const [selectedRoi, setSelectedRoi] = useState(null);
   const [editing, setEditing] = useState(null);    // {index, text}
   const [force, setForce] = useState(false);
+  const [nArenas, setNArenas] = useState(4);
   const [busy, setBusy] = useState(false);
 
   const store = info?.store;
@@ -426,6 +427,31 @@ export default function SegmentationEditor({ experiment, active, highlight, fram
     }
   };
 
+  // a new arenas.toml (one ellipse per arena), opened unsaved: adjust it, then Save
+  const makeArenas = async () => {
+    if (dirty && !window.confirm('Discard the unsaved changes?')) return;
+    if (info.files.some((f) => f.name === 'arenas.toml')
+        && !window.confirm('arenas.toml exists: replace it in the editor with a new proposal? (nothing is written until you save)')) return;
+    setBusy(true);
+    try {
+      const data = unwrap((await api.post('/api/collector/arenas_proposal', { experiment, frame_number: frameNumber, n: nArenas })).data);
+      const d = toDraft(data.settings);
+      setFileName('arenas.toml');
+      setDraft(d);
+      setSaved(null);
+      setIntensityMode(intensityModeOf(d.intensity_ths));
+      setSelectedRoi(null);
+      setDrawing(null);
+      log(data.source === 'detected' ? 'success' : 'warning', data.source === 'detected'
+        ? `arenas.toml: ${nArenas} arenas detected in chunk ${Math.floor(frameNumber / chunksize)}; check them and save`
+        : `arenas.toml: ${data.detected} arena${data.detected === 1 ? '' : 's'} detected instead of ${nArenas}: laid out on a grid, adjust the ellipses (double click to edit, or draw them) and save`);
+    } catch (err) {
+      log('error', `arenas.toml: ${errorOf(err)}`);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const stepFrame = useCallback((delta) => {
     setFrameNumber((f) => Math.min(Math.max((f ?? firstFrame) + delta, firstFrame), lastFrame));
   }, [firstFrame, lastFrame]);
@@ -507,7 +533,8 @@ export default function SegmentationEditor({ experiment, active, highlight, fram
             setFileName(e.target.value);
             loadFile(files, e.target.value);
           }}>
-            {!files.length && <option value="">none yet</option>}
+            {!files.length && !fileName && <option value="">none yet</option>}
+            {fileName && !files.some((f) => f.name === fileName) && <option value={fileName}>{fileName} (new)</option>}
             {files.map((f) => <option key={f.name} value={f.name}>{f.name}{f.ai_proposed ? ' (AI)' : ''}</option>)}
           </select>
           {files.find((f) => f.name === fileName)?.ai_proposed && (
@@ -528,6 +555,18 @@ export default function SegmentationEditor({ experiment, active, highlight, fram
             </a>
           )}
         </div>
+        {!info.arena && (
+          <div className="sc-row">
+            <span className="sc-label" title="arenas.toml: one ellipse per arena, the regions imgstore-crop-arenas cuts the recording into">Split into</span>
+            <input type="number" min={2} max={16} value={nArenas} style={{ width: 60 }}
+                   onChange={(e) => setNArenas(Math.max(2, Math.min(16, Number(e.target.value) || 2)))} />
+            <span>arenas</span>
+            <button onClick={makeArenas} disabled={busy || frameNumber == null}
+                    title="Propose arenas.toml with this many arenas, detected on the frame shown (a grid when the detector does not find exactly that many); it opens unsaved">
+              <i className="fa fa-th-large" style={{ marginRight: 6 }} />Make arenas.toml
+            </button>
+          </div>
+        )}
         {files.find((f) => f.name === fileName)?.error && <div className="ov-warn">{files.find((f) => f.name === fileName).error}</div>}
 
         {draft && (

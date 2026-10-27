@@ -140,7 +140,7 @@ function useCanvas(canvas, width, height) {
 
 export default function EthogramTrack({
   data, view, onView, cursorT, onSeek, frameOf, shade, minBout, themeName,
-  labelRuns, labelClasses, selection, onSelect,
+  labelRuns, labelClasses, labelVideos, selection, onSelect,
 }) {
   const [plotEl, setPlotEl] = useState(null);
   const [mainCanvas, setMainCanvas] = useState(null);
@@ -302,6 +302,15 @@ export default function EthogramTrack({
         ctx.fillStyle = labelStyleOf(labelClasses?.[code]).color;
         ctx.fillRect(xa, 3, Math.max(1, (b - a) * pps - (pps > 6 ? 1 : 0)), LABELS_H - 6);
       }
+      // stretches whose DEG video is made (ready for labelling): black edge
+      ctx.strokeStyle = themeName === 'dark' ? cssVar('--text', '#e2e8f0') : '#000000';
+      ctx.lineWidth = 1.5;
+      for (const [a, b] of labelVideos || []) {
+        if (b < t0 || a > t1) continue;
+        const xa = Math.max(-2, (a - t0) * pps);
+        const xb = Math.min(width + 2, (b - t0) * pps);
+        ctx.strokeRect(xa + 0.75, 1.75, Math.max(1, xb - xa - 1.5), LABELS_H - 3.5);
+      }
       if (selection) {
         const xa = (selection[0] - t0) * pps;
         const xb = (selection[1] - t0) * pps;
@@ -314,7 +323,7 @@ export default function EthogramTrack({
         ctx.fillRect(Math.round((cursorT - t0) * pps) - 1, 0, 2, LABELS_H);
       }
     }
-  }, [labelsCtx, data, width, t0, t1, pps, cursorT, labelRuns, labelClasses, selection, themeName]);
+  }, [labelsCtx, data, width, t0, t1, pps, cursorT, labelRuns, labelClasses, labelVideos, selection, themeName]);
 
   // ── overview: dominant behavior of each pixel over the whole recording ──
   const overviewImage = useMemo(() => {
@@ -505,6 +514,7 @@ export default function EthogramTrack({
   if (labelHover != null && !dragRef.current) {
     const t = t0 + labelHover / pps;
     const run = (labelRuns || []).find(([a, b]) => t >= a && t < b);
+    const video = (labelVideos || []).some(([a, b]) => t >= a && t < b);
     const zt = (s) => (data.zt0 != null ? `ZT ${formatClock(data.zt0 + s)}` : `${formatClock(s)} (movie)`);
     labelTooltip = (
       <div className="eth-tooltip" style={{ left: Math.min(labelHover + 14, Math.max(0, width - 250)), top: LABELS_H + 4 }}>
@@ -517,6 +527,7 @@ export default function EthogramTrack({
             <div className="eth-dim">{zt(run[0])} – {zt(run[1])} ({formatDuration(run[1] - run[0])})</div>
           </>
         ) : <div className="eth-dim">not labelled · {zt(t)}</div>}
+        <div className="eth-dim">{video ? 'DEG video made (black edge): ready for labelling' : 'no DEG video yet'}</div>
       </div>
     );
   }
