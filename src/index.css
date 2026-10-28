@@ -781,6 +781,24 @@ button.ov-sheet.ov-sheet-error { border-color: var(--danger); color: var(--dange
 .pose-conf-bar > span { display: block; height: 100%; }
 @media (max-width: 1100px) { .pose-row { grid-template-columns: 1fr; } }
 
+/* SLEAP labels tab (SleapLabelsTab.js) */
+.sl-main { display: flex; gap: 12px; align-items: stretch; min-height: 360px; }
+.sl-list { flex: 0 0 270px; display: flex; flex-direction: column; min-height: 0; }
+.sl-view { flex: 1 1 auto; min-width: 280px; overflow: auto; }
+.sl-side { flex: 0 0 300px; display: flex; flex-direction: column; min-height: 0; }
+.sl-side .ov-scroll, .sl-scroll { flex: 1 1 auto; min-height: 0; }
+.sl-filters { display: flex; gap: 6px; padding: 6px 10px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+.sl-table tbody tr { cursor: pointer; }
+.sl-table tbody tr:hover { background: var(--btn-hover); }
+.sl-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin: 0 4px 0 2px; vertical-align: middle; }
+.sl-done { background: var(--qc-good); }
+.sl-pred { background: transparent; border: 2px solid var(--accent); width: 5px; height: 5px; }
+.sl-sugg { background: transparent; border: 2px dashed var(--subtext); width: 5px; height: 5px; }
+.sl-actions { margin-top: 8px; gap: 8px; flex-wrap: wrap; }
+.sl-save { font-size: 12px; color: var(--subtext); font-variant-numeric: tabular-nums; }
+.sl-save-error, .sl-error { color: var(--qc-critical); }
+@media (max-width: 1100px) { .sl-main { flex-wrap: wrap; height: auto !important; } .sl-list, .sl-side { flex: 1 1 100%; max-height: 360px; } }
+
 /* ── Monitor tab (MonitorTab.js) ── */
 :root {
   --mon-done: #2ca02c;

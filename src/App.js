@@ -20,6 +20,7 @@ import OverviewTab from './OverviewTab';
 import DataManagementTab from './DataManagementTab';
 import QcTab from './QcTab';
 import PoseTab from './PoseTab';
+import SleapLabelsTab from './SleapLabelsTab';
 import MonitorTab from './MonitorTab';
 import ValidationCsvBuilder from './ValidationCsvBuilder';
 import CvatLinks from './CvatLinks';
@@ -328,6 +329,14 @@ function App() {
     setActiveTab('pose');
   }, []);
 
+  // Pose tab "Label in SLEAP": that fly's frame in the SLEAP labels tab
+  const [sleapRequest, setSleapRequest] = useState(null);   // { fly, frameNumber, nonce }
+  const openSleap = useCallback((fly, frame) => {
+    setIsPlaying(false);
+    setSleapRequest({ fly, frameNumber: frame, nonce: Date.now() });
+    setActiveTab('sleap_labels');
+  }, []);
+
   const fetchFramerate = useCallback(async () => {
     try {
       const response = await api.get('/api/framerate');
@@ -533,7 +542,7 @@ function App() {
   // PE and Ethograms need the database
   useEffect(() => {
     if (!experimentInfo.has_database) {
-      setActiveTab((tab) => (tab === 'proboscis_extension' || tab === 'ethogram' || tab === 'qc' || tab === 'pose' ? 'group_viewer' : tab));
+      setActiveTab((tab) => (tab === 'proboscis_extension' || tab === 'ethogram' || tab === 'qc' || tab === 'pose' || tab === 'sleap_labels' ? 'group_viewer' : tab));
     }
   }, [experimentInfo]);
 
@@ -708,6 +717,7 @@ function App() {
         <Tab id="ethogram" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+3" disabled={noDatabase}>Ethograms</Tab>
         <Tab id="qc" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+4" disabled={noDatabase}>QC</Tab>
         <Tab id="pose" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+5" disabled={noDatabase}>Pose</Tab>
+        <Tab id="sleap_labels" activeTab={activeTab} setActiveTab={setActiveTab} disabled={noDatabase}>SLEAP labels</Tab>
         <Tab id="overview" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+6">Metadata overview</Tab>
         <Tab id="data_management" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+7">Data management</Tab>
         <Tab id="monitor" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+8">Monitor</Tab>
@@ -920,6 +930,17 @@ function App() {
             setFrameNumber(fn);
             openEthogram(Number(fly.split('__').pop()), fn);
           }}
+          onLabelInSleap={openSleap}
+        />
+      </div>
+
+      <div className="tab-panel" style={{ display: activeTab === 'sleap_labels' ? 'block' : 'none' }}>
+        <SleapLabelsTab
+          active={activeTab === 'sleap_labels'}
+          currentExperiment={currentExperiment}
+          request={sleapRequest}
+          viewerFrame={frameNumber}
+          onOpenInPose={openPose}
         />
       </div>
 

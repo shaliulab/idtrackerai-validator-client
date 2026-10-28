@@ -14,6 +14,7 @@ const SECTIONS = [
   { id: 'help-ethogram', title: 'Ethograms' },
   { id: 'help-qc', title: 'QC' },
   { id: 'help-pose', title: 'Pose' },
+  { id: 'help-sleap', title: 'SLEAP labels' },
   { id: 'help-overview-tab', title: 'Metadata overview' },
   { id: 'help-data', title: 'Data management' },
   { id: 'help-monitor', title: 'Monitor' },
@@ -57,6 +58,17 @@ const SHORTCUTS = [
     [<><Key>←</Key> / <Key>→</Key></>, 'Previous / next frame (with Shift: 10 frames)'],
     [<><Key>↑</Key> / <Key>↓</Key></>, 'Previous / next fly'],
     ['Hover a body part or its table row', 'Its name, confidence and position'],
+  ]],
+  ['SLEAP labels', [
+    [<><Key>←</Key> / <Key>→</Key></>, 'Previous / next frame of the list'],
+    [<Key>Enter</Key>, 'Start an unlabelled frame from the prediction drawn (also: double click)'],
+    [<><Key>Tab</Key> / <Key>Shift</Key>+<Key>Tab</Key></>, 'Select the next / previous point'],
+    [<><Key>V</Key> / right click on a point</>, 'Mark the point visible / not visible'],
+    [<Key>R</Key>, 'Rotate every point 180° around the thorax (head and abdomen swapped)'],
+    ['Click the image', 'Place the selected point when it is not placed yet'],
+    [<><Key>Ctrl</Key>+<Key>Z</Key></>, 'Undo the last change'],
+    [<><Key>Ctrl</Key>+<Key>S</Key></>, 'Write the file now'],
+    ['Wheel / drag the image / double click', 'Zoom / pan / reset the zoom'],
   ]],
   ['PE', [
     [<><Key>1</Key>–<Key>7</Key></>, 'Verdict for the selected bout: pe, feed, groom, walk, other, merge, unsure (same key again removes it)'],
@@ -478,7 +490,42 @@ export default function HelpTab() {
             ethogram). A fly without a position in a frame (not tracked) has its pose
             listed but not drawn. After the pose pipeline ran again for a fly, <i>Recompile
             pose</i> builds its pose file again from the chunks' predictions (about a minute;
-            progress in the console); next to it, when the current file was compiled.
+            progress in the console); next to it, when the current file was compiled.{' '}
+            <i>Label in SLEAP</i> opens the same frame of the fly in the SLEAP labels tab.
+          </p>
+        </Section>
+
+        <Section id="help-sleap" title="SLEAP labels">
+          <p>
+            Ground truth for the pose model, written into the SLEAP training files of{' '}
+            <code>/flyhostel_data/fiftyone/FlyBehaviors</code> (<code>labels_train*.slp</code>,{' '}
+            <code>labels_test*.slp</code>) as <code>sleap-label</code> does, so the file still opens
+            there (SLEAP 1.3.3). Each video of these files is one chunk of one fly
+            (<code>SLEAP_DATA/&lt;experiment&gt;_&lt;chunk&gt;_&lt;local id&gt;/</code>, a copy of its
+            single-animal video); the list on the left holds the frames of the loaded experiment
+            in the chosen file: labelled (green), with a prediction only (blue ring) or suggested
+            (dashed). <i>To label</i> keeps those without a user instance.
+          </p>
+          <p>
+            <i>Label a frame of</i> opens any frame of a fly (<i>Viewer frame</i>: the Group
+            viewer's), also outside the list; its chunk video is copied into{' '}
+            <code>SLEAP_DATA</code> and added to the file when you label it. A frame without
+            label shows the prediction dashed: the file's, else the fly's pose file. Start from
+            it (<Key>Enter</Key> or double click) or from the mean instance of the file, laid
+            along the fly's body (its head may land on the abdomen: <i>Rotate 180°</i>,{' '}
+            <Key>R</Key>), then drag the points into place. A point is visible or not (right click, <Key>V</Key> or its
+            box in the table); a point not visible keeps its position and is drawn hollow.
+            A point not placed yet (none predicted) is placed by selecting it in the table
+            and clicking the image. Colours: left side orange, right side blue, head yellow, thorax and abdomen purple.
+          </p>
+          <p>
+            Every change is sent right away; the server writes the file about two seconds
+            after the last one (status next to <i>Save now</i>), keeping a copy of the file as
+            it was before the first write since the server started
+            (<code>~/.cache/idtrackerai-validator/slp_backups/</code>, the last 20). If the file
+            was changed elsewhere in the meantime it is not overwritten: <i>Reload</i> reads it
+            again and drops the changes not written. <i>Delete label</i> removes the frame's user
+            instance (the prediction stays); <Key>Ctrl</Key>+<Key>Z</Key> undoes any change.
           </p>
         </Section>
 

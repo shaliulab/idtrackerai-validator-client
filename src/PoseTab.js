@@ -6,6 +6,7 @@
 // position. Below, the per-frame parts detected / confidence / pose score of the
 // frames around (/api/pose/<fly>/trace); click to go there. Its `request` prop
 // ({fly, frameNumber}) opens a fly at a frame: used by the QC tab's pose charts.
+// "Label in SLEAP" opens the frame in the SLEAP labels tab (onLabelInSleap).
 // "Recompile pose" compiles the fly's pose file again from its chunks
 // (POST /api/pose/<fly>/recompile), after the pose pipeline ran again.
 
@@ -240,7 +241,7 @@ function Traces({ trace, frame, windowFrames, framerate, onSeek, nScored }) {
 }
 
 export default function PoseTab({ active, currentExperiment, request, viewerFrame, framerate, chunksize: viewerChunksize,
-                                  ethogramFlies = [], onOpenInViewer, onOpenInEthogram }) {
+                                  ethogramFlies = [], onOpenInViewer, onOpenInEthogram, onLabelInSleap }) {
   const [flies, setFlies] = useState([]);
   const [fly, setFly] = useState(null);
   const [frame, setFrame] = useState(null);
@@ -395,6 +396,11 @@ export default function PoseTab({ active, currentExperiment, request, viewerFram
                   : 'This fly has no ethogram'}>
           Open in Ethograms + Group viewer
         </button>
+        {onLabelInSleap && (
+          <button onClick={() => frame != null && onLabelInSleap(fly, frame)} title="Label this fly's pose in this frame (SLEAP labels tab)">
+            Label in SLEAP
+          </button>
+        )}
         <span className="toolbar-sep" />
         <button onClick={recompile} disabled={!fly || recompiling != null}
                 title={`Compile this fly's pose file again from the chunks' .predictions.h5 (minutes), e.g. after the pose pipeline ran again${
