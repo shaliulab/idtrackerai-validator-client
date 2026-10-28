@@ -734,7 +734,7 @@ export default function HelpTab() {
               <b>Save</b> (Ctrl+S) writes the file (the previous version goes to <code>toml_backups/</code>) and converts{' '}
               <code>&lt;date&gt;.toml</code> into the <code>&lt;date&gt;.conf</code> tracking and preprocess-sample read.</li>
             <li><b>Crop arenas</b> (whole recordings with a saved <code>arenas.toml</code>): runs{' '}
-              <code>imgstore-crop-arenas --input metadata.yaml --arenas arenas.toml --jobs 3 --gpu --size 1024</code> in the
+              <code>imgstore-crop-arenas --input metadata.yaml --arenas arenas.toml --jobs 4 --gpu --size 1024</code> in the
               background (it survives server restarts): one recording per arena in <code>arenas/1</code>, <code>arenas/2</code>, …,
               whose settings roi-proposer then proposes. Progress in chunks and <code>crop_arenas.log</code>; the arena buttons open
               an arena's settings in the editor. Running it again overwrites the arena folders (you are asked first).</li>
