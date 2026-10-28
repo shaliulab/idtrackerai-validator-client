@@ -210,8 +210,9 @@ export default function HelpTab() {
 
           <h3>Tracking table</h3>
           <p>
-            One row per detected fly in the current frame: position, identity, sex and
-            genotype, idtrackerai details (local identity, fragment, area), the ZT time and the
+            One row per detected fly in the current frame: position, identity, its metadata (sex,
+            genotype, <i>GBX</i> (0 when the sheet has no GBX value), light cycle, <i>Age</i> = the sheet's{' '}
+            <code>age_min</code>), idtrackerai details (local identity, fragment, area), the ZT time and the
             incubator's temperature (°C) and relative humidity (RH %) at that time (— when the
             incubator logged nothing then).
             You can type a frame number, a chunk or a frame index (within the displayed chunk) into the first columns to jump there.

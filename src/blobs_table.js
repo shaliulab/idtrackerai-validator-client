@@ -12,6 +12,9 @@ const COLUMNS = [
   { key: 'identity', label: 'Id',        w: 42  },
   { key: 'sex',      label: 'Sex',       w: 36  },
   { key: 'genotype', label: 'Genotype',  w: 110 },
+  { key: 'gbx',      label: 'GBX',       w: 42, title: 'GBX column of the metadata (0 when missing)' },
+  { key: 'light',    label: 'Light',     w: 42, title: 'Light cycle (LD / DD / LL) of the metadata' },
+  { key: 'age',      label: 'Age',       w: 38, title: 'Age: age_min of the metadata' },
   { key: 'sleep',    label: 'Sleep',     w: 74  },
   { key: 'ethogram', label: 'Etho',      w: 48  },
   { key: 'local_id', label: 'Loc Id',    w: 50  },
@@ -210,6 +213,9 @@ const BlobsTable = ({ Data, setFrameNumber, number_of_animals, animalMetadata = 
               <TC value={row.identity} />
               <TC value={meta.sex || '—'} />
               <TC value={meta.genotype || '—'} title={meta.genotype || ''} />
+              <TC value={meta.gbx ?? '0'} />
+              <TC value={meta.light_cycle || '—'} />
+              <TC value={meta.age || '—'} />
 
               {/* Sleep navigation */}
               {!readOnly && <td style={{ whiteSpace: 'nowrap' }}>
