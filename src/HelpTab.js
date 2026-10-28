@@ -737,7 +737,9 @@ export default function HelpTab() {
               <code>imgstore-crop-arenas --input metadata.yaml --arenas arenas.toml --jobs 4 --gpu --size 1024</code> in the
               background (it survives server restarts): one recording per arena in <code>arenas/1</code>, <code>arenas/2</code>, …,
               whose settings roi-proposer then proposes. Progress in chunks and <code>crop_arenas.log</code>; the arena buttons open
-              an arena's settings in the editor. Running it again overwrites the arena folders (you are asked first).</li>
+              an arena's settings in the editor. Running it again overwrites the arena folders (you are asked first); <b>Resume</b>
+              (<code>--resume</code>, shown once <code>arenas/</code> holds folders, highlighted when the last run did not finish) only
+              crops the chunks not done for every arena, after deleting the files of the ones left incomplete.</li>
             <li><b>preprocess-sample</b>: checks the saved <code>.conf</code> on a sample of frames of every chunk (default: 20 per
               chunk, up to chunk 299) and lists the frames where the blobs are not the number of animals in{' '}
               <code>preprocess_sample.csv</code>. It runs for hours in the background (also after a server restart; <i>Stop</i> ends it).

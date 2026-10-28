@@ -404,12 +404,13 @@ function CropArenasCard({ experiment, active, refreshKey, onEdit }) {
     return () => clearInterval(timer);
   }, [active, status?.running, fetchStatus]);
 
-  const start = async () => {
-    if (status.arenas.length && !window.confirm(`arenas/ already holds ${status.arenas.length} arena folder${status.arenas.length === 1 ? '' : 's'}: `
-        + 'crop them again from arenas.toml? Their videos and metadata.yaml are overwritten and roi-proposer proposes their tomls again.')) return;
+  const start = async (resume = false) => {
+    if (!resume && status.arenas.length && !window.confirm(`arenas/ already holds ${status.arenas.length} arena folder${status.arenas.length === 1 ? '' : 's'}: `
+        + 'crop them again from arenas.toml? Their videos and metadata.yaml are overwritten and roi-proposer proposes their tomls again.'
+        + ' (Resume only crops the chunks that are not done.)')) return;
     try {
-      const data = unwrap((await api.post('/api/collector/crop_arenas', { experiment })).data);
-      log('info', `imgstore-crop-arenas started on ${experiment} (pid ${data.pid})`);
+      const data = unwrap((await api.post('/api/collector/crop_arenas', { experiment, resume })).data);
+      log('info', `imgstore-crop-arenas ${resume ? 'resumed' : 'started'} on ${experiment} (pid ${data.pid})`);
       setShowLog(true);
       setTimeout(fetchStatus, 1500);
     } catch (err) {
@@ -429,6 +430,9 @@ function CropArenasCard({ experiment, active, refreshKey, onEdit }) {
 
   if (status?.arena) return null;
   const progress = status?.progress;
+  // arena folders of a run that did not end with exit code 0 (stopped, killed or failed)
+  const canResume = Boolean(status?.arenas.length && status.has_arenas_toml);
+  const unfinished = canResume && status.exit_code !== 0;
   return (
     <section className="card">
       <div className="card-header">
@@ -454,11 +458,19 @@ function CropArenasCard({ experiment, active, refreshKey, onEdit }) {
               {status.running ? (
                 <button onClick={stop}><i className="fa fa-stop" style={{ marginRight: 6 }} />Stop</button>
               ) : (
-                <button className="btn-primary" onClick={start} disabled={!status.has_arenas_toml}
-                        title={status.has_arenas_toml ? 'Crop the arenas of arenas.toml out of every chunk (GPU, 3 at once)'
-                          : 'Make arenas.toml first ("Split into N arenas" in the editor above) and save it'}>
-                  <i className="fa fa-crop" style={{ marginRight: 6 }} />Crop arenas
-                </button>
+                <>
+                  <button className={unfinished ? undefined : 'btn-primary'} onClick={() => start(false)} disabled={!status.has_arenas_toml}
+                          title={status.has_arenas_toml ? 'Crop the arenas of arenas.toml out of every chunk (GPU, 4 at once)'
+                            : 'Make arenas.toml first ("Split into N arenas" in the editor above) and save it'}>
+                    <i className="fa fa-crop" style={{ marginRight: 6 }} />Crop arenas
+                  </button>
+                  {canResume && (
+                    <button className={unfinished ? 'btn-primary' : undefined} onClick={() => start(true)}
+                            title="imgstore-crop-arenas --resume: skips the chunks already cropped for every arena, deletes the files of the chunks left incomplete and crops them again">
+                      <i className="fa fa-play" style={{ marginRight: 6 }} />Resume
+                    </button>
+                  )}
+                </>
               )}
               <button onClick={fetchStatus}><i className="fa fa-refresh" style={{ marginRight: 6 }} />Refresh</button>
               {!status.has_arenas_toml && <span className="sc-muted">No arenas.toml saved yet</span>}
