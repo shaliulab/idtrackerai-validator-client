@@ -9,12 +9,14 @@
 // laid along the fly's body (server side).
 // Edits are sent as they happen (one queue, in order); the server writes the file a
 // couple of seconds after the last one. Its `request` prop ({fly, frameNumber}) opens
-// a fly's frame: used by the Pose tab.
+// a fly's frame: used by the Pose tab. "Train…" opens the training panel (SleapTrain.js, the
+// GPU queue) above the frames (open state in fh-sleap-train-open).
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import api, { apiUrl } from './api';
 import { useElementSize, useFillHeight } from './layout';
 import { useConsole } from './MessageConsole';
+import SleapTrain from './SleapTrain';
 
 const unwrap = (data) => (typeof data === 'string' ? JSON.parse(data) : data);
 const fix = (v, d = 1) => (v == null ? '–' : v.toFixed(d));
@@ -247,6 +249,7 @@ export default function SleapLabelsTab({ active, currentExperiment, request, vie
   const [pending, setPending] = useState(0);      // writes queued here
   const [newFly, setNewFly] = useState('');
   const [newFrame, setNewFrame] = useState('');
+  const [trainOpen, setTrainOpen] = useState(() => { try { return localStorage.getItem('fh-sleap-train-open') === '1'; } catch { return false; } });
   const [rootEl, setRootEl] = useState(null);
   const [viewEl, setViewEl] = useState(null);
   const fillHeight = useFillHeight(rootEl, [active, data]);
@@ -258,6 +261,7 @@ export default function SleapLabelsTab({ active, currentExperiment, request, vie
   draftRef.current = draft;
 
   useEffect(() => { try { if (file) localStorage.setItem(FILE_KEY, file); } catch { /* ignore */ } }, [file]);
+  useEffect(() => { try { localStorage.setItem('fh-sleap-train-open', trainOpen ? '1' : '0'); } catch { /* ignore */ } }, [trainOpen]);
 
   const fetchFiles = useCallback(() => api.get('/api/sleap/files').then((r) => {
     const list = unwrap(r.data).files;
@@ -544,7 +548,12 @@ export default function SleapLabelsTab({ active, currentExperiment, request, vie
         </label>
         <button onClick={() => newFrame !== '' && openFly(newFly, Number(newFrame))} disabled={!newFly || newFrame === ''}>Open</button>
         <button onClick={() => viewerFrame != null && setNewFrame(String(viewerFrame))} title="The Group viewer's frame">Viewer frame</button>
+        <span className="toolbar-sep" />
+        <button className={trainOpen ? 'btn-primary' : undefined} onClick={() => setTrainOpen((v) => !v)}
+                title="Train a SLEAP model on this file (GPU queue)">Train…</button>
       </div>
+
+      {trainOpen && file && <SleapTrain active={active} file={file} />}
 
       {status?.error && <div className="card qc-pad sl-error">{status.error}</div>}
 

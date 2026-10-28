@@ -15,6 +15,7 @@ const SECTIONS = [
   { id: 'help-qc', title: 'QC' },
   { id: 'help-pose', title: 'Pose' },
   { id: 'help-sleap', title: 'SLEAP labels' },
+  { id: 'help-gpu-queue', title: 'GPU queue' },
   { id: 'help-overview-tab', title: 'Metadata overview' },
   { id: 'help-data', title: 'Data management' },
   { id: 'help-monitor', title: 'Monitor' },
@@ -527,6 +528,31 @@ export default function HelpTab() {
             again and drops the changes not written. <i>Delete label</i> removes the frame's user
             instance (the prediction stays); <Key>Ctrl</Key>+<Key>Z</Key> undoes any change.
           </p>
+          <p>
+            <b>Train…</b> opens the training panel: <i>Queue training</i> saves the file and puts{' '}
+            <code>sleap-train</code> in the <a href="#help-gpu-queue">GPU queue</a> with the configuration of a previous model
+            (<i>Config of</i>, default the newest complete one) and this file as training labels (10 % kept for validation, as
+            before). It reads the file when it starts, so labels made while it waits are included. The model goes to{' '}
+            <code>models/</code> under SLEAP's name (<code>&lt;date_time&gt;.single_instance.n=&lt;frames&gt;</code>); the panel
+            shows the epochs done (it usually stops before the maximum, when the validation loss stops improving) and the
+            models made so far with their best validation loss.
+          </p>
+        </Section>
+        <Section id="help-gpu-queue" title="GPU queue">
+          <p>
+            <code>imgstore-crop-arenas</code> and <code>sleap-train</code> do not start right away: they wait in the GPU queue
+            (Data collector tab, and the training panel of the SLEAP labels tab) until the GPU has room for them. Running out of
+            GPU memory is what breaks these jobs (a crop whose encoder cannot get memory waits an hour before trying that chunk
+            again), so the rule is about memory: a job starts when its <i>estimate</i> fits in what is <i>available</i> = total −
+            used now − what the running GPU jobs may still take (their estimate minus what they use now: a crop's encoders come
+            and go chunk by chunk, and a job just started has not allocated yet) − a 4 GB margin. <i>Used now</i> includes
+            everything on the GPU, also nextflow's SLEAP inference and jobs started by hand. The estimate is 1.4 GB per encoder
+            for a crop (4 at once) and 12 GB for a training, or the peak measured in the last runs of that kind when higher. At
+            most one training runs at a time. First in, first out: when the first job does not fit, the ones behind it wait too
+            (so a training is not passed by a stream of crops); <i>Run next</i> moves a job to the front, ✕ takes it out, ■ stops
+            a running one. The bar shows the memory used, reserved and the margin; the first waiting job says why it waits.
+            Jobs run in the background and survive server restarts; with no server running, nothing new starts.
+          </p>
         </Section>
 
         <Section id="help-overview-tab" title="Metadata overview">
@@ -757,6 +783,10 @@ export default function HelpTab() {
             From a new recording on <b>cv2</b> (the recording computer) to idtrackerai settings that work, in three cards.
           </p>
           <ul>
+            <li><b>Running now</b> (top): every <code>imgstore-crop-arenas</code> and <code>preprocess-sample</code> running on
+              the server, also those started by hand, with chunks done / total, how long it has run, the time left (tqdm's
+              estimate for crops, the pace so far for preprocess-sample) and when its log was last written (in amber after an
+              hour). Refreshed every 10 s; <i>Show</i> chooses the experiment and scrolls to its card, ■ stops it.</li>
             <li><b>Fetch from cv2</b>: pick the day it was <i>Recorded on</i>; the table lists that day's experiments on cv2:
               when they started (UTC) and at which ZT, how much cv2 has, what a fetch copies (<i>Up to ZT30</i>: the folder's
               files and the chunks starting before ZT 30, i.e. the first day and a buffer; later chunks are not needed) and how
@@ -780,9 +810,10 @@ export default function HelpTab() {
               turns red when their number is not the number of animals. Check several frames (Random, ←/→, chunk).{' '}
               <b>Save</b> (Ctrl+S) writes the file (the previous version goes to <code>toml_backups/</code>) and converts{' '}
               <code>&lt;date&gt;.toml</code> into the <code>&lt;date&gt;.conf</code> tracking and preprocess-sample read.</li>
-            <li><b>Crop arenas</b> (whole recordings with a saved <code>arenas.toml</code>): runs{' '}
+            <li><b>GPU queue</b> (below Running now): the crops waiting for GPU memory, see <a href="#help-gpu-queue">GPU queue</a>.</li>
+            <li><b>Crop arenas</b> (whole recordings with a saved <code>arenas.toml</code>): puts{' '}
               <code>imgstore-crop-arenas --input metadata.yaml --arenas arenas.toml --jobs 4 --gpu --size 1024</code> in the
-              background (it survives server restarts): one recording per arena in <code>arenas/1</code>, <code>arenas/2</code>, …,
+              GPU queue, which runs it in the background when the GPU has room (<i>Cancel</i> while it waits; it survives server restarts): one recording per arena in <code>arenas/1</code>, <code>arenas/2</code>, …,
               whose settings roi-proposer then proposes. Progress in chunks and <code>crop_arenas.log</code>; the arena buttons open
               an arena's settings in the editor. Running it again overwrites the arena folders (you are asked first); <b>Resume</b>
               (<code>--resume</code>, shown once <code>arenas/</code> holds folders, highlighted when the last run did not finish) only

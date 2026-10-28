@@ -1,8 +1,11 @@
 // "Data collector" tab (Ctrl+0): new recordings from cv2, from fetching to checked settings.
+//   0. Running now: every imgstore-crop-arenas / preprocess-sample on this computer with its
+//      progress (/api/collector/running), polled every 10 s; a row selects its experiment.
 //   1. Fetch from cv2: the experiments of a date on cv2 and what a fetch copies (chunks before
 //      ZT `zt_limit`, fh-collector-zt), rsync as a job (/api/collector/*, data_collector.py).
 //   2. Segmentation settings: roi-proposer + the editor (SegmentationEditor.js).
-//   3. Crop arenas: imgstore-crop-arenas once arenas.toml is saved (recordings split into arenas).
+//   3. Crop arenas: imgstore-crop-arenas once arenas.toml is saved (recordings split into arenas),
+//      through the GPU queue (GpuQueue.js, below "Running now").
 //   4. preprocess-sample: started / stopped here, its preprocess_sample.csv as a table and a
 //      per-chunk strip; a row opens the frame in the editor with the CSV's centroids.
 // The experiment edited is kept in fh-collector-experiment, the date in fh-collector-date.
@@ -10,6 +13,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import api from './api';
 import { useConsole } from './MessageConsole';
 import SegmentationEditor from './SegmentationEditor';
+import GpuQueueCard from './GpuQueue';
 
 const unwrap = (data) => (typeof data === 'string' ? JSON.parse(data) : data);
 const errorOf = (err) => err.response?.data?.error ?? err.message;
@@ -27,6 +31,146 @@ function fetchState(e) {
   if (e.wanted_files && e.here_files === e.wanted_files) return ['here', 'dm-ok'];
   if (e.here_files > 0) return [`${e.here_files}/${e.wanted_files} files here`, 'dm-warn'];
   return ['not here', 'dm-none'];
+}
+
+// ── 0. Running now ─────────────────────────────────────────────────────────
+const TOOLS = { crop_arenas: 'imgstore-crop-arenas', preprocess_sample: 'preprocess-sample' };
+
+function hms(text) {
+  // tqdm's "1:53:51" / "53:51" → seconds
+  if (!text || !/^[\d:]+$/.test(text)) return null;
+  return text.split(':').reduce((s, part) => s * 60 + Number(part), 0);
+}
+function duration(seconds) {
+  if (seconds == null || !Number.isFinite(seconds)) return '–';
+  const m = Math.round(seconds / 60);
+  if (m < 60) return `${m} min`;
+  const h = Math.floor(m / 60);
+  return h < 48 ? `${h} h ${m % 60} min` : `${(h / 24).toFixed(1)} d`;
+}
+
+function RunningCard({ active, selected, onSelect }) {
+  const { log } = useConsole();
+  const [data, setData] = useState(null);
+  const [error, setError] = useState(null);
+  const [loading, setLoading] = useState(false);
+
+  const fetchRuns = useCallback(async () => {
+    setLoading(true);
+    try {
+      setData(unwrap((await api.get('/api/collector/running')).data));
+      setError(null);
+    } catch (err) {
+      setError(errorOf(err));
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!active) return undefined;
+    fetchRuns();
+    const timer = setInterval(fetchRuns, 10000);
+    return () => clearInterval(timer);
+  }, [active, fetchRuns]);
+
+  const stop = async (run) => {
+    if (!window.confirm(`Stop ${TOOLS[run.tool]} on ${run.experiment}?`
+        + (run.tool === 'crop_arenas' ? ' The chunks being encoded are left incomplete (Resume crops them again).' : ' The CSV keeps the chunks checked so far.'))) return;
+    try {
+      await api.post(`/api/collector/${run.tool}/stop`, { experiment: run.experiment });
+      log('info', `${TOOLS[run.tool]} stopped on ${run.experiment}`);
+      setTimeout(fetchRuns, 1000);
+    } catch (err) {
+      log('error', `Stop: ${errorOf(err)}`);
+    }
+  };
+
+  const runs = data?.runs || [];
+  const now = data?.now ?? Date.now() / 1000;
+  const counts = Object.keys(TOOLS).map((tool) => [tool, runs.filter((r) => r.tool === tool).length]).filter(([, n]) => n);
+
+  return (
+    <section className="card">
+      <div className="card-header">
+        Running now
+        <span className="spacer" />
+        <span className="ov-normal">
+          {counts.map(([tool, n]) => <span key={tool} className="sc-badge sc-rec" style={{ marginLeft: 6 }}>{n} × {TOOLS[tool]}</span>)}
+          <button style={{ marginLeft: 8 }} onClick={fetchRuns} title="Refresh (also every 10 s while this tab is shown)">
+            <i className={`fa fa-refresh ${loading ? 'fa-spin' : ''}`} />
+          </button>
+        </span>
+      </div>
+      <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {error && <div className="ov-warn">{error}</div>}
+        {data && !runs.length && <div className="sc-muted">No imgstore-crop-arenas or preprocess-sample running.</div>}
+        {runs.length > 0 && (
+          <div className="ov-scroll">
+            <table className="ov-table">
+              <thead>
+                <tr><th>Tool</th><th>Experiment</th><th style={{ minWidth: 180 }}>Progress</th><th>Running for</th><th>Time left</th><th>Log</th><th /></tr>
+              </thead>
+              <tbody>
+                {runs.map((run) => {
+                  const p = run.progress;
+                  const fraction = p && p.total > 0 ? p.done / p.total : null;
+                  let left = null;
+                  let leftTitle = '';
+                  if (run.tool === 'crop_arenas' && p) {
+                    // tqdm's estimate when it last wrote the bar
+                    left = hms(p.remaining);
+                    if (left != null && run.log_mtime) left = Math.max(0, left - (now - run.log_mtime));
+                    leftTitle = `tqdm's estimate (${p.remaining} at ${run.log_mtime ? new Date(run.log_mtime * 1000).toLocaleTimeString() : '?'})`;
+                  } else if (fraction > 0) {
+                    left = (now - run.started) * (1 - fraction) / fraction;
+                    leftTitle = 'From the pace since the start';
+                  }
+                  const logAge = run.log_mtime ? now - run.log_mtime : null;
+                  const otherLine = run.last_line && !run.last_line.startsWith('Cropping chunks') ? run.last_line : null;
+                  return (
+                    <tr key={`${run.tool} ${run.folder}`} className={selected && run.experiment === selected ? 'sc-row-on' : ''}>
+                      <td className="mono">{TOOLS[run.tool]}{run.resume ? ' --resume' : ''}</td>
+                      <td>
+                        <span className="mono">{run.experiment || run.folder}</span>
+                        {otherLine && <div className="mono sc-small ov-warn" title="Last line of crop_arenas.log">{otherLine}</div>}
+                      </td>
+                      <td>
+                        {p ? (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <div className="sc-progress" style={{ flex: 1 }}><div style={{ width: `${(100 * (fraction || 0)).toFixed(1)}%` }} /></div>
+                            <span className="mono sc-small" style={{ whiteSpace: 'nowrap' }}>
+                              {p.done}/{p.total} chunks{run.tool === 'preprocess_sample' && run.current_chunk != null ? ` · ${run.current_chunk}` : ''}
+                            </span>
+                          </div>
+                        ) : <span className="sc-muted">no progress yet</span>}
+                      </td>
+                      <td title={`Started ${new Date(run.started * 1000).toLocaleString()} · pid ${run.pid}`}>{duration(now - run.started)}</td>
+                      <td title={leftTitle}>
+                        {left != null ? <>{duration(left)} <span className="sc-muted sc-small">({new Date((now + left) * 1000).toLocaleString([], { weekday: 'short', hour: '2-digit', minute: '2-digit' })})</span></> : '–'}
+                      </td>
+                      <td className={logAge != null && logAge > 3600 ? 'ov-warn' : ''}
+                          title={run.log_mtime ? `Log written ${new Date(run.log_mtime * 1000).toLocaleString()}` : 'No log'}>
+                        {logAge != null ? `${duration(logAge)} ago` : '–'}
+                      </td>
+                      <td style={{ whiteSpace: 'nowrap' }}>
+                        {run.experiment && (
+                          <button onClick={() => onSelect(run.experiment, run.tool)} title="Choose this experiment: its card below shows the log">Show</button>
+                        )}
+                        {run.experiment && (
+                          <button style={{ marginLeft: 4 }} onClick={() => stop(run)} title={`Stop ${TOOLS[run.tool]}`}><i className="fa fa-stop" /></button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </section>
+  );
 }
 
 // ── 1. Fetch from cv2 ──────────────────────────────────────────────────────
@@ -398,19 +542,20 @@ function CropArenasCard({ experiment, active, refreshKey, onEdit }) {
   }, [experiment]);
 
   useEffect(() => { if (active) fetchStatus(); }, [active, fetchStatus, refreshKey]);
+  const busy = Boolean(status?.running || status?.queue);
   useEffect(() => {
-    if (!active || !status?.running) return undefined;
+    if (!active || !busy) return undefined;
     const timer = setInterval(fetchStatus, 10000);
     return () => clearInterval(timer);
-  }, [active, status?.running, fetchStatus]);
+  }, [active, busy, fetchStatus]);
 
   const start = async (resume = false) => {
     if (!resume && status.arenas.length && !window.confirm(`arenas/ already holds ${status.arenas.length} arena folder${status.arenas.length === 1 ? '' : 's'}: `
         + 'crop them again from arenas.toml? Their videos and metadata.yaml are overwritten and roi-proposer proposes their tomls again.'
         + ' (Resume only crops the chunks that are not done.)')) return;
     try {
-      const data = unwrap((await api.post('/api/collector/crop_arenas', { experiment, resume })).data);
-      log('info', `imgstore-crop-arenas ${resume ? 'resumed' : 'started'} on ${experiment} (pid ${data.pid})`);
+      unwrap((await api.post('/api/collector/crop_arenas', { experiment, resume })).data);
+      log('info', `imgstore-crop-arenas${resume ? ' --resume' : ''} on ${experiment} queued: it starts when the GPU has room`);
       setShowLog(true);
       setTimeout(fetchStatus, 1500);
     } catch (err) {
@@ -418,10 +563,12 @@ function CropArenasCard({ experiment, active, refreshKey, onEdit }) {
     }
   };
   const stop = async () => {
-    if (!window.confirm('Stop imgstore-crop-arenas? The chunks being encoded are left incomplete.')) return;
+    const waiting = status.queue?.status === 'queued';
+    if (!window.confirm(waiting ? 'Take imgstore-crop-arenas out of the GPU queue?'
+      : 'Stop imgstore-crop-arenas? The chunks being encoded are left incomplete.')) return;
     try {
       await api.post('/api/collector/crop_arenas/stop', { experiment });
-      log('info', 'imgstore-crop-arenas stopped');
+      log('info', waiting ? 'imgstore-crop-arenas taken out of the GPU queue' : 'imgstore-crop-arenas stopped');
       setTimeout(fetchStatus, 1000);
     } catch (err) {
       log('error', `Stop: ${errorOf(err)}`);
@@ -430,6 +577,7 @@ function CropArenasCard({ experiment, active, refreshKey, onEdit }) {
 
   if (status?.arena) return null;
   const progress = status?.progress;
+  const waiting = status?.queue?.status === 'queued' ? status.queue : null;
   // arena folders of a run that did not end with exit code 0 (stopped, killed or failed)
   const canResume = Boolean(status?.arenas.length && status.has_arenas_toml);
   const unfinished = canResume && status.exit_code !== 0;
@@ -443,6 +591,7 @@ function CropArenasCard({ experiment, active, refreshKey, onEdit }) {
             running{progress ? ` · ${progress.done}/${progress.total} chunks` : ''}
           </span>
         )}
+        {waiting && <span className="ov-normal sc-badge">GPU queue #{waiting.position}</span>}
       </div>
       <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         {!experiment && <div className="sc-muted">Choose an experiment above.</div>}
@@ -455,12 +604,17 @@ function CropArenasCard({ experiment, active, refreshKey, onEdit }) {
               It runs in the background and keeps running if the server restarts.
             </div>
             <div className="toolbar">
-              {status.running ? (
+              {waiting ? (
+                <>
+                  <span>Waiting in the GPU queue (#{waiting.position}): {waiting.reason || 'starting…'}</span>
+                  <button onClick={stop}><i className="fa fa-times" style={{ marginRight: 6 }} />Cancel</button>
+                </>
+              ) : status.running ? (
                 <button onClick={stop}><i className="fa fa-stop" style={{ marginRight: 6 }} />Stop</button>
               ) : (
                 <>
                   <button className={unfinished ? undefined : 'btn-primary'} onClick={() => start(false)} disabled={!status.has_arenas_toml}
-                          title={status.has_arenas_toml ? 'Crop the arenas of arenas.toml out of every chunk (GPU, 4 at once)'
+                          title={status.has_arenas_toml ? 'Crop the arenas of arenas.toml out of every chunk (GPU, 4 at once), once the GPU queue has room'
                             : 'Make arenas.toml first ("Split into N arenas" in the editor above) and save it'}>
                     <i className="fa fa-crop" style={{ marginRight: 6 }} />Crop arenas
                   </button>
@@ -510,6 +664,8 @@ export default function DataCollectorTab({ active, onOpenExperiment }) {
   const [highlight, setHighlight] = useState(null);    // CSV frame shown in the editor
   const [savedKey, setSavedKey] = useState(0);
   const editorRef = useRef(null);
+  const cropRef = useRef(null);
+  const preprocessRef = useRef(null);
 
   useEffect(() => store('fh-collector-experiment', experiment), [experiment]);
 
@@ -518,6 +674,12 @@ export default function DataCollectorTab({ active, onOpenExperiment }) {
     setHighlight(null);
     setTimeout(() => editorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
   };
+  const showRun = (name, tool) => {
+    setExperiment(name);
+    setHighlight(null);
+    const ref = tool === 'crop_arenas' ? cropRef : preprocessRef;
+    setTimeout(() => ref.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 300);
+  };
   const showFrame = (frame) => {
     setHighlight({ ...frame });
     editorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -525,6 +687,10 @@ export default function DataCollectorTab({ active, onOpenExperiment }) {
 
   return (
     <div className="sc-tab">
+      <RunningCard active={active} selected={experiment} onSelect={showRun} />
+
+      <GpuQueueCard active={active} />
+
       <FetchCard active={active} onEdit={edit} editing={experiment} onOpenExperiment={onOpenExperiment} />
 
       <section className="card" ref={editorRef}>
@@ -540,10 +706,12 @@ export default function DataCollectorTab({ active, onOpenExperiment }) {
                             onSaved={() => setSavedKey((k) => k + 1)} />
       </section>
 
-      <CropArenasCard experiment={experiment} active={active} refreshKey={savedKey} onEdit={edit} />
+      <div ref={cropRef}><CropArenasCard experiment={experiment} active={active} refreshKey={savedKey} onEdit={edit} /></div>
 
-      <PreprocessCard experiment={experiment} active={active} refreshKey={savedKey}
-                      onShowFrame={showFrame} shownFrame={highlight?.frame_number} />
+      <div ref={preprocessRef}>
+        <PreprocessCard experiment={experiment} active={active} refreshKey={savedKey}
+                        onShowFrame={showFrame} shownFrame={highlight?.frame_number} />
+      </div>
     </div>
   );
 }

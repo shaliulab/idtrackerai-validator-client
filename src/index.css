@@ -951,5 +951,11 @@ button.ov-sheet.ov-sheet-error { border-color: var(--danger); color: var(--dange
 .sc-strip { width: 100%; height: 34px; display: block; background: var(--surface-2); border-radius: 4px; }
 .sc-progress { height: 6px; background: var(--surface-2); border-radius: 3px; overflow: hidden; }
 .sc-progress > div { height: 100%; background: var(--accent); }
+/* GpuQueue.js: GPU memory budget (used, reserved for running jobs, margin, rest available) */
+.gq-bar { display: flex; height: 12px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 3px; overflow: hidden; }
+.gq-used { background: var(--accent); }
+.gq-reserved { background: repeating-linear-gradient(45deg, var(--accent) 0 3px, var(--accent-soft) 3px 7px); }
+.gq-margin { background: var(--border-strong); }
+.gq-key { display: inline-block; width: 10px; height: 10px; margin-right: 5px; vertical-align: -1px; border: 1px solid var(--border-strong); background: var(--surface-2); }
 .sc-log { max-height: 260px; overflow: auto; font-size: 11px; background: var(--surface-2); padding: 8px; border-radius: var(--radius); margin: 6px 0 0; }
 .sc-csv { max-height: 420px; }
