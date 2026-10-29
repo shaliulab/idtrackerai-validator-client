@@ -139,9 +139,9 @@ function applyFilters(rows, filters, except) {
 // ALONE = the only fly of the experiment), in experiments recorded between `from`
 // and `to` (inclusive, YYYY-MM-DD). `nGenotype` / `nCohoused`: exact number of
 // flies of each of the two genotypes in the experiment (any if empty).
-// `analyzed` / `validated` / `deg`: 'yes' keeps only, 'no' excludes those experiments (any if empty).
+// `analyzed` / `validated` / `deg` / `arena`: 'yes' keeps only, 'no' excludes those experiments (any if empty).
 const EMPTY_QUERY = { genotype: '', cohoused: '', nGenotype: '', nCohoused: '', from: '', to: '',
-  analyzed: '', validated: '', deg: '' };
+  analyzed: '', validated: '', deg: '', arena: '' };
 
 // Validated: _VAL tables, or a single fly (never validated: its tracking is final).
 // The NX of an arena's path is the recording's, so an arena counts its metadata rows.
@@ -150,6 +150,8 @@ const isSingleFly = (e) => (e.arena != null ? e.flies.length : e.group_size) ===
 const isValidated = (e) => isAnalyzed(e) && (e.has_val || isSingleFly(e));
 // DEG labels: at least one fly has labelled frames in a DEG project (ground truth ethogram).
 const hasDegLabels = (e) => e.deg_videos > 0;
+// Arena: an arena of a multi-arena recording (…/arenas/<n>), else a normal petri dish.
+const isArena = (e) => e.arena != null;
 const matches = (want, value) => !want || (want === 'yes') === value;
 const queryActive = (q) => Object.values(q).some(Boolean);
 
@@ -163,6 +165,7 @@ function applyQuery(rows, q) {
     if (!matches(q.analyzed, isAnalyzed(row._exp))) return false;
     if (!matches(q.validated, isValidated(row._exp))) return false;
     if (!matches(q.deg, hasDegLabels(row._exp))) return false;
+    if (!matches(q.arena, isArena(row._exp))) return false;
     if ((q.genotype || q.cohoused) && row._noFly) return false;
     if (q.genotype && row.genotype !== q.genotype) return false;
     if (q.genotype && q.nGenotype && (row._counts[q.genotype] || 0) !== Number(q.nGenotype)) return false;
@@ -239,6 +242,7 @@ function QueryPanel({ rows, query, setQuery, stats, dateRange }) {
   if (query.analyzed) parts.push(<> {query.analyzed === 'yes' ? 'analyzed' : 'not analyzed'}</>);
   if (query.validated) parts.push(<> {query.validated === 'yes' ? 'validated' : 'not validated'}</>);
   if (query.deg) parts.push(<> {query.deg === 'yes' ? 'with' : 'without'} DEG labels</>);
+  if (query.arena) parts.push(<> {query.arena === 'yes' ? 'in an arena' : 'in a petri dish'}</>);
   if (query.from || query.to) parts.push(<> recorded {query.from ? `from ${query.from}` : ''} {query.to ? `to ${query.to}` : ''}</>);
 
   return (
@@ -291,6 +295,8 @@ function QueryPanel({ rows, query, setQuery, stats, dateRange }) {
               title="Validated: analyzed with _VAL tables, or with a single fly (never validated, its tracking is final)" />
       <Toggle label="DEG labels" value={query.deg} onChange={(v) => setQuery((q) => ({ ...q, deg: v }))}
               title="At least one fly has labelled frames in a deepethogram project (ground truth ethogram)" />
+      <Toggle label="Arena" value={query.arena} onChange={(v) => setQuery((q) => ({ ...q, arena: v }))}
+              title="Only: flies in an arena of a multi-arena recording (…/arenas/<n>); exclude: flies in a normal petri dish" />
       {queryActive(query) && <button className="ov-link" onClick={() => setQuery(EMPTY_QUERY)}>Clear</button>}
       {queryActive(query) && (
         <div className="ov-query-result">
@@ -768,7 +774,7 @@ function downloadCsv(rows, columns) {
 
 const TOGGLE_TEXT = { yes: 'only', no: 'excluded' };
 const QUERY_LABELS = { genotype: 'genotype', nGenotype: 'its flies', cohoused: 'living with', nCohoused: 'how many',
-  from: 'from', to: 'to', analyzed: 'analyzed', validated: 'validated', deg: 'DEG labels' };
+  from: 'from', to: 'to', analyzed: 'analyzed', validated: 'validated', deg: 'DEG labels', arena: 'arena' };
 
 // Everything that hides experiments (search, the stored query, bar filters) in one
 // banner, so a restriction left over from earlier is not missed.

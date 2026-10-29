@@ -579,7 +579,9 @@ export default function HelpTab() {
               fly (those are never validated, their tracking is final). <i>DEG labels</i> does the same for
               experiments where at least one fly has labelled frames in a deepethogram project (the
               ground truth ethograms, e.g. made in the Ethograms tab); the <i>DEG</i> column of the
-              table counts those videos (one per chunk of a fly).
+              table counts those videos (one per chunk of a fly). <i>Arena</i> keeps (only) or drops
+              (exclude) the flies recorded in an arena of a multi-arena recording
+              (<code>…/arenas/&lt;n&gt;</code>), as opposed to a normal petri dish.
             </li>
             <li>
               <i>Cohoused with (other genotypes)</i> is the genotypes of the other flies of a fly's
