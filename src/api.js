@@ -15,4 +15,14 @@ const api = axios.create({
   baseURL: API_BASE,
 });
 
+// The session ended (expired, signed out in another tab, server secret changed):
+// back to the login page, then to where we were.
+api.interceptors.response.use(undefined, (error) => {
+  if (error.response?.status === 401 && error.response.data?.login) {
+    const next = window.location.pathname + window.location.search;
+    window.location.assign(`${API_BASE}/login?next=${encodeURIComponent(next)}`);
+  }
+  return Promise.reject(error);
+});
+
 export default api;

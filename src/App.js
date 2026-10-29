@@ -25,7 +25,7 @@ import MonitorTab from './MonitorTab';
 import ValidationCsvBuilder from './ValidationCsvBuilder';
 import CvatLinks from './CvatLinks';
 import RoiPanel from './RoiPanel';
-import api from './api';
+import api, { apiUrl } from './api';
 import MessageConsole, { useConsole, useConsoleState, consoleHeight } from './MessageConsole';
 
 // Loaded (with hls.js) off the viewer's critical path.
@@ -103,6 +103,22 @@ function BlobsSourceTag({ info }) {
   const short = info.path.replace(/^idtrackerai\/session_/, '').replace(/\/blobs_collection(_\w+)?\.npy$/, (m, s) => (s || ''));
   const written = info.mtime ? new Date(info.mtime * 1000).toLocaleString() : '?';
   return <span className="chip" title={`${info.path}, written ${written}`}>{short}</span>;
+}
+
+// Signed-in user and a sign out button, when the server requires a login (/api/auth)
+function SignOut() {
+  const [auth, setAuth] = useState(null);
+  useEffect(() => {
+    api.get('/api/auth').then((r) => setAuth(r.data)).catch(() => {});
+  }, []);
+  if (!auth?.enabled) return null;
+  return (
+    <form method="post" action={apiUrl('/logout')} style={{ margin: 0 }}>
+      <button type="submit" title={`Signed in as ${auth.user}. Sign out of this browser`}>
+        <i className="fa fa-sign-out" style={{ marginRight: 6 }} />Sign out
+      </button>
+    </form>
+  );
 }
 
 function Logos() {
@@ -707,6 +723,7 @@ function App() {
             <i className={`fa ${themeName === 'light' ? 'fa-moon-o' : 'fa-sun-o'}`} style={{ marginRight: 6 }} />
             {themeName === 'light' ? 'Dark' : 'Light'}
           </button>
+          <SignOut />
         </div>
       </header>
 
