@@ -36,6 +36,25 @@ export function parseRoi(label) {
 const ellipseLabel = (type, e) => `${type} {'center': [${e.center[0]}, ${e.center[1]}], 'axes': [${e.axes[0]}, ${e.axes[1]}], 'angle': ${e.angle}}`;
 const polygonLabel = (type, pts) => `${type} [${pts.map(([x, y]) => `[${x.toFixed(1)}, ${y.toFixed(1)}]`).join(', ')}]`;
 
+// splitter = [[x1, y1], [x2, y2]] of landmarks.toml: the line between 2 flies that can never cross it.
+// The pipeline (split_identities.py) calls fly 1 the one on the left (top, if the line is closer to
+// horizontal than to vertical) and fly 2 the other one; same rule here.
+// -> {side(x, y): 1 or 2, normal: unit vector pointing to side 1}
+export function splitterSides([[x1, y1], [x2, y2]]) {
+  const dx = x2 - x1; const dy = y2 - y1;
+  const cross = (x, y) => dx * (y - y1) - dy * (x - x1);
+  const ref = Math.abs(dy) >= Math.abs(dx) ? [-1, 0] : [0, -1];
+  const first = Math.sign(cross((x1 + x2) / 2 + ref[0] * 1e6, (y1 + y2) / 2 + ref[1] * 1e6));
+  const len = Math.hypot(dx, dy);
+  let normal = [-dy / len, dx / len];
+  if (normal[0] * ref[0] + normal[1] * ref[1] < 0) normal = [-normal[0], -normal[1]];
+  return { side: (x, y) => (Math.sign(cross(x, y)) === first ? 1 : 2), normal };
+}
+
+const isSplitter = (points) => Array.isArray(points) && points.length === 2
+  && points.every((p) => Array.isArray(p) && p.length === 2 && p.every(Number.isFinite))
+  && (points[0][0] !== points[1][0] || points[0][1] !== points[1][1]);
+
 function roiPath(ctx, roi) {
   ctx.beginPath();
   if (roi.shape === 'Polygon') {
@@ -73,7 +92,7 @@ function fromDraft(draft) {
 const intensityModeOf = ([lo, hi]) => (lo === 0 ? 'dark' : hi === 255 ? 'bright' : 'custom');
 
 // ── Frame with ROIs, blobs and the ROI being drawn; wheel zoom, drag pan ─────
-function SegmentationCanvas({ imageUrl, width, height, rois, blobs, drawing, selected, markers, onPoint, onRemovePoint }) {
+function SegmentationCanvas({ imageUrl, width, height, rois, blobs, drawing, selected, markers, splitter, onPoint, onRemovePoint }) {
   const [box, setBox] = useState(null);
   const size = useElementSize(box);
   const canvasRef = useRef(null);
@@ -167,11 +186,37 @@ function SegmentationCanvas({ imageUrl, width, height, rois, blobs, drawing, sel
       ctx.beginPath(); ctx.arc(x, y, r, 0, 2 * Math.PI); ctx.stroke();
     });
 
+    // splitter of landmarks.toml: the whole line, and the fly number of each side
+    if (splitter && isSplitter(splitter)) {
+      const [[x1, y1], [x2, y2]] = splitter;
+      const { normal } = splitterSides(splitter);
+      const t = (2 * Math.max(width, height)) / Math.hypot(x2 - x1, y2 - y1);
+      ctx.strokeStyle = '#ffd60a';
+      ctx.lineWidth = 2 * px;
+      ctx.setLineDash([10 * px, 6 * px]);
+      ctx.beginPath();
+      ctx.moveTo(x1 - t * (x2 - x1), y1 - t * (y2 - y1));
+      ctx.lineTo(x2 + t * (x2 - x1), y2 + t * (y2 - y1));
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.font = `bold ${28 * px}px sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = '#ffd60a';
+      const [mx, my] = [(x1 + x2) / 2, (y1 + y2) / 2];
+      const off = 40 * px;
+      ctx.fillText('1', mx + normal[0] * off, my + normal[1] * off);
+      ctx.fillText('2', mx - normal[0] * off, my - normal[1] * off);
+    }
+
     // ROI being drawn
     if (drawing) {
       const pts = drawing.points;
       ctx.lineWidth = 1.5 * px;
-      ctx.strokeStyle = '#349650';
+      ctx.strokeStyle = drawing.type === 'Splitter' ? '#ffd60a' : '#349650';
+      if (drawing.type === 'Splitter' && pts.length === 1) {
+        ctx.beginPath(); ctx.arc(pts[0][0], pts[0][1], 8 * px, 0, 2 * Math.PI); ctx.stroke();
+      }
       if (drawing.type.endsWith('Polygon') && pts.length > 1) {
         ctx.setLineDash([]);
         ctx.beginPath();
@@ -193,7 +238,7 @@ function SegmentationCanvas({ imageUrl, width, height, rois, blobs, drawing, sel
       ctx.fillStyle = '#349650';
       pts.forEach(([x, y]) => { ctx.beginPath(); ctx.arc(x, y, 5 * px, 0, 2 * Math.PI); ctx.fill(); });
     }
-  }, [image, view, width, height, rois, blobs, drawing, selected, markers, side]);
+  }, [image, view, width, height, rois, blobs, drawing, selected, markers, splitter, side]);
 
   const toImage = (e) => {
     const rect = canvasRef.current.getBoundingClientRect();
@@ -378,6 +423,13 @@ export default function SegmentationEditor({ experiment, active, highlight, fram
     const { type, points } = drawing;
     setDrawing(null);
     if (!points.length) return;
+    if (type === 'Splitter') {
+      if (points.length !== 2) { log('warning', 'Splitter not changed: click 2 points of the line'); return; }
+      const splitter = points.map((p) => p.map((v) => Math.round(v * 10) / 10));
+      if (!isSplitter(splitter)) { log('warning', 'Splitter not changed: the 2 points must be different'); return; }
+      setDraft((d) => ({ ...d, splitter }));
+      return;
+    }
     try {
       let label;
       if (type.endsWith('Polygon')) {
@@ -393,6 +445,11 @@ export default function SegmentationEditor({ experiment, active, highlight, fram
       log('warning', `ROI not added: ${errorOf(err)}`);
     }
   }, [drawing, log]);
+
+  // a splitter is done with its 2nd point
+  useEffect(() => {
+    if (drawing?.type === 'Splitter' && drawing.points.length === 2) finishDrawing();
+  }, [drawing, finishDrawing]);
 
   const save = useCallback(async () => {
     if (!draft || !fileName) return;
@@ -489,6 +546,19 @@ export default function SegmentationEditor({ experiment, active, highlight, fram
   const intensity = draft?.intensity_ths || [0, 0];
   const area = draft?.area_ths || [0, 'inf'];
   const upper = area[1] !== 'inf';
+  const isLandmarks = fileName === 'landmarks.toml';
+  const splitter = isLandmarks && isSplitter(draft?.splitter) ? draft.splitter : null;
+  // blobs on each side of the splitter (centroid = mean of the contour points)
+  const blobsPerSide = splitter && (() => {
+    const { side } = splitterSides(splitter);
+    const counts = { 1: 0, 2: 0 };
+    blobs.contours.forEach((contour) => {
+      const pts = contour.map((p) => (Array.isArray(p[0]) ? p[0] : p));
+      if (!pts.length) return;
+      counts[side(pts.reduce((t, p) => t + p[0], 0) / pts.length, pts.reduce((t, p) => t + p[1], 0) / pts.length)] += 1;
+    });
+    return counts;
+  })();
 
   const setIntensityModeTo = (mode) => {
     setIntensityMode(mode);
@@ -595,7 +665,7 @@ export default function SegmentationEditor({ experiment, active, highlight, fram
                 <b>Regions of interest</b>
               </label>
               <span className="spacer" style={{ flex: 1 }} />
-              {drawing ? (
+              {drawing && drawing.type !== 'Splitter' ? (
                 <>
                   <span className="sc-muted">{drawing.type}: {drawing.points.length} pts</span>
                   <button className="btn-primary" onClick={finishDrawing} title="Enter">Done</button>
@@ -615,7 +685,7 @@ export default function SegmentationEditor({ experiment, active, highlight, fram
                 ))}
               </div>
             )}
-            {drawing && (
+            {drawing && drawing.type !== 'Splitter' && (
               <div className="sc-hint">
                 Click on the frame to add points (right click removes the nearest one); {drawing.type.endsWith('Ellipse') ? '5 or more' : '3 or more'} points, then Enter.
               </div>
@@ -661,6 +731,42 @@ export default function SegmentationEditor({ experiment, active, highlight, fram
               </label>
             )}
             <hr className="sc-hr" />
+
+            {/* Splitter between 2 flies (landmarks.toml only), read by the pipeline's splitter.nf */}
+            {isLandmarks && (
+              <>
+                <div className="sc-row" title="Line between 2 flies separated by a splitter. splitter.nf calls fly 1 the one on the left (top, if the line is closer to horizontal) and fly 2 the other one; without a splitter, it uses the vertical midline of the frame">
+                  <b>Splitter</b>
+                  <span className="spacer" style={{ flex: 1 }} />
+                  {drawing?.type === 'Splitter' ? (
+                    <button onClick={() => setDrawing(null)} title="Esc">Cancel</button>
+                  ) : (
+                    <>
+                      <button onClick={() => { setDrawing({ type: 'Splitter', points: [], ellipse: null }); setChoosingType(false); setSelectedRoi(null); }}>
+                        {splitter ? 'Redraw' : 'Draw'}
+                      </button>
+                      <button onClick={() => set({ splitter: [[store.width / 2, 0], [store.width / 2, store.height]] })}
+                              title="Vertical line through the middle of the frame">Midline</button>
+                      {draft.splitter != null && <button onClick={() => set({ splitter: null })} title="No splitter in landmarks.toml">✕</button>}
+                    </>
+                  )}
+                </div>
+                {drawing?.type === 'Splitter' && (
+                  <div className="sc-hint">Click 2 points of the splitter on the frame ({drawing.points.length} / 2); Esc cancels.</div>
+                )}
+                {splitter ? (
+                  <div className="sc-muted">
+                    <code>[[{splitter[0].join(', ')}], [{splitter[1].join(', ')}]]</code>
+                    {blobsPerSide && <> · blobs: <b>{blobsPerSide[1]}</b> on side 1, <b>{blobsPerSide[2]}</b> on side 2</>}
+                  </div>
+                ) : draft.splitter != null ? (
+                  <div className="ov-warn">splitter is not 2 different points: {JSON.stringify(draft.splitter)}</div>
+                ) : (
+                  <div className="sc-muted">No splitter</div>
+                )}
+                <hr className="sc-hr" />
+              </>
+            )}
 
             <div className="sc-row">
               <span className="sc-label">Number of animals</span>
@@ -752,6 +858,7 @@ export default function SegmentationEditor({ experiment, active, highlight, fram
           drawing={drawing}
           selected={selectedRoi != null ? parsedRois?.[selectedRoi] : null}
           markers={markers}
+          splitter={splitter}
           onPoint={(p) => setDrawing((d) => d && { ...d, points: [...d.points, p] })}
           onRemovePoint={(p, radius) => setDrawing((d) => {
             if (!d || !d.points.length) return d;
