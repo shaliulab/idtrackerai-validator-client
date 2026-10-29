@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <title>FlyHostel validator</title>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1d3b6e"/>
+      <stop offset="1" stop-color="#0f6e78"/>
+    </linearGradient>
+    <linearGradient id="wing" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#e8f4ff" stop-opacity="0.85"/>
+      <stop offset="1" stop-color="#bfe3f2" stop-opacity="0.45"/>
+    </linearGradient>
+  </defs>
+  <rect x="16" y="16" width="480" height="480" rx="112" fill="url(#bg)"/>
+  <!-- tracking box -->
+  <g fill="none" stroke="#ffc94d" stroke-width="22" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M96 168 V108 H156"/>
+    <path d="M356 108 H416 V168"/>
+    <path d="M416 344 V404 H356"/>
+    <path d="M156 404 H96 V344"/>
+  </g>
+  <!-- legs -->
+  <g stroke="#9fc2d4" stroke-width="9" stroke-linecap="round" fill="none">
+    <path d="M232 206 L196 186 L182 160"/>
+    <path d="M280 206 L316 186 L330 160"/>
+    <path d="M228 226 L184 236 L168 262"/>
+    <path d="M284 226 L328 236 L344 262"/>
+    <path d="M234 244 L206 280 L204 312"/>
+    <path d="M278 244 L306 280 L308 312"/>
+  </g>
+  <!-- wings -->
+  <ellipse cx="0" cy="0" rx="40" ry="104" fill="url(#wing)" stroke="#ffffff" stroke-opacity="0.9" stroke-width="5" transform="translate(206 302) rotate(24)"/>
+  <ellipse cx="0" cy="0" rx="40" ry="104" fill="url(#wing)" stroke="#ffffff" stroke-opacity="0.9" stroke-width="5" transform="translate(306 302) rotate(-24)"/>
+  <!-- abdomen -->
+  <ellipse cx="256" cy="300" rx="38" ry="66" fill="#f2d9a8"/>
+  <g stroke="#5a3d1e" stroke-width="9" stroke-linecap="round" opacity="0.8">
+    <path d="M224 286 Q256 296 288 286"/>
+    <path d="M226 314 Q256 324 286 314"/>
+    <path d="M234 340 Q256 348 278 340"/>
+  </g>
+  <!-- thorax -->
+  <ellipse cx="256" cy="222" rx="42" ry="40" fill="#e8c88e"/>
+  <!-- head with eyes -->
+  <ellipse cx="256" cy="166" rx="32" ry="24" fill="#f2d9a8"/>
+  <ellipse cx="232" cy="160" rx="13" ry="17" fill="#e5484d"/>
+  <ellipse cx="280" cy="160" rx="13" ry="17" fill="#e5484d"/>
+  <!-- validated badge -->
+  <circle cx="392" cy="392" r="62" fill="#2fb37a" stroke="#0f2a44" stroke-width="12"/>
+  <path d="M362 392 L384 414 L424 372" fill="none" stroke="#ffffff" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

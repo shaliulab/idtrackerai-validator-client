@@ -667,6 +667,7 @@ function App() {
       {/* ── App bar: title, experiment (shared across tabs), global toggles ── */}
       <header className="app-bar">
         <VersionTag />
+        <img className="app-logo" src={`${import.meta.env.BASE_URL}logo.svg`} alt="" />
         <div className="app-title">
           <h1>FlyHostel Viewer</h1>
           <p>Liu Lab @ VIB-KU Leuven Center for Neuroscience</p>
