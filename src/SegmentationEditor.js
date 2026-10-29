@@ -735,7 +735,7 @@ export default function SegmentationEditor({ experiment, active, highlight, fram
             {/* Splitter between 2 flies (landmarks.toml only), read by the pipeline's splitter.nf */}
             {isLandmarks && (
               <>
-                <div className="sc-row" title="Line between 2 flies separated by a splitter. splitter.nf calls fly 1 the one on the left (top, if the line is closer to horizontal) and fly 2 the other one; without a splitter, it uses the vertical midline of the frame">
+                <div className="sc-row" title="Line between 2 flies separated by a splitter. splitter.nf calls fly 1 the one on the left (top, if the line is closer to horizontal) and fly 2 the other one. splitter.nf refuses experiments without it">
                   <b>Splitter</b>
                   <span className="spacer" style={{ flex: 1 }} />
                   {drawing?.type === 'Splitter' ? (
