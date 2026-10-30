@@ -813,7 +813,9 @@ export default function HelpTab() {
               shows the ROIs in red and, in blue, the blobs idtrackerai would find with these settings; the box under the thresholds
               turns red when their number is not the number of animals. Check several frames (Random, ←/→, chunk).{' '}
               <b>Save</b> (Ctrl+S) writes the file (the previous version goes to <code>toml_backups/</code>) and converts{' '}
-              <code>&lt;date&gt;.toml</code> into the <code>&lt;date&gt;.conf</code> tracking and preprocess-sample read.</li>
+              <code>&lt;date&gt;.toml</code> into the <code>&lt;date&gt;.conf</code> tracking and preprocess-sample read.
+              On an <i>analyzed</i> experiment (it has a database) Save, and Propose with overwrite, ask for confirmation first:
+              the existing tracking was made with the old settings.</li>
             <li><b>GPU queue</b> (below Running now): the crops waiting for GPU memory, see <a href="#help-gpu-queue">GPU queue</a>.</li>
             <li><b>Crop arenas</b> (whole recordings with a saved <code>arenas.toml</code>): puts{' '}
               <code>imgstore-crop-arenas --input metadata.yaml --arenas arenas.toml --jobs 4 --gpu --size 1024</code> in the

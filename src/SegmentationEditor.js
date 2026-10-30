@@ -453,12 +453,21 @@ export default function SegmentationEditor({ experiment, active, highlight, fram
     if (drawing?.type === 'Splitter' && drawing.points.length === 2) finishDrawing();
   }, [drawing, finishDrawing]);
 
+  // Already analyzed (the folder or its arenas have a database): changing the settings now does
+  // not change that tracking, so the user confirms
+  const confirmAnalyzed = useCallback((action) => {
+    const dbs = info?.databases || [];
+    return !dbs.length || window.confirm(`${experiment} is already analyzed (${dbs.map((d) => d.path).join(', ')}).\n\n`
+      + `${action}? The existing tracking was made with the current settings and is not redone.`);
+  }, [info, experiment]);
+
   const save = useCallback(async () => {
     if (!draft || !fileName) return;
     if (draft.number_of_animals === 0 && !draft.track_wo_identities) {
       log('warning', 'Define the number of animals, or tick "Track without identities"');
       return;
     }
+    if (!confirmAnalyzed(`Save ${fileName}`)) return;
     setBusy(true);
     try {
       const data = unwrap((await api.post('/api/collector/settings', { experiment, file: fileName, settings: fromDraft(draft) })).data);
@@ -471,9 +480,10 @@ export default function SegmentationEditor({ experiment, active, highlight, fram
     } finally {
       setBusy(false);
     }
-  }, [draft, fileName, experiment, log, fetchInfo, onSaved]);
+  }, [draft, fileName, experiment, log, fetchInfo, onSaved, confirmAnalyzed]);
 
   const propose = async () => {
+    if (force && !confirmAnalyzed('Overwrite its tomls with the roi-proposer proposal')) return;
     setBusy(true);
     try {
       const job = await trackJob(unwrap((await api.post('/api/collector/propose', { experiment, force })).data));
