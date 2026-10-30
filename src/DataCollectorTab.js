@@ -8,6 +8,7 @@
 //      through the GPU queue (GpuQueue.js, below "Running now").
 //   4. preprocess-sample: started / stopped here, its preprocess_sample.csv as a table and a
 //      per-chunk strip; a row opens the frame in the editor with the CSV's centroids.
+// "analyzed" badges: the folder (or one of its arenas) has a database, as the index lists them.
 // The experiment edited is kept in fh-collector-experiment, the date in fh-collector-date.
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import api from './api';
@@ -31,6 +32,21 @@ function fetchState(e) {
   if (e.wanted_files && e.here_files === e.wanted_files) return ['here', 'dm-ok'];
   if (e.here_files > 0) return [`${e.here_files}/${e.wanted_files} files here`, 'dm-warn'];
   return ['not here', 'dm-none'];
+}
+
+// Analyzed = a database (*db other than index.db) in the folder; a whole recording also counts
+// its arenas' (paths arenas/K/…). `databases` from /api/collector/date or /settings.
+function AnalyzedBadge({ databases }) {
+  if (!databases) return null;
+  const arenas = [...new Set(databases.filter((d) => d.path.includes('/')).map((d) => d.path.split('/')[1]))];
+  const own = databases.some((d) => !d.path.includes('/'));
+  const title = databases.length
+    ? databases.map((d) => `${d.path} · ${(d.size / 1e6).toFixed(0)} MB · ${new Date(d.mtime * 1000).toLocaleString()}`).join('\n')
+    : 'No database yet (*db other than index.db): the pipeline has not tracked it';
+  const [text, cls] = own ? ['analyzed', 'dm-ok']
+    : arenas.length ? [`arena${arenas.length > 1 ? 's' : ''} ${arenas.join(', ')} analyzed`, 'dm-ok']
+      : ['not analyzed', 'dm-none'];
+  return <span className={`dm-status ${cls}`} title={title}>{text}</span>;
 }
 
 // ── 0. Running now ─────────────────────────────────────────────────────────
@@ -296,6 +312,7 @@ function FetchCard({ active, onEdit, editing, onOpenExperiment }) {
                   <th title={`Chunks starting before ZT${listing.zt_limit} (+ the other files of the folder)`}>Up to ZT{listing.zt_limit}</th>
                   <th>Here</th>
                   <th>To fetch</th>
+                  <th title="Has a database: idtrackerai has tracked it (or some of its arenas)">Analyzed</th>
                   <th />
                 </tr>
               </thead>
@@ -318,6 +335,7 @@ function FetchCard({ active, onEdit, editing, onOpenExperiment }) {
                       <td>{e.wanted_chunks} chunks{e.wanted_last_chunk != null ? ` (≤ ${e.wanted_last_chunk})` : ''} · {gb(e.wanted_bytes)}</td>
                       <td><span className={`dm-status ${cls}`}>{state}</span></td>
                       <td>{e.missing_bytes ? gb(e.missing_bytes) : '–'}</td>
+                      <td>{e.local ? <AnalyzedBadge databases={e.databases} /> : '–'}</td>
                       <td style={{ whiteSpace: 'nowrap' }}>
                         <button disabled={!e.local} onClick={() => onEdit(e.experiment)} title="Edit its idtrackerai settings below">Settings ▸</button>{' '}
                         <button disabled={!e.local} onClick={() => onOpenExperiment(e.experiment)} title="Open it in the Group viewer">Open</button>
@@ -329,7 +347,7 @@ function FetchCard({ active, onEdit, editing, onOpenExperiment }) {
                     </tr>
                   );
                 })}
-                {!experiments.length && <tr><td colSpan={9} className="sc-muted">No experiment recorded on {listing.date}</td></tr>}
+                {!experiments.length && <tr><td colSpan={10} className="sc-muted">No experiment recorded on {listing.date}</td></tr>}
               </tbody>
             </table>
           </div>
@@ -663,6 +681,7 @@ export default function DataCollectorTab({ active, onOpenExperiment }) {
   const [experiment, setExperiment] = useState(() => stored('fh-collector-experiment', null));
   const [highlight, setHighlight] = useState(null);    // CSV frame shown in the editor
   const [savedKey, setSavedKey] = useState(0);
+  const [info, setInfo] = useState(null);              // /api/collector/settings of the experiment
   const editorRef = useRef(null);
   const cropRef = useRef(null);
   const preprocessRef = useRef(null);
@@ -697,13 +716,16 @@ export default function DataCollectorTab({ active, onOpenExperiment }) {
         <div className="card-header">
           Segmentation settings
           <span className="spacer" />
+          {info && info.experiment === experiment?.replace(/^\/+|\/+$/g, '') && (
+            <span className="ov-normal" style={{ marginRight: 8 }}><AnalyzedBadge databases={info.databases} /></span>
+          )}
           <span className="ov-normal">
             <input type="text" className="mono" style={{ width: 300 }} placeholder="FlyHostelN/NX/YYYY-MM-DD_HH-MM-SS[/arenas/K]"
                    value={experiment || ''} onChange={(e) => setExperiment(e.target.value.trim() || null)} />
           </span>
         </div>
         <SegmentationEditor experiment={experiment} active={active} highlight={highlight} frameRequest={highlight}
-                            onSaved={() => setSavedKey((k) => k + 1)} />
+                            onSaved={() => setSavedKey((k) => k + 1)} onInfo={setInfo} />
       </section>
 
       <div ref={cropRef}><CropArenasCard experiment={experiment} active={active} refreshKey={savedKey} onEdit={edit} /></div>

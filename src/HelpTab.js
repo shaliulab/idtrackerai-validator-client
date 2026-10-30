@@ -793,7 +793,8 @@ export default function HelpTab() {
             <li><b>Fetch from cv2</b>: pick the day it was <i>Recorded on</i>; the table lists that day's experiments on cv2:
               when they started (UTC) and at which ZT, how much cv2 has, what a fetch copies (<i>Up to ZT30</i>: the folder's
               files and the chunks starting before ZT 30, i.e. the first day and a buffer; later chunks are not needed) and how
-              much of it is <i>here</i> already. ZT0 is the experiment's <code>reference_hour</code> in the metadata sheets
+              much of it is <i>here</i> already, and whether it is <i>analyzed</i> (its folder, or one of its arenas, has a
+              database; hover for the files). The same badge is shown next to the experiment of <i>Segmentation settings</i>. ZT0 is the experiment's <code>reference_hour</code> in the metadata sheets
               (12:00, marked *, while the sheets do not have it). <b>Fetch N selected</b> copies the missing files with rsync
               (resumable; files written in the last 10 min are skipped, so it can run while cv2 still records); the console
               shows the progress. A drive must keep 50 GB free. <a href="http://10.43.205.5:8000" target="_blank" rel="noreferrer">10.43.205.5:8000</a>{' '}

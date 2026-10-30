@@ -312,7 +312,7 @@ function SliderField({ label, value, min, max, onChange, title }) {
   );
 }
 
-export default function SegmentationEditor({ experiment, active, highlight, frameRequest, onSaved }) {
+export default function SegmentationEditor({ experiment, active, highlight, frameRequest, onSaved, onInfo }) {
   const { log, trackJob } = useConsole();
   const [info, setInfo] = useState(null);
   const [error, setError] = useState(null);
@@ -349,10 +349,11 @@ export default function SegmentationEditor({ experiment, active, highlight, fram
   }, []);
 
   const fetchInfo = useCallback(async (keepFile) => {
-    if (!experiment) { setInfo(null); return; }
+    if (!experiment) { setInfo(null); onInfo?.(null); return; }
     try {
       const data = unwrap((await api.get('/api/collector/settings', { params: { experiment } })).data);
       setInfo(data);
+      onInfo?.(data);
       setError(null);
       const names = data.files.map((f) => f.name);
       const name = keepFile && names.includes(keepFile) ? keepFile : (names.includes(`${data.date_time}.toml`) ? `${data.date_time}.toml` : names[0] || null);
@@ -361,10 +362,11 @@ export default function SegmentationEditor({ experiment, active, highlight, fram
       return data;
     } catch (err) {
       setInfo(null);
+      onInfo?.(null);
       setError(errorOf(err));
       return null;
     }
-  }, [experiment, loadFile]);
+  }, [experiment, loadFile, onInfo]);
 
   // a new experiment: its files, at the frame its toml was annotated on
   useEffect(() => {
