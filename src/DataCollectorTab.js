@@ -443,12 +443,12 @@ function PreprocessCard({ experiment, active, refreshKey, onShowFrame, shownFram
       <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         {!experiment && <div className="sc-muted">Choose an experiment above.</div>}
         {error && <div className="ov-warn">{error}</div>}
-        {status?.arena && <div className="sc-muted">preprocess-sample does not run on arena folders (it reads &lt;folder name&gt;.conf).</div>}
-        {status && !status.arena && (
+        {status && (
           <>
             <div className="sc-muted">
               Samples frames of each chunk and lists those where the segmentation (the <code>.conf</code>) does not find
               the number of animals. It runs in the background for hours and keeps running if the server restarts.
+              {status.arena && <> In this arena it reads <code>{experiment.split('/').pop()}.conf</code>, a copy of <code>{status.conf}</code> made when the toml is saved and before each run.</>}
             </div>
             <div className="toolbar">
               <label className="field">Chunks
@@ -463,7 +463,7 @@ function PreprocessCard({ experiment, active, refreshKey, onShowFrame, shownFram
                 <button onClick={stop}><i className="fa fa-stop" style={{ marginRight: 6 }} />Stop</button>
               ) : (
                 <button className="btn-primary" onClick={start} disabled={!status.has_conf}
-                        title={status.has_conf ? 'Starts preprocess-sample (idtrackeraiv4) on these chunks' : 'Save the main toml first: it writes the .conf preprocess-sample reads'}>
+                        title={status.has_conf ? 'Starts preprocess-sample (idtrackeraiv4) on these chunks' : `Save the main toml first: it writes ${status.conf}, the .conf preprocess-sample reads`}>
                   <i className="fa fa-play" style={{ marginRight: 6 }} />Run preprocess-sample
                 </button>
               )}

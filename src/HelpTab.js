@@ -826,7 +826,9 @@ export default function HelpTab() {
               <code>preprocess_sample.csv</code>. It runs for hours in the background (also after a server restart; <i>Stop</i> ends it).
               The strip shows the problematic frames per chunk and the table lists them; click one to see it in the editor with the
               CSV's blob centres marked in orange. A few frames with fewer blobs are flies touching each other; many, or frames with
-              more blobs, mean the thresholds or ROIs need changing.</li>
+              more blobs, mean the thresholds or ROIs need changing. It also runs in an arena (<code>…/arenas/K</code>): there
+              it reads <code>K.conf</code>, a copy of the arena's <code>&lt;date&gt;.conf</code> made when its toml is saved and before
+              each run.</li>
           </ul>
         </Section>
 
