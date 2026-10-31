@@ -811,7 +811,11 @@ export default function HelpTab() {
               database; hover for the files). The same badge is shown next to the experiment of <i>Segmentation settings</i>. ZT0 is the experiment's <code>reference_hour</code> in the metadata sheets
               (12:00, marked *, while the sheets do not have it). <b>Fetch N selected</b> copies the missing files with rsync
               (resumable; files written in the last 10 min are skipped, so it can run while cv2 still records); the console
-              shows the progress. A drive must keep 50 GB free. <a href="http://10.43.205.5:8000" target="_blank" rel="noreferrer">10.43.205.5:8000</a>{' '}
+              shows the progress. A drive must keep 50 GB free. <b>Schedule…</b> fetches the selected experiments later
+              instead: choose <i>Start at</i> and <i>Schedule N selected</i>; the server starts it at that time (this page can be
+              closed), decides then what to copy (so chunks recorded until then are included) and waits for a fetch that is still
+              running. The table marks them ⏱ with the time; <i>Scheduled fetches</i> lists them with <i>Start now</i> and ✕
+              (cancel), and the console follows them once they start. <a href="http://10.43.205.5:8000" target="_blank" rel="noreferrer">10.43.205.5:8000</a>{' '}
               shows cv2's folders in the browser.</li>
             <li><b>Segmentation settings</b> (<i>Settings ▸</i> on a row, <i>arena K</i> for the arenas cropped out of an arena
               experiment): <b>Propose with roi-proposer</b> writes <code>&lt;date&gt;.toml</code> and <code>landmarks.toml</code>{' '}

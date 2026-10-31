@@ -2,7 +2,8 @@
 //   0. Running now: every imgstore-crop-arenas / preprocess-sample on this computer with its
 //      progress (/api/collector/running), polled every 10 s; a row selects its experiment.
 //   1. Fetch from cv2: the experiments of a date on cv2 and what a fetch copies (chunks before
-//      ZT `zt_limit`, fh-collector-zt), rsync as a job (/api/collector/*, data_collector.py).
+//      ZT `zt_limit`, fh-collector-zt), rsync as a job (/api/collector/*, data_collector.py),
+//      now or at a scheduled time (Schedule…, /api/collector/schedule, run by the server).
 //   2. Segmentation settings: roi-proposer + the editor (SegmentationEditor.js).
 //   3. Crop arenas: imgstore-crop-arenas once arenas.toml is saved (recordings split into arenas),
 //      through the GPU queue (GpuQueue.js, below "Running now").
@@ -190,6 +191,80 @@ function RunningCard({ active, selected, onSelect }) {
 }
 
 // ── 1. Fetch from cv2 ──────────────────────────────────────────────────────
+// Scheduled fetches (/api/collector/schedule): started by the server at their time (planned
+// then, so chunks recorded until then are included), also with this page closed.
+const pad = (n) => String(n).padStart(2, '0');
+const localInput = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+function defaultScheduleTime() {
+  // the last time of day used (fh-collector-schedule-hm, default 22:00), today or tomorrow
+  const [h, m] = stored('fh-collector-schedule-hm', '22:00').split(':').map(Number);
+  const d = new Date();
+  d.setHours(h || 0, m || 0, 0, 0);
+  if (d.getTime() < Date.now() + 60000) d.setDate(d.getDate() + 1);
+  return localInput(d);
+}
+const whenText = (t) => {
+  const d = new Date(t * 1000);
+  const today = new Date();
+  const tomorrow = new Date(); tomorrow.setDate(today.getDate() + 1);
+  const day = d.toDateString() === today.toDateString() ? 'today'
+    : d.toDateString() === tomorrow.toDateString() ? 'tomorrow' : d.toLocaleDateString();
+  return `${day} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+};
+const SCHEDULE_STATUS = { scheduled: 'dm-warn', running: 'dm-warn', done: 'dm-ok', failed: 'dm-bad', cancelled: 'dm-none' };
+
+function ScheduledFetches({ schedule, onCancel, onNow }) {
+  const [showDone, setShowDone] = useState(false);
+  const entries = schedule?.entries || [];
+  const open = entries.filter((e) => e.status === 'scheduled' || e.status === 'running');
+  const done = entries.filter((e) => e.status !== 'scheduled' && e.status !== 'running');
+  if (!entries.length) return null;
+  const row = (e) => (
+    <tr key={e.id}>
+      <td><span className={`dm-status ${SCHEDULE_STATUS[e.status] || ''}`}>{e.status}</span></td>
+      <td>{whenText(e.status === 'scheduled' ? e.at : (e.started || e.at))}</td>
+      <td className="mono" title={e.experiments.join('\n')}>
+        {e.experiments.length === 1 ? e.experiments[0] : `${e.experiments.length} experiments (${e.experiments[0]}, …)`}
+      </td>
+      <td>ZT{e.zt_limit}</td>
+      <td className="sc-muted" style={{ maxWidth: 420 }}>
+        {e.status === 'scheduled' && e.at <= (schedule.now || 0) && (e.waiting ? `waiting ${e.waiting}` : 'starting…')}
+        {e.status === 'running' && e.job_id && `job ${e.job_id} (progress in the console)`}
+        {e.error}
+      </td>
+      <td style={{ whiteSpace: 'nowrap' }}>
+        {e.status === 'scheduled' && (
+          <>
+            <button onClick={() => onNow(e)} title="Start it now (when no other fetch runs)">Start now</button>{' '}
+            <button onClick={() => onCancel(e)} title="Cancel this scheduled fetch">✕</button>
+          </>
+        )}
+      </td>
+    </tr>
+  );
+  return (
+    <div>
+      <div className="sc-muted" style={{ marginBottom: 4 }}>
+        <i className="fa fa-clock-o" style={{ marginRight: 6 }} />Scheduled fetches
+        {!schedule.scheduling && open.length > 0 && ' (started by another server instance, which must be running)'}
+        {done.length > 0 && (
+          <button style={{ marginLeft: 8 }} onClick={() => setShowDone((v) => !v)}>
+            {showDone ? 'Hide' : 'Show'} {done.length} finished
+          </button>
+        )}
+      </div>
+      {(open.length > 0 || showDone) && (
+        <table className="ov-table">
+          <tbody>
+            {open.map(row)}
+            {showDone && done.map(row)}
+          </tbody>
+        </table>
+      )}
+    </div>
+  );
+}
+
 function FetchCard({ active, onEdit, editing, onOpenExperiment }) {
   const { log, trackJob } = useConsole();
   const [dates, setDates] = useState(null);
@@ -201,6 +276,10 @@ function FetchCard({ active, onEdit, editing, onOpenExperiment }) {
   const [error, setError] = useState(null);
   const [selected, setSelected] = useState(new Set());
   const [fetching, setFetching] = useState(false);
+  const [schedule, setSchedule] = useState(null);   // {entries, now, scheduling}
+  const [scheduling, setScheduling] = useState(false);
+  const [scheduleAt, setScheduleAt] = useState(defaultScheduleTime);
+  const tracked = useRef(new Set());
 
   useEffect(() => store('fh-collector-date', date || null), [date]);
   useEffect(() => store('fh-collector-zt', String(ztLimit)), [ztLimit]);
@@ -238,6 +317,64 @@ function FetchCard({ active, onEdit, editing, onOpenExperiment }) {
   }, [date, ztLimit]);
 
   useEffect(() => { if (active) fetchDate(); }, [date, ztLimit]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const fetchSchedule = useCallback(async () => {
+    try {
+      setSchedule(unwrap((await api.get('/api/collector/schedule')).data));
+    } catch (err) {
+      log('error', `Scheduled fetches: ${errorOf(err)}`);
+    }
+  }, [log]);
+  const running = schedule?.entries.some((e) => e.status === 'running' || (e.status === 'scheduled' && e.at <= schedule.now));
+  useEffect(() => {
+    if (!active) return undefined;
+    fetchSchedule();
+    const timer = setInterval(fetchSchedule, running ? 10000 : 30000);
+    return () => clearInterval(timer);
+  }, [active, running, fetchSchedule]);
+
+  // a scheduled fetch that started: follow its job in the console (once per job)
+  useEffect(() => {
+    (schedule?.entries || []).forEach((e) => {
+      if (e.status !== 'running' || !e.job_id || tracked.current.has(e.job_id)) return;
+      tracked.current.add(e.job_id);
+      log('info', `Scheduled fetch of ${e.experiments.length} experiment(s) started`);
+      // (the job lives in the server instance that started it: another one answers 404)
+      api.get(`/api/jobs/${e.job_id}`).then((r) => trackJob(unwrap(r.data))).then((done) => {
+        if (done?.status === 'done') log('success', `Scheduled fetch: fetched ${done.items.length} experiment(s)`);
+        fetchSchedule();
+        fetchDate();
+      }).catch(() => { /* followed in the schedule list */ });
+    });
+  }, [schedule]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const addSchedule = async () => {
+    const at = new Date(scheduleAt).getTime() / 1000;
+    if (!Number.isFinite(at)) { log('error', 'Schedule: choose a date and time'); return; }
+    try {
+      unwrap((await api.post('/api/collector/schedule', { experiments: [...selected], zt_limit: ztLimit, at })).data);
+      store('fh-collector-schedule-hm', scheduleAt.slice(11, 16));
+      log('success', `Fetch of ${selected.size} experiment(s) scheduled for ${whenText(at)}`);
+      setScheduling(false);
+      fetchSchedule();
+    } catch (err) {
+      log('error', `Schedule: ${errorOf(err)}`);
+    }
+  };
+  const cancelSchedule = async (e) => {
+    try { await api.post(`/api/collector/schedule/${e.id}/cancel`); } catch (err) { log('error', `Cancel: ${errorOf(err)}`); }
+    fetchSchedule();
+  };
+  const scheduleNow = async (e) => {
+    try { await api.post(`/api/collector/schedule/${e.id}/now`); } catch (err) { log('error', `Start now: ${errorOf(err)}`); }
+    setTimeout(fetchSchedule, 1500);
+  };
+  const scheduledAt = useMemo(() => {
+    const m = new Map();
+    (schedule?.entries || []).filter((e) => e.status === 'scheduled')
+      .forEach((e) => e.experiments.forEach((x) => { if (!m.has(x) || m.get(x) > e.at) m.set(x, e.at); }));
+    return m;
+  }, [schedule]);
 
   const startFetch = async () => {
     setFetching(true);
@@ -294,7 +431,25 @@ function FetchCard({ active, onEdit, editing, onOpenExperiment }) {
                   title="rsync the selected experiments (only missing or different files)">
             <i className="fa fa-download" style={{ marginRight: 6 }} />Fetch {selected.size} selected ({gb(selectedBytes)})
           </button>
+          <button disabled={!selected.size} onClick={() => { if (!scheduling) setScheduleAt(defaultScheduleTime()); setScheduling((v) => !v); }}
+                  title="Fetch the selected experiments later, at a time you choose (the server starts it, this page can be closed)">
+            <i className="fa fa-clock-o" style={{ marginRight: 6 }} />Schedule…
+          </button>
         </div>
+        {scheduling && (
+          <div className="toolbar">
+            <label className="field" title="The server starts the fetch at this time (local time of this browser); what to copy is decided then">
+              Start at
+              <input type="datetime-local" value={scheduleAt} min={localInput(new Date())} onChange={(e) => setScheduleAt(e.target.value)} />
+            </label>
+            <button className="btn-primary" disabled={!selected.size || !scheduleAt} onClick={addSchedule}>
+              Schedule {selected.size} selected (up to ZT{ztLimit})
+            </button>
+            <button onClick={() => setScheduling(false)}>Cancel</button>
+            <span className="sc-muted">Chunks recorded until then are included; if a fetch is running then, it starts after it.</span>
+          </div>
+        )}
+        <ScheduledFetches schedule={schedule} onCancel={cancelSchedule} onNow={scheduleNow} />
         {error && <div className="ov-warn">{error}</div>}
         {listing && (
           <div className="ov-scroll">
@@ -333,7 +488,12 @@ function FetchCard({ active, onEdit, editing, onOpenExperiment }) {
                         {e.recording && <span className="sc-badge sc-rec" title="Files modified in the last 10 min: still recording">● rec</span>}
                       </td>
                       <td>{e.wanted_chunks} chunks{e.wanted_last_chunk != null ? ` (≤ ${e.wanted_last_chunk})` : ''} · {gb(e.wanted_bytes)}</td>
-                      <td><span className={`dm-status ${cls}`}>{state}</span></td>
+                      <td>
+                        <span className={`dm-status ${cls}`}>{state}</span>
+                        {scheduledAt.has(e.experiment) && (
+                          <span className="sc-badge" title="A scheduled fetch includes it">⏱ {whenText(scheduledAt.get(e.experiment))}</span>
+                        )}
+                      </td>
                       <td>{e.missing_bytes ? gb(e.missing_bytes) : '–'}</td>
                       <td>{e.local ? <AnalyzedBadge databases={e.databases} /> : '–'}</td>
                       <td style={{ whiteSpace: 'nowrap' }}>
