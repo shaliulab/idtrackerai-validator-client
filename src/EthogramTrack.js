@@ -1,6 +1,7 @@
 // EthogramTrack.js  —  canvas ethogram of one fly (/api/ethogram/<fly>/track)
 //
-// One row per behavior, x = seconds since the start of the fly's movie, plus an
+// One row per behavior (arena flies: active / inactive, from the centroid), x = seconds
+// since the start of the fly's movie, plus an
 // overview strip of the whole recording with the visible window on it. The view
 // ([t0, t1]) belongs to the parent, so nothing here resets the zoom: the parent
 // only moves the window, keeping its width.
@@ -22,6 +23,8 @@ export const BEHAVIOR_STYLE = {
   feed: { label: 'feed', color: '#009E73' },
   groom: { label: 'groom', color: '#E69F00' },
   walk: { label: 'walk', color: '#D55E00' },
+  // activity ethogram of arena flies (kind "activity"): only these two rows
+  active: { label: 'active', color: '#D55E00' },
 };
 const styleOf = (behavior) => BEHAVIOR_STYLE[behavior] || { label: behavior, color: '#888888' };
 

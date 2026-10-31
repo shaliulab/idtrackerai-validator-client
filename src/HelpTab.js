@@ -355,6 +355,13 @@ export default function HelpTab() {
               the pointer (start, end, duration, score).
             </li>
             <li>
+              Arena flies (marked <i>(activity)</i> in the list) show only two rows, <b>active</b> and{' '}
+              <b>inactive</b>, made by the <i>sleep_centroid.nf</i> pipeline: a second is inactive when the
+              fly's centroid barely moved since the previous one. Their sleep bouts (5 min inactive) come
+              from the same pipeline, and they show even without a movie. Arena flies it has not processed
+              yet show their behavior ethogram.
+            </li>
+            <li>
               Zoom with the wheel, the window buttons (1 min … 6 h, All), <Key>+</Key>/<Key>−</Key> or a
               double click; pan by dragging, Shift+wheel, or by dragging the window on the
               <i>Whole recording</i> strip. The window keeps its width while the movie plays, when

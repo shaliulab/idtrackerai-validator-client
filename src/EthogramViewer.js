@@ -4,7 +4,8 @@
 // drawn from /api/ethogram/<fly>/track), with a dropdown + prev/next buttons to
 // switch between flies of the group. When the fly has an HLS movie (shown above the
 // ethogram), the video and the ethogram cursor are kept in sync: the x axis is
-// seconds since the start of the movie. The visible window is only ever moved, never reset: playback pages
+// seconds since the start of the movie. Arena flies with an activity ethogram (sleep_centroid.nf) show only
+// active / inactive rows, and their sleep bouts are the centroid ones. The visible window is only ever moved, never reset: playback pages
 // it along (with "follow"), jumps center it, and its width is kept per browser.
 // Below the ethogram, the fly's deepethogram labels and the card writing them (DegLabels).
 
@@ -461,9 +462,9 @@ export default function EthogramViewer({ flies, request, animalMetadata, active,
         <label>
           Fly:&nbsp;
           <select value={fly || ''} onChange={(e) => setFly(e.target.value)} style={selectStyle}>
-            {flies.map(({ fly: f, available }) => (
+            {flies.map(({ fly: f, available, activity }) => (
               <option key={f} value={f}>
-                {f}{!available ? ' (no ethogram)' : ''}
+                {f}{!available ? ' (no ethogram)' : activity ? ' (activity)' : ''}
               </option>
             ))}
           </select>
@@ -644,15 +645,25 @@ export default function EthogramViewer({ flies, request, animalMetadata, active,
             <button onClick={() => zoomBy(2)} title="Zoom out (−)" aria-label="Zoom out">−</button>
             <button onClick={() => zoomBy(0.5)} title="Zoom in (+)" aria-label="Zoom in">+</button>
             <span className="eth-dim">window {formatClock(viewWidth)}</span>
+            {track.kind === 'activity' && (
+              <span
+                className="eth-dim"
+                title={`${track.source}: a second is inactive when the centroid moved at most min_displacement_mm (1 mm by default) since the previous one (sleep_centroid.nf); sleep bouts are 5 min of inactivity`}
+              >
+                activity from the centroid
+              </span>
+            )}
             <span className="spacer" />
             <label className="field check" title="While the movie plays, move the window along with the cursor">
               <input type="checkbox" checked={follow} onChange={(e) => setFollow(e.target.checked)} />
               follow playback
             </label>
-            <label className="field check" title="Fade seconds the classifier was less sure about">
-              <input type="checkbox" checked={shade} onChange={(e) => setShade(e.target.checked)} />
-              shade by score
-            </label>
+            {track.kind !== 'activity' && (
+              <label className="field check" title="Fade seconds the classifier was less sure about">
+                <input type="checkbox" checked={shade} onChange={(e) => setShade(e.target.checked)} />
+                shade by score
+              </label>
+            )}
             <label className="field" title="◀ ▶ next to each behavior skip bouts shorter than this">
               ◀ ▶ skip bouts under
               <input
