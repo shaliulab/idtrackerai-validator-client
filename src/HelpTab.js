@@ -561,6 +561,13 @@ export default function HelpTab() {
             a running one. The bar shows the memory used, reserved and the margin; the first waiting job says why it waits.
             Jobs run in the background and survive server restarts; with no server running, nothing new starts.
           </p>
+          <p>
+            A running crop has a pause button (also crops started outside the queue): the chunks being encoded finish
+            (<i>pausing…</i>) and no new chunk starts (<i>paused</i>; a paused crop reserves no GPU memory, so the queue may start
+            other jobs) until you press play. The pause is the file <code>crop_arenas.pause</code> next to the recording's
+            <code>metadata.yaml</code>: <code>touch</code> / <code>rm</code> it does the same from a shell. Crops started before
+            pausing existed have no button; stop and <i>Resume</i> them to get it.
+          </p>
         </Section>
 
         <Section id="help-overview-tab" title="Metadata overview">

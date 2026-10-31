@@ -4,7 +4,10 @@
 // Shows that budget as a bar, the running jobs (GPU memory now / peak / estimate, progress),
 // the queue in order with why its head waits (Run next, Cancel), jobs of these kinds started
 // outside the queue, and the last finished ones. Polled every 10 s while shown; `kinds`
-// limits the lists to some kinds (the budget is always the whole GPU's).
+// limits the lists to some kinds (the budget is always the whole GPU's). Running jobs whose kind
+// can pause (`pause_state` not null: imgstore-crop-arenas runs started with pause support) get
+// Pause / Play: pausing lets the chunks being encoded finish and starts no new one ("pausing"
+// until they are done, then "paused", which reserves no GPU memory).
 import React, { useCallback, useEffect, useState } from 'react';
 import api from './api';
 import { useConsole } from './MessageConsole';
@@ -20,6 +23,24 @@ function duration(seconds) {
   return h < 48 ? `${h} h ${m % 60} min` : `${(h / 24).toFixed(1)} d`;
 }
 const STATUS_CLASS = { done: 'dm-ok', failed: 'dm-bad', cancelled: 'dm-none' };
+
+function PauseButton({ job, onToggle }) {
+  if (job.pause_state == null) return null;
+  const paused = job.pause_state !== 'running';
+  return (
+    <button onClick={() => onToggle(job, !paused)} style={{ marginRight: 4 }}
+            title={paused ? 'Resume: start new chunks again'
+              : 'Pause: the chunks being encoded finish, no new chunk starts until you press play'}>
+      <i className={`fa ${paused ? 'fa-play' : 'fa-pause'}`} />
+    </button>
+  );
+}
+
+function PauseBadge({ state }) {
+  if (state === 'pausing') return <span className="sc-badge" style={{ marginLeft: 6 }} title="Paused: the chunks being encoded finish, then nothing runs">pausing…</span>;
+  if (state === 'paused') return <span className="sc-badge" style={{ marginLeft: 6 }} title="No chunk is being encoded; reserves no GPU memory">paused</span>;
+  return null;
+}
 
 function Budget({ gpu }) {
   if (!gpu) return <div className="ov-warn">No GPU visible (nvidia-smi).</div>;
@@ -92,6 +113,18 @@ export default function GpuQueueCard({ active, kinds: only }) {
     }
   };
 
+  const togglePause = async (job, paused) => {
+    const id = job.id ?? `external-${job.pid}`;
+    const label = data.kinds[job.kind]?.label || job.kind;
+    try {
+      await api.post(`/api/gpu_queue/${id}/pause`, { paused });
+      log('info', `${label} on ${job.what}: ${paused ? 'pausing (the chunks being encoded finish, no new chunk starts)' : 'resumed'}`);
+      setTimeout(fetchQueue, 800);
+    } catch (err) {
+      log('error', `GPU queue: ${errorOf(err)}`);
+    }
+  };
+
   const shown = (e) => !only || only.includes(e.kind);
   const entries = (data?.entries || []).filter(shown);
   const running = entries.filter((e) => e.status === 'running');
@@ -136,20 +169,23 @@ export default function GpuQueueCard({ active, kinds: only }) {
                     <tr key={e.id}>
                       <td className="mono">{label(e.kind)}</td>
                       <td className="mono">{e.what}</td>
-                      <td><Progress progress={e.progress} /></td>
+                      <td><Progress progress={e.progress} /><PauseBadge state={e.pause_state} /></td>
                       <td title={`Started ${new Date(e.started * 1000).toLocaleString()} · pid ${e.pid} · log ${e.log}`}>{duration(now - e.started)}</td>
                       <td className="mono sc-small">{gb(e.mem_mb)} / {gb(e.peak_mb)} / {gb(e.estimate_mb)}</td>
-                      <td><button onClick={() => act(e, 'cancel')} title="Stop"><i className="fa fa-stop" /></button></td>
+                      <td style={{ whiteSpace: 'nowrap' }}>
+                        <PauseButton job={e} onToggle={togglePause} />
+                        <button onClick={() => act(e, 'cancel')} title="Stop"><i className="fa fa-stop" /></button>
+                      </td>
                     </tr>
                   ))}
                   {external.map((e) => (
                     <tr key={`x${e.pid}`} title="Started outside the queue: counted in the budget">
                       <td className="mono">{label(e.kind)} <span className="sc-muted">(outside the queue)</span></td>
                       <td className="mono">{e.what}</td>
-                      <td className="sc-muted">–</td>
+                      <td className="sc-muted">–<PauseBadge state={e.pause_state} /></td>
                       <td>{duration(now - e.started)}</td>
                       <td className="mono sc-small">{gb(e.mem_mb)}</td>
-                      <td />
+                      <td><PauseButton job={e} onToggle={togglePause} /></td>
                     </tr>
                   ))}
                 </tbody>
