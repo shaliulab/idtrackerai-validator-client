@@ -624,7 +624,7 @@ export default function SegmentationEditor({ experiment, active, highlight, fram
     <div className="sc-editor">
       {/* ── left: settings (layout of idtrackerai v6's segmentation app) ── */}
       <div className="sc-panel">
-        <div className="sc-row">
+        <div className="sc-row sc-file-row">
           <span className="sc-label">Settings file</span>
           <select value={fileName || ''} onChange={(e) => {
             if (dirty && !window.confirm('Discard the unsaved changes?')) return;
@@ -638,7 +638,9 @@ export default function SegmentationEditor({ experiment, active, highlight, fram
           {files.find((f) => f.name === fileName)?.ai_proposed && (
             <span className="sc-badge sc-ai" title="Proposed by roi-proposer and not reviewed yet: check it and save it">AI proposed</span>
           )}
-          {dirty && <span className="sc-badge sc-dirty">unsaved</span>}
+          {draft && (dirty
+            ? <span className="sc-badge sc-save-state sc-dirty" title="The inputs differ from the file">unsaved</span>
+            : <span className="sc-badge sc-save-state sc-saved" title="The inputs match the file">saved</span>)}
         </div>
         <div className="sc-row">
           <button onClick={propose} disabled={busy} title="roi-proposer propose: ROIs from the YOLO model, other settings from the latest annotated experiment of the same camera">
