@@ -8,6 +8,7 @@ import Tab from './Tab';
 import InteractiveText from './interactiveText';
 import FramePlayer from './framePlayer';
 import { BlobsTable } from './blobs_table';
+import FrameJump from './FrameJump';
 import SelectComponent, { postLoad } from './selectComponent';
 import CardResizer from './CardResizer';
 import Splitter from './Splitter';
@@ -498,21 +499,30 @@ function App() {
   }
   const player = playerRef.current;
 
-  const [frameRange, setFrameRange] = useState(null); // { min, max }
+  // { min, max: tracked frames (the recording's while nothing is tracked),
+  //   recordingMin, recordingMax: frames that can be shown, chunksize }
+  const [frameRange, setFrameRange] = useState(null);
 
   const fetchFrameRange = useCallback(async () => {
     try {
       const { data } = await api.get('/api/frame_range');
       const parsed = typeof data === 'string' ? JSON.parse(data) : data;
-      const min = Number(parsed.min_frame);
-      const max = Number(parsed.max_frame);
-      if (Number.isFinite(min) && Number.isFinite(max) && max > min) {
-        setFrameRange({ min, max });
-      }
+      const recordingMin = parsed.recording_min ?? undefined;
+      const recordingMax = parsed.recording_max ?? undefined;
+      const min = parsed.min_frame ?? recordingMin;
+      const max = parsed.max_frame ?? recordingMax;
+      setFrameRange({ min, max, recordingMin, recordingMax, chunksize: parsed.chunksize });
     } catch (error) {
+      setFrameRange(null);   // no bounds rather than the previous experiment's
       console.error('Error fetching frame range:', error);
     }
   }, []);
+
+  // Moving around is limited by the recording, not by the tracking
+  const recordingRange = useMemo(
+    () => ({ min: frameRange?.recordingMin, max: frameRange?.recordingMax }),
+    [frameRange],
+  );
 
   // Declared after fetchFrameRange: this handler calls it, and `const` is not
   // hoisted.
@@ -589,12 +599,15 @@ function App() {
     if (!isPlaying || !videoFrameRate) return undefined;
     const speed = 2 * Number(videoFrameRate);                    // recording frames / s
     const step = Math.max(1, Math.round(speed / PLAYBACK_FPS));
+    // Started outside the tracked frames: loop over the recording, not back to the tracking
+    const from = frameNumberRef.current;
+    const tracked = frameRange && from >= frameRange.min && from <= frameRange.max;
     player.play({
-      from: frameNumberRef.current,
+      from,
       step,
       intervalMs: (1000 * step) / speed,
-      min: frameRange?.min,
-      max: frameRange?.max,
+      min: tracked ? frameRange.min : frameRange?.recordingMin,
+      max: tracked ? frameRange.max : frameRange?.recordingMax,
       onAdvance: setFrameNumber,
     });
     return () => player.stop();
@@ -605,7 +618,7 @@ function App() {
 
   // Readout above the slider: position of the displayed frame.
   const firstRow = trackingData[0];
-  const chunksize = firstRow?.chunksize;
+  const chunksize = firstRow?.chunksize ?? frameRange?.chunksize;
 
   // Everything that depends on the loaded experiment, refreshed after /api/load.
   const onExperimentLoaded = useCallback(async (firstFrame) => {
@@ -804,8 +817,13 @@ function App() {
                 Navigation
                 <span className="spacer" />
                 <div className="readout" style={{ textTransform: 'none', letterSpacing: 0, fontWeight: 400 }}>
-                  <span>Frame <b>{frameNumber}</b></span>
-                  {chunksize > 0 && <span>Chunk <b>{Math.floor(frameNumber / chunksize)}</b></span>}
+                  <FrameJump
+                    frameNumber={frameNumber}
+                    chunksize={chunksize}
+                    min={frameRange?.recordingMin}
+                    max={frameRange?.recordingMax}
+                    onSeek={(n) => { setIsPlaying(false); setFrameNumber(n); }}
+                  />
                   {firstRow?.ZT && <span>ZT <b>{firstRow.ZT}</b></span>}
                 </div>
               </div>
@@ -824,7 +842,7 @@ function App() {
                   isPlaying={isPlaying}
                   setIsPlaying={setIsPlaying}
                   recordingFramerate={recordingFramerate}
-                  frameRange={frameRange}
+                  frameRange={recordingRange}
                   active={activeTab === 'group_viewer'}
                 />
                 <div className="toolbar" style={{ justifyContent: 'center' }}>

@@ -7,6 +7,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import api, { apiUrl } from './api';
 import { useConsole, useConsoleState, consoleHeight } from './MessageConsole';
 import { useElementSize } from './layout';
+import FrameJump from './FrameJump';
 
 const unwrap = (data) => (typeof data === 'string' ? JSON.parse(data) : data);
 const errorOf = (err) => err.response?.data?.error ?? err.message;
@@ -554,7 +555,6 @@ export default function SegmentationEditor({ experiment, active, highlight, fram
   const markers = highlight && highlight.frame_number === frameNumber ? highlight.points : null;
   const imageUrl = frameNumber != null
     ? apiUrl(`/api/collector/frame?experiment=${encodeURIComponent(experiment)}&frame_number=${frameNumber}`) : null;
-  const chunk = frameNumber != null ? Math.floor(frameNumber / chunksize) : null;
   const intensity = draft?.intensity_ths || [0, 0];
   const area = draft?.area_ths || [0, 'inf'];
   const upper = area[1] !== 'inf';
@@ -858,8 +858,18 @@ export default function SegmentationEditor({ experiment, active, highlight, fram
       <div className="sc-view">
         <div className="sc-row">
           <span className="readout">
-            <span>Frame <b>{frameNumber ?? '–'}</b></span>
-            <span>Chunk <b>{chunk ?? '–'}</b></span>
+            <FrameJump
+              frameNumber={frameNumber}
+              chunksize={chunksize}
+              min={firstFrame}
+              max={lastFrame}
+              disabled={!chunks.length}
+              onSeek={(n) => {
+                const c = Math.floor(n / chunksize);
+                if (chunks.includes(c)) setFrameNumber(n);
+                else log('warning', `Chunk ${c} (frame ${n}) is not in this folder`);
+              }}
+            />
             {chunks.length > 0 && <span>chunks here <b>{chunks[0]}–{chunks[chunks.length - 1]}</b></span>}
           </span>
         </div>
@@ -894,10 +904,6 @@ export default function SegmentationEditor({ experiment, active, highlight, fram
             const c = chunks[Math.floor(Math.random() * chunks.length)];
             setFrameNumber(c * chunksize + Math.floor(Math.random() * chunksize));
           }} title="A random frame of the chunks here">Random</button>
-          <label className="field">Chunk
-            <input type="number" value={chunk ?? ''} min={chunks[0]} max={chunks[chunks.length - 1]}
-                   onChange={(e) => e.target.value !== '' && setFrameNumber(Number(e.target.value) * chunksize)} />
-          </label>
         </div>
         <div className="sc-hint">Wheel: zoom · drag: pan · double click: fit · ←/→ frame (Shift: 10 s)</div>
       </div>

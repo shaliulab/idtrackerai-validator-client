@@ -417,6 +417,9 @@ body.resizing-row, body.resizing-row * { cursor: row-resize !important; user-sel
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
+.frame-jump { display: inline-flex; align-items: center; gap: 12px; }
+.frame-jump-field input[type="number"] { width: 72px; font-variant-numeric: tabular-nums; }
+.frame-jump-field:first-child input[type="number"] { width: 104px; }
 
 /* ── Transport (playback / navigation buttons) ── */
 .transport {

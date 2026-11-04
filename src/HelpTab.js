@@ -224,9 +224,14 @@ export default function HelpTab() {
 
           <h3>Navigation</h3>
           <ul>
-            <li>The <b>slider</b> covers the whole recording. The current frame, chunk and ZT are shown above it.</li>
             <li>
-              The <b>transport buttons</b> step by chunk, 30 s, 10 s and 1 s, and play or pause.
+              <b>Frame</b> and <b>Chunk</b> at the top of the card show where you are; type a number and press Enter
+              to go there (Esc cancels). They work on any frame of the recording, also with a fly missing or in a chunk
+              not analyzed yet. ZT is shown next to them when the frame has tracking rows.
+            </li>
+            <li>The <b>slider</b> covers the tracked frames (the whole recording while nothing is tracked).</li>
+            <li>
+              The <b>transport buttons</b> step by chunk, 30 s, 10 s and 1 s, and play or pause. They can leave the tracked frames, up to the ends of the recording.
               The last two jump to the previous / next <b>rejection</b>, a frame flagged for review.
             </li>
             <li>
@@ -829,7 +834,7 @@ export default function HelpTab() {
               Enter; click a ROI to highlight it, ↑ ↓ ✕ to move or delete it, double click to edit its text), <b>number of
               animals</b>, <b>intensity thresholds</b> (dark animals: pixels below <i>max</i>) and <b>area thresholds</b>. The frame
               shows the ROIs in red and, in blue, the blobs idtrackerai would find with these settings; the box under the thresholds
-              turns red when their number is not the number of animals. Check several frames (Random, ←/→, chunk).{' '}
+              turns red when their number is not the number of animals. Check several frames (Random, ←/→, chunk, or type a <i>Frame</i> or <i>Chunk</i> above the image and press Enter).{' '}
               <b>Save</b> (Ctrl+S) writes the file (the previous version goes to <code>toml_backups/</code>) and converts{' '}
               <code>&lt;date&gt;.toml</code> into the <code>&lt;date&gt;.conf</code> tracking and preprocess-sample read.
               On an <i>analyzed</i> experiment (it has a database) Save, and Propose with overwrite, ask for confirmation first:

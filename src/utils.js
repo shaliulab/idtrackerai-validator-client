@@ -5,7 +5,7 @@ const toInt = (value) => Number.parseInt(value, 10);
 
 const getChunkSize = (recordingFramerate) => recordingFramerate * CHUNK_SECONDS;
 
-// Keep navigation inside the experiment's tracked frames (/api/frame_range);
+// Keep navigation inside the recording (/api/frame_range), tracked or not;
 // unbounded while the range is unknown.
 const clampToRange = (n, range) =>
   Math.min(Math.max(n, range?.min ?? 0), range?.max ?? Infinity);
