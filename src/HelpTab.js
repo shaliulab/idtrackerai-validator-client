@@ -846,7 +846,10 @@ export default function HelpTab() {
               whose settings roi-proposer then proposes. Progress in chunks and <code>crop_arenas.log</code>; the arena buttons open
               an arena's settings in the editor. Running it again overwrites the arena folders (you are asked first); <b>Resume</b>
               (<code>--resume</code>, shown once <code>arenas/</code> holds folders, highlighted when the last run did not finish) only
-              crops the chunks not done for every arena, after deleting the files of the ones left incomplete.</li>
+              crops the chunks not done for every arena, after deleting the files of the ones left incomplete. A run that was
+              killed or filled the drive leaves empty or truncated arena videos (roi-proposer then fails with <i>moov atom not
+              found</i>): the card lists the chunks missing, with the space they need, and an arena of that recording shows
+              <i>Crop of this arena</i> with <i>Resume crop of …</i>; <i>Propose</i> on such an arena is refused until it is done.</li>
             <li><b>preprocess-sample</b>: checks the saved <code>.conf</code> on a sample of frames of every chunk (default: 20 per
               chunk, up to chunk 299) and lists the frames where the blobs are not the number of animals in{' '}
               <code>preprocess_sample.csv</code>. It runs for hours in the background (also after a server restart; <i>Stop</i> ends it).

@@ -727,13 +727,15 @@ function CropArenasCard({ experiment, active, refreshKey, onEdit }) {
     return () => clearInterval(timer);
   }, [active, busy, fetchStatus]);
 
+  // an arena folder shows the crop of its recording
+  const recording = status?.arena ? status.recording : experiment;
   const start = async (resume = false) => {
     if (!resume && status.arenas.length && !window.confirm(`arenas/ already holds ${status.arenas.length} arena folder${status.arenas.length === 1 ? '' : 's'}: `
         + 'crop them again from arenas.toml? Their videos and metadata.yaml are overwritten and roi-proposer proposes their tomls again.'
         + ' (Resume only crops the chunks that are not done.)')) return;
     try {
-      unwrap((await api.post('/api/collector/crop_arenas', { experiment, resume })).data);
-      log('info', `imgstore-crop-arenas${resume ? ' --resume' : ''} on ${experiment} queued: it starts when the GPU has room`);
+      unwrap((await api.post('/api/collector/crop_arenas', { experiment: recording, resume })).data);
+      log('info', `imgstore-crop-arenas${resume ? ' --resume' : ''} on ${recording} queued: it starts when the GPU has room`);
       setShowLog(true);
       setTimeout(fetchStatus, 1500);
     } catch (err) {
@@ -745,7 +747,7 @@ function CropArenasCard({ experiment, active, refreshKey, onEdit }) {
     if (!window.confirm(waiting ? 'Take imgstore-crop-arenas out of the GPU queue?'
       : 'Stop imgstore-crop-arenas? The chunks being encoded are left incomplete.')) return;
     try {
-      await api.post('/api/collector/crop_arenas/stop', { experiment });
+      await api.post('/api/collector/crop_arenas/stop', { experiment: recording });
       log('info', waiting ? 'imgstore-crop-arenas taken out of the GPU queue' : 'imgstore-crop-arenas stopped');
       setTimeout(fetchStatus, 1000);
     } catch (err) {
@@ -753,12 +755,72 @@ function CropArenasCard({ experiment, active, refreshKey, onEdit }) {
     }
   };
 
-  if (status?.arena) return null;
   const progress = status?.progress;
   const waiting = status?.queue?.status === 'queued' ? status.queue : null;
-  // arena folders of a run that did not end with exit code 0 (stopped, killed or failed)
+  const completeness = status?.completeness;
+  const incomplete = Boolean(completeness && !completeness.complete);
+  // arena folders of a run that did not end with exit code 0 (stopped, killed or failed), or with chunks not cropped
   const canResume = Boolean(status?.arenas.length && status.has_arenas_toml);
-  const unfinished = canResume && status.exit_code !== 0;
+  const unfinished = canResume && (status.exit_code !== 0 || incomplete);
+  const lowSpace = Boolean(incomplete && completeness.needed_bytes != null && status.free_bytes != null
+    && status.free_bytes < completeness.needed_bytes + 50e9);
+  const ranges = (missing) => missing.slice(0, 6).map(([a, b]) => (a === b ? `${a}` : `${a}–${b}`)).join(', ')
+    + (missing.length > 6 ? ', …' : '');
+  // what the crop left: chunks cropped for every arena (imgstore-crop-arenas' own rule, what --resume skips)
+  const completenessNote = incomplete && !status.running && (
+    <div className="ov-warn">
+      Incomplete crop: {completeness.done} of {completeness.total} chunks are cropped for every arena;
+      chunks {ranges(completeness.missing)} are missing or broken (empty or truncated videos: roi-proposer and preprocess-sample fail on them).
+      {status.no_space && ' The drive filled up during the last run ("No space left on device" in crop_arenas.log).'}
+      {' '}Resume crops only those chunks{completeness.needed_bytes != null && <> (≈{gb(completeness.needed_bytes)} more; {gb(status.free_bytes)} free on the drive{lowSpace && ': free some space first'})</>}.
+    </div>
+  );
+
+  if (status?.arena) {
+    // arena folder: shown only while its recording's crop is incomplete, running or queued
+    if (!incomplete && !status.running && !waiting) return null;
+    return (
+      <section className="card">
+        <div className="card-header">
+          Crop of this arena
+          <span className="spacer" />
+          {status.running && (
+            <span className="ov-normal sc-badge sc-rec">
+              running{progress ? ` · ${progress.done}/${progress.total} chunks` : ''}
+            </span>
+          )}
+          {waiting && <span className="ov-normal sc-badge">GPU queue #{waiting.position}</span>}
+        </div>
+        <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div className="sc-muted">
+            This arena was cropped out of <code>{recording}</code> by imgstore-crop-arenas.
+            {(status.running || waiting) && ' Propose its settings once the crop is done.'}
+          </div>
+          {completenessNote}
+          <div className="toolbar">
+            {waiting ? (
+              <>
+                <span>Waiting in the GPU queue (#{waiting.position}): {waiting.reason || 'starting…'}</span>
+                <button onClick={stop}><i className="fa fa-times" style={{ marginRight: 6 }} />Cancel</button>
+              </>
+            ) : status.running ? (
+              <button onClick={stop}><i className="fa fa-stop" style={{ marginRight: 6 }} />Stop</button>
+            ) : (
+              <button className="btn-primary" onClick={() => start(true)} disabled={!canResume}
+                      title={`imgstore-crop-arenas --resume on ${recording}: crops again, for every arena, only the chunks that are missing or broken`}>
+                <i className="fa fa-play" style={{ marginRight: 6 }} />Resume crop of {recording}
+              </button>
+            )}
+            <button onClick={fetchStatus}><i className="fa fa-refresh" style={{ marginRight: 6 }} />Refresh</button>
+            <button onClick={() => onEdit(recording)} title="Open the whole recording in the editor (Crop arenas card, log)">Open recording</button>
+          </div>
+          {status.running && progress && progress.total > 0 && (
+            <div className="sc-progress"><div style={{ width: `${(100 * progress.done / progress.total).toFixed(1)}%` }} /></div>
+          )}
+        </div>
+      </section>
+    );
+  }
   return (
     <section className="card">
       <div className="card-header">
@@ -821,7 +883,8 @@ function CropArenasCard({ experiment, active, refreshKey, onEdit }) {
             )}
             {status.running && !status.log && <div className="sc-muted">Started outside the validator: no crop_arenas.log to follow.</div>}
             {status.exit_code != null && status.exit_code !== 0 && <div className="ov-warn">Last run failed (exit code {status.exit_code}): see the log.</div>}
-            {status.exit_code === 0 && <div className="sc-muted">Last run finished.</div>}
+            {status.exit_code === 0 && !incomplete && <div className="sc-muted">Last run finished.</div>}
+            {completenessNote}
             {status.log && (
               <div>
                 <button className="ov-more" style={{ border: 'none', padding: 0, background: 'none' }} onClick={() => setShowLog((v) => !v)}>
