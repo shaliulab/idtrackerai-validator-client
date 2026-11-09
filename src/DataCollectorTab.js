@@ -582,6 +582,9 @@ function PreprocessCard({ experiment, active, refreshKey, onShowFrame, shownFram
         experiment, start_chunk: range.start, end_chunk: range.end, samples_per_chunk: range.samples,
       })).data);
       log('info', `preprocess-sample started on chunks ${data.start_chunk}–${data.end_chunk} (${data.samples_per_chunk} frames per chunk, pid ${data.pid})`);
+      if (data.index?.remade) {
+        log('info', `index.db remade (${data.index.reason}): ${data.index.indexed} chunks indexed, ${data.index.previous ?? 'none'} before`);
+      }
       setTimeout(fetchStatus, 1500);
     } catch (err) {
       log('error', `preprocess-sample: ${errorOf(err)}`);
