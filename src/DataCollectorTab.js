@@ -50,6 +50,26 @@ function AnalyzedBadge({ databases }) {
   return <span className={`dm-status ${cls}`} title={title}>{text}</span>;
 }
 
+// Validated = a database holding ROI_0_VAL and IDENTITY_VAL; a whole recording also counts its
+// arenas' (paths arenas/K/…).
+function ValidatedBadge({ databases }) {
+  if (!databases) return null;
+  if (!databases.length) return <span className="sc-muted">–</span>;
+  const arena = (d) => (d.path.includes('/') ? d.path.split('/')[1] : null);
+  const validated = databases.filter((d) => d.validated);
+  const title = databases.map((d) => `${d.path}: ${d.validated ? 'ROI_0_VAL + IDENTITY_VAL' : d.validated === false ? 'not validated' : 'unreadable'}`).join('\n');
+  const own = validated.some((d) => !arena(d));
+  const ownDb = databases.some((d) => !arena(d));
+  const arenas = [...new Set(databases.filter((d) => arena(d)).map(arena))];
+  const validArenas = [...new Set(validated.filter((d) => arena(d)).map(arena))];
+  let text, cls;
+  if (own || (ownDb && !arenas.length)) [text, cls] = own ? ['validated', 'dm-ok'] : ['not validated', 'dm-none'];
+  else if (!validArenas.length) [text, cls] = ['not validated', 'dm-none'];
+  else if (validArenas.length === arenas.length) [text, cls] = [`arena${arenas.length > 1 ? 's' : ''} ${validArenas.join(', ')} validated`, 'dm-ok'];
+  else [text, cls] = [`arena${validArenas.length > 1 ? 's' : ''} ${validArenas.join(', ')} of ${arenas.length} validated`, 'dm-warn'];
+  return <span className={`dm-status ${cls}`} title={title}>{text}</span>;
+}
+
 // ── 0. Running now ─────────────────────────────────────────────────────────
 const TOOLS = { crop_arenas: 'imgstore-crop-arenas', preprocess_sample: 'preprocess-sample' };
 
@@ -468,6 +488,7 @@ function FetchCard({ active, onEdit, editing, onOpenExperiment }) {
                   <th>Here</th>
                   <th>To fetch</th>
                   <th title="Has a database: idtrackerai has tracked it (or some of its arenas)">Analyzed</th>
+                  <th title="Its database (or some of its arenas') holds the validated tables ROI_0_VAL and IDENTITY_VAL">Validated</th>
                   <th />
                 </tr>
               </thead>
@@ -496,6 +517,7 @@ function FetchCard({ active, onEdit, editing, onOpenExperiment }) {
                       </td>
                       <td>{e.missing_bytes ? gb(e.missing_bytes) : '–'}</td>
                       <td>{e.local ? <AnalyzedBadge databases={e.databases} /> : '–'}</td>
+                      <td>{e.local ? <ValidatedBadge databases={e.databases} /> : '–'}</td>
                       <td style={{ whiteSpace: 'nowrap' }}>
                         <button disabled={!e.local} onClick={() => onEdit(e.experiment)} title="Edit its idtrackerai settings below">Settings ▸</button>{' '}
                         <button disabled={!e.local} onClick={() => onOpenExperiment(e.experiment)} title="Open it in the Group viewer">Open</button>
@@ -507,7 +529,7 @@ function FetchCard({ active, onEdit, editing, onOpenExperiment }) {
                     </tr>
                   );
                 })}
-                {!experiments.length && <tr><td colSpan={10} className="sc-muted">No experiment recorded on {listing.date}</td></tr>}
+                {!experiments.length && <tr><td colSpan={11} className="sc-muted">No experiment recorded on {listing.date}</td></tr>}
               </tbody>
             </table>
           </div>

@@ -815,7 +815,8 @@ export default function HelpTab() {
               when they started (UTC) and at which ZT, how much cv2 has, what a fetch copies (<i>Up to ZT30</i>: the folder's
               files and the chunks starting before ZT 30, i.e. the first day and a buffer; later chunks are not needed) and how
               much of it is <i>here</i> already, and whether it is <i>analyzed</i> (its folder, or one of its arenas, has a
-              database; hover for the files). The same badge is shown next to the experiment of <i>Segmentation settings</i>. ZT0 is the experiment's <code>reference_hour</code> in the metadata sheets
+              database; hover for the files) and <i>validated</i> (that database holds the <code>ROI_0_VAL</code> and{' '}
+              <code>IDENTITY_VAL</code> tables; for a recording split into arenas, which arenas). The <i>analyzed</i> badge is shown next to the experiment of <i>Segmentation settings</i>. ZT0 is the experiment's <code>reference_hour</code> in the metadata sheets
               (12:00, marked *, while the sheets do not have it). <b>Fetch N selected</b> copies the missing files with rsync
               (resumable; files written in the last 10 min are skipped, so it can run while cv2 still records); the console
               shows the progress. A drive must keep 50 GB free. <b>Schedule…</b> fetches the selected experiments later
