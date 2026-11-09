@@ -82,6 +82,7 @@ const FrameWithSquare = React.forwardRef(
       onNativeSize,
       showPose,
       labelField = LABEL_FIELD,
+      colorByLabel = false,
       onFrameClick,
     },
     ref,
@@ -256,6 +257,17 @@ const FrameWithSquare = React.forwardRef(
         const sy = displayHeight / native.height;
         const identityColor = (identity) =>
           identity != null && identity !== 0 ? colorFor(colors, identity) : '#000000';
+        // "Colour by label": the displayed field picks the colour instead of
+        // identity (e.g. local_identity while identities are still 0). Same
+        // palette, 0 / missing still black; floats go by their rounded value.
+        const byLabel = colorByLabel && labelField !== 'identity';
+        const animalColor = (animal) => {
+          if (!byLabel) return identityColor(animal.identity);
+          const v = animal?.[labelField];
+          return identityColor(typeof v === 'number' ? Math.round(v) : v);
+        };
+        const animalText = (animal) =>
+          formatLabel(byLabel ? animal?.[labelField] : animal.identity);
         if (native.width !== nativeSize?.width || native.height !== nativeSize?.height) {
           onNativeSize?.(native);
         }
@@ -266,12 +278,12 @@ const FrameWithSquare = React.forwardRef(
         context.clearRect(0, 0, displayWidth, displayHeight);
         context.drawImage(img, 0, 0, displayWidth, displayHeight);
 
-        // Tracking labels. Colour still follows identity regardless of which
-        // field is displayed, so an animal keeps the same colour when the
-        // label switches to area or fragment.
+        // Tracking labels. Colour follows identity regardless of which field
+        // is displayed (an animal keeps its colour when the label switches to
+        // area or fragment), unless "Colour by label" is ticked.
         context.font = `${TEXT_SIZE}px ${TEXT_FAMILY}`;
         trackingData.forEach((animal) => {
-          context.fillStyle = identityColor(animal.identity);
+          context.fillStyle = animalColor(animal);
           const v = animal?.[labelField] ?? animal?.identity ?? '';
           context.fillText(formatLabel(v), animal.x * sx, animal.y * sy);
         });
@@ -401,7 +413,7 @@ const FrameWithSquare = React.forwardRef(
             const d = (animal.x - nx) ** 2 + (animal.y - ny) ** 2;
             if (d < bestDist) { bestDist = d; centerFly = animal; }
           });
-          const borderColor = centerFly ? identityColor(centerFly.identity) : INSET_BORDER_COLOR;
+          const borderColor = centerFly ? animalColor(centerFly) : INSET_BORDER_COLOR;
 
           // Border (inside the inset, so it is not clipped at the canvas edge)
           context.strokeStyle = borderColor;
@@ -410,7 +422,7 @@ const FrameWithSquare = React.forwardRef(
           context.strokeRect(dstX + b, dstY + b, INSET_DISPLAY_SIZE - 2 * b, INSET_DISPLAY_SIZE - 2 * b);
 
           if (centerFly) {
-            const text = formatLabel(centerFly.identity);
+            const text = animalText(centerFly);
             context.font = `bold ${INSET_LABEL_SIZE}px ${TEXT_FAMILY}`;
             context.textBaseline = 'top';
             const pad = 4;
@@ -464,6 +476,7 @@ const FrameWithSquare = React.forwardRef(
       onNativeSize,
       showPose,
       labelField,
+      colorByLabel,
     ]);
 
     return (
@@ -485,7 +498,9 @@ const FrameWithSquare = React.forwardRef(
 FrameWithSquare.displayName = 'FrameWithSquare';
 
 // What is drawn over the frame: pose skeletons and the field labelling each animal.
-export function FrameDisplayOptions({ trackingData, showPose, setShowPose, labelField, setLabelField }) {
+export function FrameDisplayOptions({
+  trackingData, showPose, setShowPose, labelField, setLabelField, colorByLabel, setColorByLabel,
+}) {
   // Which fields the current tracking rows actually carry. Derived from the
   // data rather than hard-coded, so a backend that stops sending `fragment`
   // does not leave a dead option in the menu.
@@ -516,6 +531,22 @@ export function FrameDisplayOptions({ trackingData, showPose, setShowPose, label
           ))}
         </select>
       </label>
+      {setColorByLabel && (
+        <label
+          className="field check"
+          title={labelField === 'identity'
+            ? 'Choose a Label other than identity to colour by it'
+            : `Colour each animal by its ${labelField} instead of its identity (0 stays black)`}
+        >
+          <input
+            type="checkbox"
+            checked={!!colorByLabel}
+            disabled={labelField === 'identity'}
+            onChange={(e) => setColorByLabel(e.target.checked)}
+          />
+          Colour by label
+        </label>
+      )}
     </>
   );
 }

@@ -195,7 +195,9 @@ export default function HelpTab() {
               Each fly is labelled at its centroid in its <b>identity colour</b>. Black means
               identity <b>0</b>: a detection that was not assigned to any fly. Use{' '}
               <i>Label</i> to show another field instead of the identity (area, fragment, …);
-              the colour still follows the identity.
+              the colour still follows the identity unless <i>Colour by label</i> is ticked, which
+              colours each fly by the shown field instead (e.g. <code>local_identity</code> while
+              identities are still 0; 0 stays black). The magnifier then follows it too.
             </li>
             <li>
               <b>Hover</b> to open a magnifying glass. Its border takes the colour of the fly

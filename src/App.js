@@ -180,6 +180,16 @@ function App() {
     try { localStorage.setItem('fh-label-field', labelField); } catch { /* ignore */ }
   }, [labelField]);
 
+  // Colour the animals by the displayed field instead of identity (opt-in).
+  const [colorByLabel, setColorByLabel] = useState(() => {
+    try { return localStorage.getItem('fh-label-color') === '1'; }
+    catch { return false; }
+  });
+
+  useEffect(() => {
+    try { localStorage.setItem('fh-label-color', colorByLabel ? '1' : '0'); } catch { /* ignore */ }
+  }, [colorByLabel]);
+
   // index.css switches its color variables on this attribute.
   useEffect(() => {
     document.documentElement.dataset.theme = themeName;
@@ -780,6 +790,7 @@ function App() {
               onNativeSize={setNativeSize}
               showPose={showPose}
               labelField={labelField}
+              colorByLabel={colorByLabel}
               onFrameClick={setFrameClick}
             />
           </div>
@@ -859,6 +870,8 @@ function App() {
                     setShowPose={setShowPose}
                     labelField={labelField}
                     setLabelField={setLabelField}
+                    colorByLabel={colorByLabel}
+                    setColorByLabel={setColorByLabel}
                   />
                 </div>
                 <CvatLinks experiment={currentExperiment} frameNumber={frameNumber} />
