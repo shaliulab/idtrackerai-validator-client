@@ -12,8 +12,6 @@ import ThirtyForthIcon from './assets/icons/thirtyforth.svg?react';
 // import ThirtyForthIcon from './assets/icons/tenforth.svg?react';
 import ChunkForthIcon from './assets/icons/chunkforth.svg?react';
 
-import PreviousRejectionIcon from './assets/icons/previousRejection.svg?react';
-import NextRejectionIcon from './assets/icons/nextRejection.svg?react';
 
 
 // One icon button of the transport bar; `title` names the action and its key.
@@ -35,8 +33,6 @@ const OneSecondForthButton = iconButton(OneForthIcon, 'Forward 1 s (5)');
 const TenSecondsForthButton = iconButton(TenForthIcon, 'Forward 10 s (6)');
 const ThirtySecondsForthButton = iconButton(ThirtyForthIcon, 'Forward 30 s');
 const ChunkForthButton = iconButton(ChunkForthIcon, 'Next chunk (7)');
-const PreviousRejectionButton = iconButton(PreviousRejectionIcon, 'Previous rejection (8)');
-const NextRejectionButton = iconButton(NextRejectionIcon, 'Next rejection (9)');
 
 const TogglePlayButton = ({ isPlaying, play, pause }) => (
   <button
@@ -51,5 +47,5 @@ const TogglePlayButton = ({ isPlaying, play, pause }) => (
 export { 
     OneSecondBackButton,TenSecondsBackButton, ThirtySecondsBackButton, ChunkBackButton,
     OneSecondForthButton,TenSecondsForthButton, ThirtySecondsForthButton, ChunkForthButton,
-    NextRejectionButton, PreviousRejectionButton, TogglePlayButton
+    TogglePlayButton
 };

@@ -17,6 +17,7 @@ const COLUMNS = [
   { key: 'age',      label: 'Age',       w: 38, title: 'Age: age_min of the metadata' },
   { key: 'sleep',    label: 'Sleep',     w: 74  },
   { key: 'ethogram', label: 'Etho',      w: 48  },
+  { key: 'interaction', label: 'Inter',  w: 74, title: 'Previous / next interaction of the fly (with any fly)' },
   { key: 'local_id', label: 'Loc Id',    w: 50  },
   { key: 'in_frame', label: 'InFrm',     w: 50  },
   { key: 'fragment', label: 'Frag',      w: 50  },
@@ -56,14 +57,16 @@ const NAV_BTN_DISABLED = {
 };
 
 // Columns that act on the viewer (sleep / ethogram navigation): hidden when read-only.
-const NAVIGATION_COLUMNS = new Set(['sleep', 'ethogram']);
+const NAVIGATION_COLUMNS = new Set(['sleep', 'ethogram', 'interaction']);
 
 // ethogramIdentities: identities with an ethogram in the loaded experiment. Identity 0 is
 // an unidentified blob in groups, but the only fly in single-animal (1X) experiments.
+// interactions ({available, path, identities: Set}): flies with interactions (interactions index of the experiment);
+// the others get their interaction buttons grayed out.
 // readOnly: plain cells, no navigation (for the row shown in the PE / Ethograms tabs).
 // frameRange ({min, max}, tracked frames): a chunk that starts before the first
 // tracked frame (e.g. validation starting mid-chunk) opens at that frame instead.
-const BlobsTable = ({ Data, setFrameNumber, number_of_animals, animalMetadata = {}, onOpenEthogram, ethogramIdentities, readOnly = false, frameRange }) => {
+const BlobsTable = ({ Data, setFrameNumber, number_of_animals, animalMetadata = {}, onOpenEthogram, ethogramIdentities, interactions, readOnly = false, frameRange }) => {
   const columns = readOnly ? COLUMNS.filter(c => !NAVIGATION_COLUMNS.has(c.key)) : COLUMNS;
   const [draft, setDraft] = useState('');
   const [editingRow, setEditingRow] = useState(null);
@@ -117,6 +120,19 @@ const BlobsTable = ({ Data, setFrameNumber, number_of_animals, animalMetadata = 
     }
   }, [setFrameNumber]);
 
+  const navInteraction = useCallback(async (dir, identity, frameNumber) => {
+    const key = `int_${dir}_${identity}`;
+    setSleepLoading(s => ({ ...s, [key]: true }));
+    try {
+      const { data } = await api.get(`/api/interaction/${dir}/${identity}/${frameNumber}`);
+      if (data.frame_number != null) setFrameNumber(data.frame_number);
+    } catch (e) {
+      console.error('Interaction nav failed:', e);
+    } finally {
+      setSleepLoading(s => ({ ...s, [key]: false }));
+    }
+  }, [setFrameNumber]);
+
   const rows = useMemo(() => {
     const n = Math.max(Number(number_of_animals) || 0, Data.length);
     const padded = Data.slice(0, n);
@@ -151,6 +167,10 @@ const BlobsTable = ({ Data, setFrameNumber, number_of_animals, animalMetadata = 
           const hasEthogram = Boolean(onOpenEthogram) && row.identity != null && ethogramIdentities?.has(Number(row.identity));
           const prevKey = `prev_${row.identity}`;
           const nextKey = `next_${row.identity}`;
+          const hasInteractions = row.identity != null && Boolean(interactions?.identities?.has(Number(row.identity)));
+          const noInteractions = !interactions?.available
+            ? `No interactions index for this experiment${interactions?.path ? ` (${interactions.path})` : ''}`
+            : `No interactions of fly ${row.identity} in ${interactions.path}`;
 
           return (
             <tr key={`row-${index}`}>
@@ -244,6 +264,27 @@ const BlobsTable = ({ Data, setFrameNumber, number_of_animals, animalMetadata = 
                     : `No ethogram for identity ${row.identity} in this experiment`}
                   onClick={() => onOpenEthogram(row.identity, row.frame_number)}
                 >etho</button>
+              </td>}
+
+              {/* Interaction navigation */}
+              {!readOnly && <td style={{ whiteSpace: 'nowrap' }}>
+                {['prev', 'next'].map((dir, i) => {
+                  const busy = !!sleepLoading[`int_${dir}_${row.identity}`];
+                  const enabled = hasInteractions && !busy;
+                  return (
+                    <span key={dir}>
+                      {i > 0 && ' '}
+                      <button
+                        style={enabled ? NAV_BTN : NAV_BTN_DISABLED}
+                        disabled={!enabled}
+                        title={hasInteractions
+                          ? `Start of the ${dir === 'prev' ? 'previous' : 'next'} interaction of fly ${row.identity}`
+                          : noInteractions}
+                        onClick={() => navInteraction(dir, row.identity, row.frame_number)}
+                      >{dir === 'prev' ? '← i' : 'i →'}</button>
+                    </span>
+                  );
+                })}
               </td>}
 
               <TC value={row.local_identity} />

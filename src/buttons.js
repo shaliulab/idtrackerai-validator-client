@@ -20,8 +20,6 @@ import {
   ThirtySecondsForthButton, 
   TenSecondsForthButton, 
   OneSecondForthButton, 
-  PreviousRejectionButton, 
-  NextRejectionButton, 
   TogglePlayButton 
 } from './icons';
 
@@ -77,34 +75,6 @@ const Buttons = ({ frameNumber, setFrameNumber, isPlaying, setIsPlaying, recordi
     setFrameNumber((prev) => get_30seconds_forward(prev, frameRate, frameRange));
   };
 
-  const prev_rejection = () => {
-    api.get(`/api/prev_rejection/${parseInt(frameNumber, 10)}`)
-      .then((response) => {
-        const data =
-          typeof response.data === 'string'
-            ? JSON.parse(response.data)
-            : response.data;
-        if (data?.frame_number != null) setFrameNumber(data.frame_number);
-      })
-      .catch((error) => {
-        console.error('Error fetching previous rejection:', error);
-      });
-  };
-
-  const next_rejection = () => {
-    api.get(`/api/next_rejection/${parseInt(frameNumber, 10)}`)
-      .then((response) => {
-        const data =
-          typeof response.data === 'string'
-            ? JSON.parse(response.data)
-            : response.data;
-        if (data?.frame_number != null) setFrameNumber(data.frame_number);
-      })
-      .catch((error) => {
-        console.error('Error fetching next rejection:', error);
-      });
-  };
-
   // Keyboard shortcuts
   // Deps are the values the handlers actually close over: everything else is
   // either an updater-form setState or a stable prop.
@@ -144,12 +114,6 @@ const Buttons = ({ frameNumber, setFrameNumber, isPlaying, setIsPlaying, recordi
         case '7':
           next_chunk();
           break;
-        case '8':
-          prev_rejection();
-          break;
-        case '9':
-          next_rejection();
-          break;
         default:
           break;
       }
@@ -173,9 +137,6 @@ const Buttons = ({ frameNumber, setFrameNumber, isPlaying, setIsPlaying, recordi
       <TenSecondsForthButton onClick={seconds10_forward} />
       <ThirtySecondsForthButton onClick={seconds30_forward} />
       <ChunkForthButton onClick={next_chunk} />
-      <span className="sep" />
-      <PreviousRejectionButton onClick={prev_rejection} />
-      <NextRejectionButton onClick={next_rejection} />
     </div>
   );
 };

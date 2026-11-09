@@ -317,6 +317,21 @@ function App() {
 
   useEffect(() => { fetchEthogramFlies(); }, [fetchEthogramFlies]);
 
+  // Blobs table interaction buttons: flies with interactions in the loaded experiment
+  const [interactions, setInteractions] = useState({ available: false, path: null, identities: new Set() });
+  const fetchInteractions = useCallback(async () => {
+    try {
+      const { data } = await api.get('/api/interactions/identities');
+      const info = typeof data === 'string' ? JSON.parse(data) : data;
+      setInteractions({ available: !!info?.available, path: info?.path ?? null, identities: new Set((info?.identities ?? []).map(Number)) });
+    } catch (err) {
+      console.error("Couldn't fetch the flies with interactions", err);
+      setInteractions({ available: false, path: null, identities: new Set() });
+    }
+  }, []);
+
+  useEffect(() => { fetchInteractions(); }, [fetchInteractions]);
+
   const fetchCurrentExperiment = useCallback(async () => {
     try {
       const { data } = await api.get('/api/current_experiment');
@@ -640,9 +655,10 @@ function App() {
     fetchUseVal();
     fetchAnimalMetadata();
     fetchEthogramFlies();
+    fetchInteractions();
     fetchCurrentExperiment();
     await fetchFlies();
-  }, [player, fetchCurrentExperiment, fetchFramerate, fetchFrameRange, fetchUseVal, fetchAnimalMetadata, fetchEthogramFlies, fetchFlies]);
+  }, [player, fetchCurrentExperiment, fetchFramerate, fetchFrameRange, fetchUseVal, fetchAnimalMetadata, fetchEthogramFlies, fetchInteractions, fetchFlies]);
 
   // Overview table "Open": load that experiment and show it in the Group viewer.
   const openExperiment = useCallback(async (experiment) => {
@@ -818,7 +834,8 @@ function App() {
                             number_of_animals={number_of_animals}
                             animalMetadata={animalMetadata}
                             onOpenEthogram={openEthogram}
-                            ethogramIdentities={ethogramIdentities} />
+                            ethogramIdentities={ethogramIdentities}
+                            interactions={interactions} />
               </div>
               <CardResizer id="viewer-tracking" />
             </section>

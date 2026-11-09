@@ -50,7 +50,6 @@ const SHORTCUTS = [
     [<><Key>2</Key> / <Key>6</Key></>, 'Back / forward 10 s'],
     [<><Key>3</Key> / <Key>5</Key></>, 'Back / forward 1 s'],
     [<Key>4</Key>, 'Play / pause'],
-    [<><Key>8</Key> / <Key>9</Key></>, 'Previous / next rejection'],
     ['Mouse wheel on the frame', 'Scrub (one notch = "Playback framerate" frames); pauses playback'],
     ['Middle click on the frame', 'Play / pause'],
     ['Hover over the frame', 'Magnifying glass'],
@@ -221,6 +220,11 @@ export default function HelpTab() {
           </p>
           <ul>
             <li><b>← z / z →</b> jump to the start of the previous / next sleep bout of that fly.</li>
+            <li>
+              <b>← i / i →</b> jump to the start of the previous / next interaction of that fly, with any fly (the interactions
+              index of the interactions pipeline, <code>interactions/&lt;experiment&gt;_index.csv</code>). Grayed out when the
+              experiment has no index yet or the fly has no interactions in it.
+            </li>
             <li><b>etho</b> opens that fly's ethogram at the current frame.</li>
           </ul>
 
@@ -234,7 +238,6 @@ export default function HelpTab() {
             <li>The <b>slider</b> covers the tracked frames (the whole recording while nothing is tracked).</li>
             <li>
               The <b>transport buttons</b> step by chunk, 30 s, 10 s and 1 s, and play or pause. They can leave the tracked frames, up to the ends of the recording.
-              The last two jump to the previous / next <b>rejection</b>, a frame flagged for review.
             </li>
             <li>
               <i>Playback framerate</i> sets the playback speed and the number of frames
