@@ -15,6 +15,7 @@ import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import api from './api';
 import { useConsole } from './MessageConsole';
 import MetadataUpdate from './MetadataUpdate';
+import CvatLaunch, { STATE_LABELS as CVAT_STATES } from './CvatLaunch';
 import CardResizer from './CardResizer';
 
 const MISSING = '(missing)';
@@ -610,7 +611,8 @@ function SheetButton({ experiment, onClick, status }) {
   );
 }
 
-function ExperimentTable({ rows, onOpen, current, active, onUpdateMetadata, sheetStatus, onPredownload, predownloading }) {
+function ExperimentTable({ rows, onOpen, current, active, onUpdateMetadata, sheetStatus, onPredownload, predownloading,
+  onSendToCvat, cvatRuns }) {
   const { log } = useConsole();
   const [sort, setSort] = useState({ key: 'date', desc: true });
   const scrollRef = useRef(null);
@@ -732,6 +734,15 @@ function ExperimentTable({ rows, onOpen, current, active, onUpdateMetadata, shee
                 </td>
                 <td className="ov-actions">
                   <SheetButton experiment={e} onClick={onUpdateMetadata} status={sheetStatus[e.experiment]} />
+                  {e.analyzed !== false && !e.error && (
+                    <button className={`ov-sheet${cvatRuns[e.experiment] ? ` cl-btn-${cvatRuns[e.experiment].state}` : ''}`}
+                            onClick={() => onSendToCvat(e.experiment)}
+                            title={'Send to CVAT for validation: checks the tracking first (broken chunks, missing flies, '
+                              + 'identities, existing CVAT tasks, disk space), then runs manual/validation/main.sh'
+                              + (cvatRuns[e.experiment] ? `\n\nValidation run: ${CVAT_STATES[cvatRuns[e.experiment].state] || cvatRuns[e.experiment].state}` : '')}>
+                      <i className="fa fa-upload" />
+                    </button>
+                  )}
                   <button disabled={!!e.error || sameExperiment(e.experiment, current)}
                           onClick={() => onOpen(e.experiment)}
                           title={e.analyzed === false
@@ -818,6 +829,8 @@ export default function OverviewTab({ active, currentExperiment, onOpenExperimen
   const [reindexing, setReindexing] = useState(false);
   const [downloadingSheets, setDownloadingSheets] = useState(false);
   const [metadataOf, setMetadataOf] = useState(null);   // experiment whose sheet metadata is being updated
+  const [cvatOf, setCvatOf] = useState(null);           // experiment being sent to CVAT for validation
+  const [cvatRuns, setCvatRuns] = useState({});         // experiment -> state of its validation run started here
   const [sheetStatus, setSheetStatus] = useState({});    // experiment -> predownloaded sheet metadata status
   const [predownloading, setPredownloading] = useState(false);
   const [error, setError] = useState(null);
@@ -892,6 +905,19 @@ export default function OverviewTab({ active, currentExperiment, onOpenExperimen
       .catch(() => { /* older server: no predownload */ });
   }, []);
   useEffect(() => { if (data) fetchSheetStatus(); }, [data, fetchSheetStatus]);
+
+  // Validation runs (main.sh) started from this server, for the CVAT button of each row.
+  const fetchCvatRuns = useCallback(() => {
+    api.get('/api/cvat_launch/runs')
+      .then((r) => setCvatRuns(unwrap(r.data)))
+      .catch(() => { /* older server */ });
+  }, []);
+  useEffect(() => {
+    if (!data || !active) return undefined;
+    fetchCvatRuns();
+    const timer = setInterval(fetchCvatRuns, 30000);
+    return () => clearInterval(timer);
+  }, [data, active, fetchCvatRuns]);
 
   const predownload = useCallback((experiments) => {
     setPredownloading(true);
@@ -1054,11 +1080,16 @@ export default function OverviewTab({ active, currentExperiment, onOpenExperimen
 
       <ExperimentTable rows={filtered} onOpen={onOpenExperiment} current={currentExperiment} active={active}
                        onUpdateMetadata={setMetadataOf} sheetStatus={sheetStatus}
-                       onPredownload={predownload} predownloading={predownloading} />
+                       onPredownload={predownload} predownloading={predownloading}
+                       onSendToCvat={setCvatOf} cvatRuns={cvatRuns} />
 
       {metadataOf && (
         <MetadataUpdate experiment={metadataOf} onWritten={() => fetchData()}
                         onClose={() => { setMetadataOf(null); fetchSheetStatus(); }} />
+      )}
+      {cvatOf && (
+        <CvatLaunch experiment={cvatOf} onStarted={fetchCvatRuns}
+                    onClose={() => { setCvatOf(null); fetchCvatRuns(); }} />
       )}
     </div>
   );

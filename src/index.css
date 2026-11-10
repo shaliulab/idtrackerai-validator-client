@@ -969,3 +969,15 @@ button.ov-sheet.ov-sheet-error { border-color: var(--danger); color: var(--dange
 .gq-key { display: inline-block; width: 10px; height: 10px; margin-right: 5px; vertical-align: -1px; border: 1px solid var(--border-strong); background: var(--surface-2); }
 .sc-log { max-height: 260px; overflow: auto; font-size: 11px; background: var(--surface-2); padding: 8px; border-radius: var(--radius); margin: 6px 0 0; }
 .sc-csv { max-height: 420px; }
+
+/* CvatLaunch.js: send an experiment to CVAT for validation */
+.cl-checks { columns: 1; }
+.cl-run { border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px; margin-bottom: 10px; }
+.cl-tail { max-height: 30vh; overflow: auto; font-size: 11px; margin: 4px 0 0; white-space: pre-wrap; word-break: break-all; }
+.cl-state { text-transform: uppercase; font-size: 11px; letter-spacing: 0.04em; }
+.cl-running { color: var(--accent); }
+.cl-done { color: #2ca02c; }
+.cl-failed, .cl-stopped { color: var(--danger); }
+.ov-sheet.cl-btn-running { color: var(--accent); }
+.ov-sheet.cl-btn-done { color: #2ca02c; }
+.ov-sheet.cl-btn-failed, .ov-sheet.cl-btn-stopped { color: var(--danger); }
