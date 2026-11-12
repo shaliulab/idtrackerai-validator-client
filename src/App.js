@@ -22,6 +22,7 @@ import DataManagementTab from './DataManagementTab';
 import QcTab from './QcTab';
 import PoseTab from './PoseTab';
 import SleapLabelsTab from './SleapLabelsTab';
+import AnnotateTab from './AnnotateTab';
 import MonitorTab from './MonitorTab';
 import ValidationCsvBuilder from './ValidationCsvBuilder';
 import CvatLinks from './CvatLinks';
@@ -593,7 +594,7 @@ function App() {
   // PE and Ethograms need the database
   useEffect(() => {
     if (!experimentInfo.has_database) {
-      setActiveTab((tab) => (tab === 'proboscis_extension' || tab === 'ethogram' || tab === 'qc' || tab === 'pose' || tab === 'sleap_labels' ? 'group_viewer' : tab));
+      setActiveTab((tab) => (tab === 'proboscis_extension' || tab === 'ethogram' || tab === 'qc' || tab === 'pose' || tab === 'sleap_labels' || tab === 'annotate' ? 'group_viewer' : tab));
     }
   }, [experimentInfo]);
 
@@ -773,6 +774,7 @@ function App() {
         <Tab id="proboscis_extension" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+2" disabled={noDatabase}>Proboscis extension (PE)</Tab>
         <Tab id="ethogram" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+3" disabled={noDatabase}>Ethograms</Tab>
         <Tab id="qc" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+4" disabled={noDatabase}>QC</Tab>
+        <Tab id="annotate" activeTab={activeTab} setActiveTab={setActiveTab} disabled={noDatabase}>Annotate</Tab>
         <Tab id="pose" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+5" disabled={noDatabase}>Pose</Tab>
         <Tab id="sleap_labels" activeTab={activeTab} setActiveTab={setActiveTab} disabled={noDatabase}>SLEAP labels</Tab>
         <Tab id="overview" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+6">Metadata overview</Tab>
@@ -974,6 +976,19 @@ function App() {
             setActiveTab('group_viewer');
           }}
           onOpenPose={openPose}
+        />
+      </div>
+
+      <div className="tab-panel" style={{ display: activeTab === 'annotate' ? 'block' : 'none' }}>
+        <AnnotateTab
+          active={activeTab === 'annotate'}
+          currentExperiment={currentExperiment}
+          viewerFrame={frameNumber}
+          onOpenFrame={(fn) => {
+            setIsPlaying(false);
+            setFrameNumber(fn);
+            setActiveTab('group_viewer');
+          }}
         />
       </div>
 

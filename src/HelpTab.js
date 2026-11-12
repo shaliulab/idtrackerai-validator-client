@@ -13,6 +13,7 @@ const SECTIONS = [
   { id: 'help-pe', title: 'Proboscis extension (PE)' },
   { id: 'help-ethogram', title: 'Ethograms' },
   { id: 'help-qc', title: 'QC' },
+  { id: 'help-annotate', title: 'Annotate' },
   { id: 'help-pose', title: 'Pose' },
   { id: 'help-sleap', title: 'SLEAP labels' },
   { id: 'help-gpu-queue', title: 'GPU queue' },
@@ -36,6 +37,14 @@ function Section({ id, title, children }) {
 const SHORTCUTS = [
   ['Anywhere', [
     [<><Key>Ctrl</Key>+<Key>0</Key> / <Key>1</Key> / <Key>2</Key> / <Key>3</Key> / <Key>4</Key> / <Key>5</Key> / <Key>6</Key> / <Key>7</Key> / <Key>8</Key> / <Key>9</Key></>, 'Switch to Data collector / Group viewer / PE / Ethograms / QC / Pose / Metadata overview / Data management / Monitor / How to use (the tabs, left to right)'],
+  ]],
+  ['Annotate', [
+    [<><Key>1</Key>…<Key>9</Key></>, 'Local identity of the selected box (of the next box drawn when none is selected)'],
+    [<Key>Enter</Key>, 'Save the frame and open the next one'],
+    [<><Key>←</Key> / <Key>→</Key></>, 'Previous / next frame of the scenes (Shift: scene)'],
+    [<><Key>U</Key> / <Key>Del</Key> / <Key>Tab</Key></>, 'No label / delete the box / next box'],
+    [<Key>P</Key>, 'Copy the boxes of the last frame saved'],
+    [<><Key>Ctrl</Key>+<Key>Z</Key></>, 'Undo in this frame'],
   ]],
   ['Data collector', [
     ['Click on the frame (while adding a ROI)', 'Add a point; right click removes the nearest one'],
@@ -491,6 +500,32 @@ export default function HelpTab() {
             the distributions per frame and the worst 10 s bins. Clicking any of them opens that
             frame of the fly in the Pose tab. The proboscis is normally retracted, so it is
             rarely detected.
+          </p>
+        </Section>
+
+        <Section id="help-annotate" title="Annotate">
+          <p>
+            Validation of multi-fly experiments with boxes, in place of CVAT (which stays available). Each fly gets one box
+            labelled with its <b>local identity</b> (1…N, the labels of the CVAT tasks). The list holds the failed scenes of the
+            validation pipeline (<code>flyhostel/validation/scene_qc.csv</code>), else the runs of bad frames of the QC tab.
+          </p>
+          <p>
+            A frame not saved yet opens with the machine's proposal: one box around each tracked blob, with its local identity
+            (dashed <b>?</b> = no identity). Fix what is wrong, then <Key>Enter</Key> saves the frame and opens the next one.
+            Edits are also saved when you leave the frame; a proposal you did not touch is not. Saved frames turn green in the
+            strip above the image and count as validated.
+          </p>
+          <ul>
+            <li>Drag on the image draws a box, drag a box moves it, the corners of the selected box resize it.</li>
+            <li><Key>1</Key>…<Key>9</Key> label the selected box (two digits typed quickly with 10+ flies); a local identity already on another box swaps with it. <Key>U</Key> removes the label, <Key>Del</Key> the box.</li>
+            <li>Tags FMB, NEW-FRAGMENT and CROSSING (buttons) mean the same as in CVAT.</li>
+            <li><Key>P</Key> copies the boxes of the last frame saved; “Machine proposal” starts again from the tracking.</li>
+          </ul>
+          <p>
+            <b>Integrate</b> runs <code>integrate-human-annotations --source validator</code> over a ZT range (empty: the frames annotated).
+            It writes the validated tables as feathers in <code>flyhostel/validation</code> without touching the database, and lists the annotated
+            frames that still have problems above the legend. <b>Write validated tables…</b> then runs <code>save-human-annotations</code>,
+            which replaces the <code>_VAL</code> tables of the database.
           </p>
         </Section>
 

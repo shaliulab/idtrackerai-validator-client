@@ -981,3 +981,20 @@ button.ov-sheet.ov-sheet-error { border-color: var(--danger); color: var(--dange
 .ov-sheet.cl-btn-running { color: var(--accent); }
 .ov-sheet.cl-btn-done { color: #2ca02c; }
 .ov-sheet.cl-btn-failed, .ov-sheet.cl-btn-stopped { color: var(--danger); }
+
+/* Annotate tab (AnnotateTab.js) */
+.bx-reason { max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
+.bx-strip { display: flex; gap: 1px; margin-bottom: 6px; flex-wrap: wrap; }
+.bx-cell { flex: 1 1 4px; min-width: 4px; max-width: 18px; height: 10px; background: var(--border); cursor: pointer; border-radius: 1px; }
+.bx-cell.bx-saved { background: var(--qc-good); }
+.bx-cell.bx-current { outline: 2px solid var(--accent); outline-offset: 0; }
+.bx-labels { display: flex; flex-wrap: wrap; gap: 4px; padding: 8px 10px; border-bottom: 1px solid var(--border); }
+.bx-label { min-width: 30px; font-weight: 600; border-left: 6px solid var(--bx-color); }
+.bx-label-on { outline: 2px solid var(--bx-color); background: var(--btn-hover); }
+.bx-label-missing { opacity: 0.55; }
+.bx-tag { font-size: 11px; font-weight: 500; }
+.bx-warnings:empty { display: none; }
+.bx-help { font-size: 11px; line-height: 1.5; }
+.bx-problems { border-top: 1px solid var(--border); padding: 6px 10px; font-size: 12px; }
+.bx-problems summary { cursor: pointer; }
+.bx-problems-list { max-height: 180px; }
