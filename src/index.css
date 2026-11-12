@@ -998,3 +998,9 @@ button.ov-sheet.ov-sheet-error { border-color: var(--danger); color: var(--dange
 .bx-problems { border-top: 1px solid var(--border); padding: 6px 10px; font-size: 12px; }
 .bx-problems summary { cursor: pointer; }
 .bx-problems-list { max-height: 180px; }
+.bx-flag { color: #d9a400; font-weight: 600; }
+.bx-cell.bx-flagged { background: #e0b400; }
+.bx-flags { background: color-mix(in srgb, #ffd400 18%, transparent); font-size: 12px; line-height: 1.45; max-height: 140px; overflow: auto; border-bottom: 1px solid var(--border); }
+.bx-source { margin-left: 8px; font-size: 11px; padding: 1px 6px; border-radius: 8px; border: 1px solid var(--border); font-weight: 500; }
+.bx-source-solver { border-color: var(--accent); }
+.bx-source-saved { border-color: var(--qc-good); }

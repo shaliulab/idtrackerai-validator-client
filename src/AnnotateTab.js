@@ -7,6 +7,9 @@
 // identity); saving it (Enter) marks it validated. Edits of a frame are saved when leaving it;
 // an untouched proposal is not (Enter accepts it). The list holds the failed scenes of the
 // validation pipeline (scene_qc.csv), else the QC tab's runs of bad frames.
+// "Propose" runs `yolov7-cvat propose` (the YOLO detections + identity solver of the CVAT pipeline's
+// predict --assign / complete, with the carry-over of swaps between clips): unsaved frames then open with its boxes,
+// the uncertain ones marked "!", and the frames it flagged (what a person must check) listed with ⚑ (F / Shift+F).
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import api, { apiUrl } from './api';
@@ -15,7 +18,7 @@ import { useConsole } from './MessageConsole';
 
 const unwrap = (data) => (typeof data === 'string' ? JSON.parse(data) : data);
 const errorOf = (err) => err.response?.data?.error || err.message;
-const FILTERS = [['todo', 'To do'], ['all', 'All'], ['done', 'Done']];
+const FILTERS = [['todo', 'To do'], ['flagged', '⚑ Flagged'], ['all', 'All'], ['done', 'Done']];
 const UNDO_DEPTH = 100;
 const HANDLE = 7;            // px (screen) around a corner that resizes
 const MIN_DRAG = 4;          // px (screen) before a drag draws a box
@@ -28,7 +31,9 @@ export const labelColor = (label) => {
   const n = parseInt(label, 10);
   return Number.isFinite(n) ? PALETTE[(n - 1) % PALETTE.length] : TAG_COLOR;
 };
-const sameBoxes = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+const geometry = (list) => list.map(({ x0, y0, x1, y1, label }) => [x0, y0, x1, y1, label]);
+const sameBoxes = (a, b) => JSON.stringify(geometry(a)) === JSON.stringify(geometry(b));
+const unsure = (b) => b.confidence === 'low' || b.confidence === 'medium';
 const fmtTime = (t) => (t ? new Date(t * 1000).toLocaleString() : '');
 
 function BoxCanvas({ image, size, boxes, machine, selected, setSelected, onDraft, onCommit, newLabel, showMachine }) {
@@ -92,6 +97,13 @@ function BoxCanvas({ image, size, boxes, machine, selected, setSelected, onDraft
       ctx.fillRect(x0, y0 - 17, tw, 17);
       ctx.fillStyle = '#000';
       ctx.fillText(text, x0 + 4, y0 - 2);
+      if (unsure(b)) {
+        // the solver was not sure: a person must check this box
+        ctx.fillStyle = b.confidence === 'low' ? '#ff4d4d' : '#ffd400';
+        ctx.fillRect(x0 + tw, y0 - 17, 14, 17);
+        ctx.fillStyle = '#000';
+        ctx.fillText('!', x0 + tw + 4, y0 - 2);
+      }
       if (isSel) {
         ctx.fillStyle = color;
         for (const [px, py] of [[x0, y0], [x1, y0], [x0, y1], [x1, y1]]) ctx.fillRect(px - 4, py - 4, 8, 8);
@@ -281,17 +293,24 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
   }, [active, currentExperiment, fetchInfo]);
 
   const annotated = useMemo(() => new Map((info?.annotated || []).map((a) => [a.frame_number, a])), [info]);
+  const flagged = useMemo(() => new Set(info?.flagged || []), [info]);
   const nAnimals = info?.n_animals || 0;
 
   // every frame of the scenes, in order: what ← → walk through
   const scenes = useMemo(() => (info?.scenes || []).map((s, k) => {
     let done = 0;
-    for (let f = s.start; f < s.start + s.length; f += 1) if (annotated.has(f)) done += 1;
-    return { ...s, k, done };
-  }), [info, annotated]);
+    let flags = 0;
+    for (let f = s.start; f < s.start + s.length; f += 1) {
+      if (annotated.has(f)) done += 1;
+      else if (flagged.has(f)) flags += 1;
+    }
+    return { ...s, k, done, flags };
+  }), [info, annotated, flagged]);
   const shownScenes = useMemo(() => scenes.filter((s) => (
-    filter === 'all' || (filter === 'done' ? s.done === s.length : s.done < s.length)
+    filter === 'all' || (filter === 'flagged' ? s.flags > 0 : filter === 'done' ? s.done === s.length : s.done < s.length)
   )), [scenes, filter]);
+  // flagged frames not saved yet, in order
+  const todoFlags = useMemo(() => [...flagged].filter((f) => !annotated.has(f)).sort((a, b) => a - b), [flagged, annotated]);
   const sceneOf = useCallback((fn) => scenes.find((s) => fn >= s.start && fn < s.start + s.length), [scenes]);
   const currentScene = current != null ? sceneOf(current) : null;
 
@@ -455,10 +474,10 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
     commit(boxes.filter((_, i) => i !== selected));
     setSelected(null);
   }, [selected, boxes, commit]);
-  const resetToProposal = useCallback(() => {
+  const resetToProposal = useCallback((which = '1') => {
     if (current == null) return;
-    // the machine's proposal of a saved frame: ask the server for it with the saved boxes kept
-    api.get(`/api/annotate/frame/${current}`, { params: { proposal: 1 } })
+    // a proposal again (also for a saved frame): the solver's, or idtrackerai's boxes ('tracking')
+    api.get(`/api/annotate/frame/${current}`, { params: { proposal: which } })
       .then((r) => commit(unwrap(r.data).boxes))
       .catch((err) => log('error', errorOf(err)));
   }, [current, commit, log]);
@@ -467,9 +486,33 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
     commit(lastSaved.current.map((b) => ({ ...b })));
   }, [commit, log]);
 
+  const stepFlag = useCallback((d) => {
+    const list = todoFlags.filter((f) => f !== current);
+    if (!list.length) { log('info', 'No flagged frame left to check'); return; }
+    const ref = current ?? -1;
+    const target = d > 0 ? list.find((f) => f > ref) ?? list[0] : [...list].reverse().find((f) => f < ref) ?? list[list.length - 1];
+    go(target);
+  }, [todoFlags, current, go, log]);
+
+  const propose = useCallback(() => {
+    const again = info?.proposal_run;
+    if (again && !window.confirm('Make the proposals again? Frames you saved are kept (and their labels guide the solver); unsaved frames get the new proposals.')) return;
+    api.post('/api/annotate/propose')
+      .then((r) => trackJob(unwrap(r.data)))
+      .then((job) => {
+        if (!job) return;
+        const res = job.result;
+        if (job.status === 'done') log('success', `Proposals made: ${JSON.stringify(res?.summary?.decisions || {})}, ${res?.summary?.flagged_frames ?? '?'} frames flagged`);
+        else if (res?.tail) log('error', `${res.command}\n${res.tail.slice(-15).join('\n')}`);
+        fetchInfo();
+        setReloadKey((k) => k + 1);
+      })
+      .catch((err) => log('error', `Propose: ${errorOf(err)}`));
+  }, [info, trackJob, log, fetchInfo]);
+
   // keys (while shown, not in a field)
   const keys = useRef({});
-  keys.current = { stepFrame, stepScene, accept, undoLast, setLabel, removeSelected, copyPrevious, boxes, selected, nAnimals };
+  keys.current = { stepFrame, stepScene, stepFlag, accept, undoLast, setLabel, removeSelected, copyPrevious, boxes, selected, nAnimals };
   useEffect(() => {
     if (!active) return undefined;
     const onKey = (e) => {
@@ -489,6 +532,7 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
       else if (e.key === 'Escape') setSelected(null);
       else if (e.key === 'u' || e.key === 'U') k.setLabel('');
       else if (e.key === 'p' || e.key === 'P') k.copyPrevious();
+      else if (e.key === 'f' || e.key === 'F') k.stepFlag(e.shiftKey ? -1 : 1);
       else if (/^[0-9]$/.test(e.key)) {
         // two digits typed quickly make one number (more than 9 flies)
         const now = Date.now();
@@ -543,6 +587,16 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
           {pending > 0 ? 'Saving…' : dirty ? 'Edited (saved when you leave the frame)' : frame?.saved ? `Saved by ${frame.author} · ${fmtTime(frame.updated)}` : frame ? 'Proposal, not saved' : ''}
         </span>
         <span className="spacer" />
+        <button onClick={propose} disabled={!scenes.length || info?.source?.kind !== 'scene_qc'}
+                title="Run yolov7-cvat propose: YOLO detections + the identity solver of the CVAT pipeline (predict --assign, complete), swaps carried from clip to clip. Unsaved frames then open with its boxes; GPU, minutes to hours">
+          {info?.proposal_run ? 'Propose again' : 'Propose (YOLO + solver)'}
+        </button>
+        {info?.proposal_run && (
+          <span className="ov-count" title={JSON.stringify(info.proposal_run.summary?.decisions || {})}>
+            {todoFlags.length} ⚑ to check · proposed {fmtTime(info.proposal_run.t)}
+          </span>
+        )}
+        <span className="toolbar-sep" />
         <label className="field" title="ZT range integrated (hours, as integrate-human-annotations --start-zt / --end-zt). Empty: the frames annotated">
           ZT
           <input type="number" placeholder="start" value={zt.start} style={{ width: 64 }} onChange={(e) => setZt((z) => ({ ...z, start: e.target.value }))} />
@@ -587,7 +641,7 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
                         ref={isCur ? (el) => el?.scrollIntoView({ block: 'nearest' }) : undefined} title={s.reason}>
                       <td><span className={`sl-dot ${s.done === s.length ? 'sl-done' : s.done ? 'sl-pred' : 'sl-sugg'}`} /></td>
                       <td className="qc-num">{s.start.toLocaleString()}</td>
-                      <td className="qc-muted">{s.done}/{s.length}</td>
+                      <td className="qc-muted">{s.done}/{s.length}{s.flags ? <span className="bx-flag" title={`${s.flags} flagged frame(s) not saved yet`}> ⚑{s.flags}</span> : null}</td>
                       <td className="qc-muted bx-reason">{s.reason}</td>
                     </tr>
                   );
@@ -624,6 +678,7 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
             {current != null ? (
               <span>
                 Frame {current.toLocaleString()}
+                {frame?.source && <span className={`bx-source bx-source-${frame.source}`}>{{ solver: 'solver proposal', tracking: 'idtrackerai proposal', saved: 'saved' }[frame.source]}</span>}
                 <span className="ov-count"> · chunk {frame?.chunk ?? '…'}{currentScene ? ` · scene ${currentScene.start.toLocaleString()} (${current - currentScene.start + 1} of ${currentScene.length})` : ''}</span>
               </span>
             ) : <span>No frame open</span>}
@@ -632,6 +687,7 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
             <button onClick={() => stepFrame(-1)} title="Previous frame (←)">◀</button>
             <button onClick={() => stepFrame(1)} title="Next frame (→)">▶</button>
             <button onClick={() => stepScene(1)} title="Next scene (Shift+→)">⏭</button>
+            <button onClick={() => stepFlag(1)} disabled={!todoFlags.length} title="Next flagged frame not saved yet (F; Shift+F: previous)">⚑ ▶</button>
             <label className="field"><input type="checkbox" checked={showMachine} onChange={(e) => setShowMachine(e.target.checked)} />Centroids</label>
           </header>
           <div className="card-body">
@@ -640,7 +696,7 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
                 {Array.from({ length: currentScene.length }, (_, i) => {
                   const fn = currentScene.start + i;
                   return (
-                    <span key={fn} className={`bx-cell${annotated.has(fn) ? ' bx-saved' : ''}${fn === current ? ' bx-current' : ''}`}
+                    <span key={fn} className={`bx-cell${annotated.has(fn) ? ' bx-saved' : flagged.has(fn) ? ' bx-flagged' : ''}${fn === current ? ' bx-current' : ''}`}
                           onClick={() => go(fn)} title={`Frame ${fn}${annotated.has(fn) ? ' (saved)' : ''}`} />
                   );
                 })}
@@ -657,7 +713,9 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
                 <button className="btn-primary" onClick={accept} disabled={!frame || !!frame.error || duplicates.length > 0}
                         title="Save this frame as shown and go to the next one (Enter)">Save &amp; next (Enter)</button>
                 <button onClick={copyPrevious} title="Boxes of the last frame saved (P)">Copy previous (P)</button>
-                <button onClick={resetToProposal} title="The machine's boxes again">Machine proposal</button>
+                <button onClick={() => resetToProposal('1')} disabled={!frame?.has_solver}
+                        title="The boxes of the YOLO + solver proposal again">Solver proposal</button>
+                <button onClick={() => resetToProposal('tracking')} title="One box per blob of idtrackerai, with its local identity">idtrackerai boxes</button>
                 <button onClick={unsave} disabled={!frame?.saved} title="This frame no longer counts as annotated">Unsave</button>
                 {onOpenFrame && <button onClick={() => onOpenFrame(current)}>Open in Group viewer</button>}
               </div>
@@ -690,6 +748,11 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
               </button>
             ))}
           </div>
+          {frame?.flags?.length > 0 && (
+            <div className="qc-pad bx-flags">
+              {frame.flags.map((t, i) => <div key={i}>⚑ {t}</div>)}
+            </div>
+          )}
           <div className="qc-pad bx-warnings">
             {duplicates.length > 0 && <div className="sl-error">Local identity {duplicates.join(', ')} on two boxes</div>}
             {frame && !frame.error && missing.length > 0 && <div className="qc-muted">No box for {missing.join(', ')}</div>}
@@ -697,7 +760,7 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
           </div>
           <div className="ov-scroll">
             <table className="pe-table ov-table pose-table sl-table">
-              <thead><tr><th>Label</th><th title="Identity of that local identity in this chunk (CONCATENATION)">Id</th><th>x</th><th>y</th><th>w×h</th></tr></thead>
+              <thead><tr><th>Label</th><th title="Identity of that local identity in this chunk (CONCATENATION)">Id</th><th>x</th><th>y</th><th>w×h</th><th title="The solver's note">!</th></tr></thead>
               <tbody>
                 {boxes.map((b, i) => (
                   <tr key={i} className={i === selected ? 'pose-selected' : undefined} onClick={() => setSelected(i)}>
@@ -706,6 +769,9 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
                     <td className="qc-num">{((b.x0 + b.x1) / 2).toFixed(0)}</td>
                     <td className="qc-num">{((b.y0 + b.y1) / 2).toFixed(0)}</td>
                     <td className="qc-num qc-muted">{(b.x1 - b.x0).toFixed(0)}×{(b.y1 - b.y0).toFixed(0)}</td>
+                    <td title={b.note ? `${b.confidence ? `${b.confidence} confidence: ` : ''}${b.note}` : ''}>
+                      {unsure(b) ? <span className={b.confidence === 'low' ? 'sl-error' : 'bx-flag'}>!</span> : b.note ? <span className="qc-muted">i</span> : ''}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -714,7 +780,7 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
           <div className="qc-muted qc-pad bx-help">
             Drag on the image: new box · drag a box: move · corners of the selected box: resize · 1–{nAnimals || 'N'}: label
             {nAnimals > 9 ? ' (two digits quickly for 10+)' : ''} · U: no label · Del: delete · Tab: next box · Enter: save &amp; next ·
-            ←/→ frame · Shift+←/→ scene · P: copy previous · Ctrl+Z undo · wheel zoom · right/middle drag or Shift+drag: pan · double click: reset zoom
+            ←/→ frame · Shift+←/→ scene · F / Shift+F: next / previous flagged frame · P: copy previous · Ctrl+Z undo · wheel zoom · right/middle drag or Shift+drag: pan · double click: reset zoom
           </div>
         </section>
       </div>

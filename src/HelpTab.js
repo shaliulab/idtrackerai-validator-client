@@ -44,6 +44,7 @@ const SHORTCUTS = [
     [<><Key>←</Key> / <Key>→</Key></>, 'Previous / next frame of the scenes (Shift: scene)'],
     [<><Key>U</Key> / <Key>Del</Key> / <Key>Tab</Key></>, 'No label / delete the box / next box'],
     [<Key>P</Key>, 'Copy the boxes of the last frame saved'],
+    [<><Key>F</Key> / <Key>Shift</Key>+<Key>F</Key></>, 'Next / previous frame flagged by the solver'],
     [<><Key>Ctrl</Key>+<Key>Z</Key></>, 'Undo in this frame'],
   ]],
   ['Data collector', [
@@ -514,6 +515,14 @@ export default function HelpTab() {
             (dashed <b>?</b> = no identity). Fix what is wrong, then <Key>Enter</Key> saves the frame and opens the next one.
             Edits are also saved when you leave the frame; a proposal you did not touch is not. Saved frames turn green in the
             strip above the image and count as validated.
+          </p>
+          <p>
+            <b>Propose (YOLO + solver)</b> gives the frames a better start: the same detections and identity solver as the CVAT
+            pipeline (<code>predict --assign</code> and <code>complete</code>), run on the scenes. When the solver decides that
+            idtrackerai swapped two flies, the swap is carried into the next scenes of the chunk. Boxes it is unsure of carry
+            a <b>!</b> (yellow: check, red: decide yourself; the reason is in the boxes table) and the frames where a person
+            must act are marked ⚑. <Key>F</Key> jumps to the next one. Frames you saved are kept when proposing again, and their
+            labels guide the solver.
           </p>
           <ul>
             <li>Drag on the image draws a box, drag a box moves it, the corners of the selected box resize it.</li>
