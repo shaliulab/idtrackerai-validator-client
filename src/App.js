@@ -12,6 +12,7 @@ import FrameJump from './FrameJump';
 import SelectComponent, { postLoad } from './selectComponent';
 import CardResizer from './CardResizer';
 import Splitter from './Splitter';
+import { useIsNarrow } from './layout';
 
 import { FIRST_FRAME, PLACEHOLDER_IMAGE, LABEL_FIELD } from './constants';
 import PEValidator from './PEValidator';
@@ -230,6 +231,7 @@ function App() {
   // without scrolling, keeping the native aspect ratio. Once the splitter is
   // dragged, its width is that share of the window width (persisted).
   const viewerRef = useRef(null);
+  const narrow = useIsNarrow();   // phone: frame above the side panel, full width
   const [frameSize, setFrameSize] = useState({ width: 600, height: 600, available: 600 });
   const [frameWidthShare, setFrameWidthShare] = useState(() => {
     try { return Number(localStorage.getItem('fh-frame-width-share')) || null; }
@@ -254,6 +256,11 @@ function App() {
       if (!el || el.offsetParent === null) return;    // hidden tab: keep the last size
       const top = el.getBoundingClientRect().top + window.scrollY;
       const maxHeight = window.innerHeight - top - consoleHeight(consoleOpen, consoleBodyHeight) - PAGE_BOTTOM_GAP - 2;
+      if (narrow) {
+        const width = Math.max(100, Math.floor(el.clientWidth - 2));
+        setFrameSize({ width, height: Math.round(width * aspect), available: Math.max(0, maxHeight) });
+        return;
+      }
       const wanted = frameWidthShare
         ? frameWidthShare * window.innerWidth
         : Math.min(window.innerWidth * FRAME_MAX_WIDTH_SHARE, maxHeight / aspect);
@@ -263,7 +270,7 @@ function App() {
     fit();
     window.addEventListener('resize', fit);
     return () => window.removeEventListener('resize', fit);
-  }, [aspect, consoleOpen, consoleBodyHeight, activeTab, frameWidthShare]);
+  }, [aspect, consoleOpen, consoleBodyHeight, activeTab, frameWidthShare, narrow]);
 
   const dragStartWidth = useRef(0);
   const onFrameSplitterDrag = (dx) => {
@@ -861,15 +868,15 @@ function App() {
             />
           </div>
 
-          <Splitter
+          {!narrow && <Splitter
             direction="vertical"
             title="Drag to resize the frame · double click to fit the window"
             onDragStart={() => { dragStartWidth.current = frameSize.width; }}
             onDrag={onFrameSplitterDrag}
             onReset={() => setFrameWidthShare(null)}
-          />
+          />}
 
-          <div className="viewer-side" style={{ height: Math.max(frameSize.height + 2, frameSize.available) }}>
+          <div className="viewer-side" style={narrow ? undefined : { height: Math.max(frameSize.height + 2, frameSize.available) }}>
             <section className="card viewer-table">
               <div className="card-header">
                 Tracking

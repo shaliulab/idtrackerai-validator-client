@@ -14,7 +14,7 @@
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import api, { apiUrl } from './api';
-import { useElementSize, useFillHeight } from './layout';
+import { useElementSize, useFillHeight, useIsNarrow } from './layout';
 import { useConsole } from './MessageConsole';
 import SleapTrain from './SleapTrain';
 
@@ -252,6 +252,7 @@ export default function SleapLabelsTab({ active, currentExperiment, request, vie
   const [trainOpen, setTrainOpen] = useState(() => { try { return localStorage.getItem('fh-sleap-train-open') === '1'; } catch { return false; } });
   const [rootEl, setRootEl] = useState(null);
   const [viewEl, setViewEl] = useState(null);
+  const narrow = useIsNarrow();
   const fillHeight = useFillHeight(rootEl, [active, data]);
   const { width: viewWidth } = useElementSize(viewEl);
   const queue = useRef(Promise.resolve());
@@ -505,7 +506,9 @@ export default function SleapLabelsTab({ active, currentExperiment, request, vie
   }, [data]);
   // the frame card: header, image, the actions below it
   const mainHeight = fillHeight ? fillHeight - 60 : 640;
-  const size = Math.max(260, Math.min((viewWidth || 600) - 24, mainHeight - 140));
+  const size = narrow   // phone: the panels are stacked, the frame takes the width
+    ? Math.max(200, (viewWidth || 360) - 24)
+    : Math.max(260, Math.min((viewWidth || 600) - 24, mainHeight - 140));
   const saveState = pending > 0 ? 'Sending…' : status?.error ? 'Not saved' : status?.saving ? 'Saving…'
     : status?.dirty ? `${status.dirty} change${status.dirty > 1 ? 's' : ''} to write…`
     : status?.last_saved ? `Saved ${new Date(status.last_saved * 1000).toLocaleTimeString()}` : 'No changes';

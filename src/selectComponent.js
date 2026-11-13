@@ -13,7 +13,7 @@ const defaultOption = { value: "", label: "Browse available experiments..." };
 
 // react-select styles inline; route its colors through the theme's CSS variables.
 const selectStyles = {
-  container: (base) => ({ ...base, width: 420, maxWidth: '40vw' }),
+  container: (base) => ({ ...base, width: 420, maxWidth: 'var(--exp-picker-max, 40vw)' }),   // phones: index.css
   control: (base, state) => ({
     ...base,
     minHeight: 32,

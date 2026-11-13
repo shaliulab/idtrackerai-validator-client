@@ -57,13 +57,27 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 export function ConsoleProvider({ children }) {
   const [entries, setEntries] = useState([]);   // {id, time, level, text} | {id, time, job}
   const [open, setOpen] = useState(() => {
-    try { return localStorage.getItem('fh-console-open') !== 'false'; } catch { return true; }
+    // phones start with it collapsed (it would take a third of the screen); a choice made since is kept
+    const narrow = window.matchMedia?.('(max-width: 760px)').matches;
+    try {
+      const stored = localStorage.getItem('fh-console-open');
+      return stored == null ? !narrow : stored !== 'false';
+    } catch { return !narrow; }
   });
   const [height, setHeight] = useState(() => {
     try { return Number(localStorage.getItem('fh-console-height')) || DEFAULT_HEIGHT; }
     catch { return DEFAULT_HEIGHT; }
   });
   const nextId = useRef(1);
+  // phones: at most 30% of the screen, whatever height was dragged on a desktop
+  const [screenH, setScreenH] = useState(() => window.innerHeight);
+  useEffect(() => {
+    const onResize = () => setScreenH(window.innerHeight);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+  const narrow = window.matchMedia?.('(max-width: 760px)').matches;
+  const shownHeight = narrow ? Math.max(MIN_HEIGHT, Math.min(height, Math.round(screenH * 0.3))) : height;
 
   useEffect(() => {
     try { localStorage.setItem('fh-console-open', String(open)); } catch { /* ignore */ }
@@ -123,8 +137,8 @@ export function ConsoleProvider({ children }) {
 
   const api_ = useMemo(() => ({ log, trackJob }), [log, trackJob]);
   const state = useMemo(
-    () => ({ entries, setEntries, open, setOpen, height, setHeight }),
-    [entries, open, height],
+    () => ({ entries, setEntries, open, setOpen, height: shownHeight, setHeight }),
+    [entries, open, shownHeight],
   );
 
   return (

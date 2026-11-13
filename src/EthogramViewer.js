@@ -501,11 +501,11 @@ export default function EthogramViewer({ flies, request, animalMetadata, active,
 
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', paddingBottom: 8 }}>
         <form
-          style={{ display: 'flex', gap: 6, alignItems: 'center' }}
+          style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', maxWidth: '100%' }}
           onSubmit={(e) => { e.preventDefault(); goTo(); }}
         >
           Go to&nbsp;
-          <select value={gotoMode} onChange={(e) => setGotoMode(e.target.value)} style={selectStyle}>
+          <select value={gotoMode} onChange={(e) => setGotoMode(e.target.value)} style={{ ...selectStyle, maxWidth: '100%' }}>
             <option value="frame_number">frame number (since chunk 0)</option>
             <option value="zt">ZT seconds (since ZT0 of day 1)</option>
           </select>

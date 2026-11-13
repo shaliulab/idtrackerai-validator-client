@@ -254,13 +254,13 @@ input[type="checkbox"] { accent-color: var(--accent); }
 .ov-seg button:last-child { border-radius: 0 var(--radius) var(--radius) 0; margin-left: -1px; }
 .ov-seg button.on { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
 
-.ov-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+.ov-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(150px, 100%), 1fr)); gap: 12px; }
 .ov-stat { padding: 10px 14px; }
 .ov-stat-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--subtext); }
 .ov-stat-value { font-size: 24px; font-weight: 600; font-variant-numeric: tabular-nums; margin-top: 2px; white-space: nowrap; }
 .ov-stat-sub { font-size: 12px; color: var(--subtext); }
 
-.ov-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 12px; align-items: start; }
+.ov-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(340px, 100%), 1fr)); gap: 12px; align-items: start; }
 .ov-chart { display: flex; flex-direction: column; }
 .ov-count { font-weight: 400; text-transform: none; letter-spacing: 0; }
 .ov-x { border: none; background: none; padding: 0 4px; font-size: 16px; line-height: 1; color: var(--subtext); }
@@ -338,7 +338,7 @@ input[type="checkbox"] { accent-color: var(--accent); }
   background: var(--surface-2); color: var(--text);
 }
 .help-pending { font-style: italic; font-weight: 600; background: #ffd54f; color: #333; padding: 0 4px; border-radius: 3px; }
-.help-keys-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 16px 24px; }
+.help-keys-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(340px, 100%), 1fr)); gap: 16px 24px; }
 .help-keys { border-collapse: collapse; font-size: 13px; width: 100%; }
 .help-keys caption { text-align: left; font-weight: 600; padding-bottom: 4px; }
 .help-keys td { padding: 4px 6px; border-top: 1px solid var(--border); vertical-align: top; }
@@ -887,7 +887,7 @@ button.ov-sheet.ov-sheet-error { border-color: var(--danger); color: var(--dange
 /* ── Server resources card (ServerResources.js) ── */
 :root { --res-busy: #c27c0e; }
 :root[data-theme="dark"] { --res-busy: #f0a92e; }
-.res-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; }
+.res-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr)); gap: 12px; }
 .res-tile { padding: 10px 14px; display: flex; flex-direction: column; gap: 4px; box-shadow: none; }
 .res-tile.res-busy { border-left: 3px solid var(--res-busy); }
 .res-tile.res-full { border-left: 3px solid var(--mon-failed); }
@@ -1025,3 +1025,78 @@ button.ov-sheet.ov-sheet-error { border-color: var(--danger); color: var(--dange
 .bx-full { position: fixed; inset: 0; z-index: 1000; background: var(--bg); padding: 6px; box-sizing: border-box; display: flex; flex-direction: column; overflow: hidden; }
 .bx-full .sl-main { flex: 1 1 auto; min-height: 0; }
 .bx-full .sl-side { flex-basis: 260px; }
+
+/* ── Phones (≤ 760px; NARROW_QUERY in layout.js) ──────────────────────────
+   One column: panels shown side by side on a desktop are stacked, fixed
+   heights computed for the window give way to the content's, wide tables
+   scroll inside their card instead of the page. */
+@media (max-width: 760px) {
+  html, body { overflow-x: hidden; }
+  /* 16px: iOS zooms into any focused field with smaller text */
+  :where(select, input[type="text"], input[type="number"], input[type="search"], textarea) { font-size: 16px; }
+  :where(button) { min-height: 32px; }
+
+  .app-bar { flex-wrap: wrap; gap: 8px 12px; padding: 12px 10px 8px; }
+  .app-logo { width: 28px; height: 28px; margin-right: -6px; }
+  .app-title h1 { font-size: 15px; }
+  .app-title p, .app-logos { display: none; }
+  .app-bar .spacer { display: none; }
+  .app-bar > :not(.app-logo):not(.app-title):not(.app-version) { max-width: 100%; }
+  .app-actions { flex-wrap: wrap; width: 100%; gap: 6px; }
+  .exp-picker { width: 100%; flex-wrap: wrap; --exp-picker-max: calc(100vw - 64px); }
+  .exp-picker > div:first-child { flex: 1 1 0; min-width: 0; }
+  .exp-basedir { max-width: 100%; }
+
+  /* tabs: one row scrolled sideways, no keyboard hints */
+  .tabs { overflow-x: auto; scrollbar-width: none; padding: 0 6px; -webkit-overflow-scrolling: touch; }
+  .tabs::-webkit-scrollbar { display: none; }
+  .tab { flex: none; white-space: nowrap; padding: 10px 10px; }
+  .tab kbd { display: none; }
+
+  .tab-panel { padding: 8px; }
+  .card { max-width: 100%; overflow-x: auto; }
+  .card-header { flex-wrap: wrap; row-gap: 4px; }
+  .toolbar { gap: 8px 12px; }
+  .field { white-space: normal; flex-wrap: wrap; }
+  .readout { flex-wrap: wrap; gap: 6px 12px; }
+  .frame-jump { flex-wrap: wrap; gap: 8px; }
+  input[style*="width: 3"], input[style*="width: 2"] { max-width: 100%; }
+
+  /* Group viewer: frame above the tracking table and navigation */
+  .viewer { flex-direction: column; gap: 8px; }
+  .viewer-side { height: auto !important; }
+  .viewer-table { min-height: 0; }
+  .viewer-table .scroll { max-height: 50vh; }
+
+  /* PE: controls, media and bouts stacked, "Current media" below */
+  .pe-layout { flex-direction: column; height: auto !important; gap: 8px; }
+  .pe-layout > .splitter, .pe-row-splitter { display: none; }
+  .pe-side { width: auto !important; max-height: 240px; }
+  .pe-media { overflow-x: auto; }
+  .pe-bouts .scroll { max-height: 60vh; }
+
+  /* SLEAP labels / Annotate: list, view and side panel stacked */
+  .sl-main { flex-direction: column; height: auto !important; }
+  .sl-list, .sl-side { flex: none; max-height: 45vh; }
+  .sl-view { min-width: 0; }
+  .bx-stage { flex: none; height: 60vh; min-height: 240px; }
+  .bx-full .sl-main { height: 100% !important; }
+  .bx-full .sl-side { max-height: 30vh; }
+
+  .help-section { padding: 14px 14px 16px; }
+  .help-section { overflow-wrap: anywhere; }
+  .help-section table, .help-section pre { display: block; max-width: 100%; overflow-x: auto; }
+  .help-keys-grid > * { min-width: 0; }
+  .help-keys td:first-child { white-space: normal; }
+  .help-glossary { grid-template-columns: 1fr; }
+  .help-glossary dd { margin-bottom: 6px; }
+
+  .qc-row { grid-template-columns: 1fr; }
+  .qc-verdict { flex-wrap: wrap; }
+  .pose-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .pose-side { flex-basis: 100%; }
+  .sc-editor { grid-template-columns: minmax(0, 1fr); padding: 8px; }
+  .mon-process-name { width: 110px; }
+  .mon-command { flex-wrap: wrap; }
+  .ov-table td.ov-wrap { max-width: 200px; }
+}

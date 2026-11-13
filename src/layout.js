@@ -60,3 +60,24 @@ export function useStoredNumber(key, initial = null) {
   }, [key, value]);
   return [value, setValue];
 }
+
+// Phone-sized screens: side-by-side panels are stacked (keep in sync with the
+// @media (max-width: 760px) block at the end of index.css).
+export const NARROW_QUERY = '(max-width: 760px)';
+
+// true while the media query matches; follows rotation and window resizes.
+export function useMediaQuery(query) {
+  const get = () => (typeof window !== 'undefined' && window.matchMedia ? window.matchMedia(query).matches : false);
+  const [matches, setMatches] = useState(get);
+  useEffect(() => {
+    if (!window.matchMedia) return undefined;
+    const mq = window.matchMedia(query);
+    const onChange = () => setMatches(mq.matches);
+    onChange();
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, [query]);
+  return matches;
+}
+
+export const useIsNarrow = () => useMediaQuery(NARROW_QUERY);

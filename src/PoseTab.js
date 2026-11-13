@@ -12,7 +12,7 @@
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import api, { apiUrl } from './api';
-import { useElementSize, useStoredNumber } from './layout';
+import { useElementSize, useIsNarrow, useStoredNumber } from './layout';
 import { SKELETON } from './FrameWithSquare';
 import { METRICS } from './PoseQc';
 import { useConsole } from './MessageConsole';
@@ -258,6 +258,7 @@ export default function PoseTab({ active, currentExperiment, request, viewerFram
   const [recompiling, setRecompiling] = useState(null);   // fly being recompiled
   const [poseVersion, setPoseVersion] = useState(0);      // bumped when a pose file is recompiled
   const { width: viewWidth } = useElementSize(viewEl);
+  const narrow = useIsNarrow();   // phone: the table goes below the frame
   const { log, trackJob } = useConsole();
   const latest = useRef(0);
   const fps = framerate || 150;
@@ -357,7 +358,9 @@ export default function PoseTab({ active, currentExperiment, request, viewerFram
 
   const compiledTime = flies.find((f) => f.fly === fly)?.compiled_at;
   const compiledAt = compiledTime ? new Date(compiledTime * 1000).toLocaleString() : null;
-  const size = Math.max(240, Math.min(560, (viewWidth || 900) - 460));
+  const size = narrow
+    ? Math.max(200, Math.min(560, (viewWidth || 360) - 26))
+    : Math.max(240, Math.min(560, (viewWidth || 900) - 460));
   const shownPose = useMemo(() => (pose && !showJoints ? { ...pose, nodes: pose.nodes.filter((n) => n.scored) } : pose), [pose, showJoints]);
   const nodes = shownPose?.nodes || [];
   const steps = [[-chunksize, '⇤ chunk'], [-Math.round(fps), '−1 s'], [-10, '−10'], [-1, '−1'], [1, '+1'], [10, '+10'], [Math.round(fps), '+1 s'], [chunksize, 'chunk ⇥']];
