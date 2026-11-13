@@ -715,19 +715,31 @@ function App() {
     // a reload keeps what was done since, not the link
     window.history.replaceState(null, '', window.location.pathname + window.location.hash);
     const flat = (name) => (name || '').replace(/\//g, '_').replace(/_arenas_(\d+)$/, '_arena$1');
+    const open = async () => {
+      const { data } = await api.get('/api/current_experiment');
+      const info = typeof data === 'string' ? JSON.parse(data) : data;
+      if (flat(info?.experiment) !== flat(experiment)) {
+        await postLoad(experiment);
+        log('info', `Loaded ${experiment}`);
+        setPickerKey((k) => k + 1);
+      }
+      await onExperimentLoaded(frame);
+    };
     (async () => {
-      try {
-        const { data } = await api.get('/api/current_experiment');
-        const info = typeof data === 'string' ? JSON.parse(data) : data;
-        if (flat(info?.experiment) !== flat(experiment)) {
-          await postLoad(experiment);
-          log('info', `Loaded ${experiment}`);
-          setPickerKey((k) => k + 1);
+      // a dropped connection (no response) gets a second try; a server error does not
+      for (let attempt = 1; ; attempt += 1) {
+        try {
+          await open();
+          break;
+        } catch (err) {
+          if (!err.response && attempt < 2) {
+            log('warning', `Link: ${err.message}, trying again`);
+            await new Promise((resolve) => setTimeout(resolve, 1000));
+            continue;
+          }
+          log('error', `Link: failed to load ${experiment}: ${err.response?.data?.error ?? err.message}`);
+          return;
         }
-        await onExperimentLoaded(frame);
-      } catch (err) {
-        log('error', `Link: failed to load ${experiment}: ${err.response?.data?.error ?? err.message}`);
-        return;
       }
       setIsPlaying(false);
       if (tab === 'annotate') setAnnotateRequest({ experiment: flat(experiment), frameNumber: frame, nonce: Date.now() });

@@ -48,6 +48,7 @@ const SHORTCUTS = [
     [<><Key>Z</Key> / <Key>Shift</Key>+<Key>Z</Key></>, 'Zoom to the next region to look at (dashed orange, listed under "Where to look") / the whole frame'],
     [<Key>M</Key>, 'Full screen: only the frame, its navigation and the labels (M or Esc leaves it)'],
     ['Carry labels (checkbox)', 'A label you change is carried to the next frames of the scene along the fly\'s idtrackerai fragment (until it ends or a frame you saved); those frames are saved when you leave them'],
+    ['f65× on a box', 'One idtrackerai blob holds this fly and another (a crossing): its fragment is given to neither box, so labels you give here are not carried through it'],
     ['↳ on a box', 'Its label comes from a frame you saved where you gave it to the same idtrackerai fragment (in this chunk), not from this frame: the integration does the same. Leave it if it looks right'],
     [<><Key>G</Key> / <Key>Shift</Key>+<Key>G</Key></>, 'Next / previous frame flagged by the solver and not saved yet (also ◀ ⚑ / ⚑ ▶)'],
     [<><Key>Ctrl</Key>+<Key>Z</Key></>, 'Undo in this frame'],

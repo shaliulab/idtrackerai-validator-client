@@ -17,7 +17,18 @@ const api = axios.create({
 
 // The session ended (expired, signed out in another tab, server secret changed):
 // back to the login page, then to where we were.
-api.interceptors.response.use(undefined, (error) => {
+// A GET that got no response at all (connection dropped: "Network Error") is sent again,
+// up to NETWORK_RETRIES times; cancelled requests and HTTP errors are not.
+const NETWORK_RETRIES = 2;
+api.interceptors.response.use(undefined, async (error) => {
+  const config = error.config;
+  if (config && !error.response && error.code === 'ERR_NETWORK'
+      && (config.method || 'get').toLowerCase() === 'get'
+      && (config.__retries || 0) < NETWORK_RETRIES && !config.signal?.aborted) {
+    config.__retries = (config.__retries || 0) + 1;
+    await new Promise((resolve) => setTimeout(resolve, 400 * config.__retries));
+    return api(config);
+  }
   if (error.response?.status === 401 && error.response.data?.login) {
     const next = window.location.pathname + window.location.search;
     window.location.assign(`${API_BASE}/login?next=${encodeURIComponent(next)}`);

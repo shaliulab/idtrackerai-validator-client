@@ -40,21 +40,37 @@ const fmtZt = (h) => {
   return `ZT ${sign}${pad(Math.floor(s / 3600))}:${pad(Math.floor((s % 3600) / 60))}:${pad(s % 60)} (${h.toFixed(2)} h)`;
 };
 // idtrackerai fragment of each box: the machine row whose centroid is inside the box, nearest its centre,
-// one row per box (touching flies: overlapping boxes) -> [fragment or null]
+// one row per box (touching flies: overlapping boxes) -> [fragment or null]. Tag boxes (FMB, NEW-FRAGMENT, …) take
+// no row. A row inside a box with a local identity that got no row of its own is one blob holding two flies (a
+// crossing): its fragment is given to neither box (out.shared: box index -> that fragment), or a label given to one
+// fly would be carried through the fragment to the other (same rule as the server's box_fragments).
+const isTag = (label) => !!label && !/^\d+$/.test(label);
+const inBox = (b, m) => m.x >= b.x0 && m.x <= b.x1 && m.y >= b.y0 && m.y <= b.y1;
 const fragmentsOf = (boxes, machine) => {
+  const rows = machine || [];
   const pairs = [];
-  boxes.forEach((b, i) => (machine || []).forEach((m, j) => {
-    if (m.fragment == null || m.x < b.x0 || m.x > b.x1 || m.y < b.y0 || m.y > b.y1) return;
+  boxes.forEach((b, i) => rows.forEach((m, j) => {
+    if (m.fragment == null || isTag(b.label) || !inBox(b, m)) return;
     pairs.push([Math.hypot(m.x - (b.x0 + b.x1) / 2, m.y - (b.y0 + b.y1) / 2), i, j]);
   }));
   pairs.sort((a, b) => a[0] - b[0]);
-  const out = boxes.map(() => null);
+  const rowOf = boxes.map(() => null);
   const used = new Set();
   for (const [, i, j] of pairs) {
-    if (out[i] != null || used.has(j)) continue;
-    out[i] = machine[j].fragment;
+    if (rowOf[i] != null || used.has(j)) continue;
+    rowOf[i] = j;
     used.add(j);
   }
+  const out = rowOf.map((j) => (j == null ? null : rows[j].fragment));
+  out.shared = new Map();
+  boxes.forEach((b, i) => {
+    if (rowOf[i] != null || !/^\d+$/.test(b.label || '')) return;
+    const k = rowOf.findIndex((j) => j != null && inBox(b, rows[j]));
+    if (k < 0) return;
+    out.shared.set(i, rows[rowOf[k]].fragment);
+    out.shared.set(k, rows[rowOf[k]].fragment);
+  });
+  out.shared.forEach((f, i) => { out[i] = null; });
   return out;
 };
 // labels a person gave in a frame (fragment -> local identity): boxes with a local identity whose fragment had no box,
@@ -309,8 +325,9 @@ function BoxCanvas({ image, width, height, boxes, fragments, regions, focus, mac
       ctx.strokeRect(x0, y0, x1 - x0, y1 - y0);
       ctx.setLineDash([]);
       const frag = fragments?.[i];
-      // ↳: label taken from a frame you saved (same fragment), not decided in this frame
-      const text = `${b.track ? `${TRACK_MARK} ` : ''}${b.inherited != null ? '↳' : ''}${b.label || '?'}${frag != null ? `  f${frag}` : ''}`;
+      const sharedFrag = fragments?.shared?.get(i);
+      // ↳: label taken from a frame you saved (same fragment), not decided in this frame; f65×: blob of two flies
+      const text = `${b.track ? `${TRACK_MARK} ` : ''}${b.inherited != null ? '↳' : ''}${b.label || '?'}${frag != null ? `  f${frag}` : sharedFrag != null ? `  f${sharedFrag}×` : ''}`;
       const tw = ctx.measureText(text).width + 8;
       ctx.fillStyle = color;
       ctx.fillRect(x0, y0 - 17, tw, 17);
@@ -1432,7 +1449,9 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
                   <tr key={i} className={i === selected ? 'pose-selected' : undefined} onClick={() => setSelected(i)}>
                     <td><span className="qc-swatch" style={{ background: labelColor(b.label), border: '1px solid #0006' }} />{b.track ? <span title="Track: kept in the next frames until hidden (H)">{TRACK_MARK} </span> : null}{b.label || '?'}</td>
                     <td className="qc-num qc-muted">{identityOf(b.label) ?? ''}</td>
-                    <td className="qc-num">{fragments[i] ?? ''}</td>
+                    <td className="qc-num">{fragments[i] ?? (fragments.shared?.has(i)
+                      ? <span title="One blob holding this fly and another (a crossing): its fragment carries no label to either box">{fragments.shared.get(i)}×</span>
+                      : '')}</td>
                     <td className="qc-num">{((b.x0 + b.x1) / 2).toFixed(0)}</td>
                     <td className="qc-num">{((b.y0 + b.y1) / 2).toFixed(0)}</td>
                     <td className="qc-num qc-muted">{(b.x1 - b.x0).toFixed(0)}×{(b.y1 - b.y0).toFixed(0)}</td>
