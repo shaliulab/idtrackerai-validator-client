@@ -775,6 +775,7 @@ button.ov-sheet.ov-sheet-error { border-color: var(--danger); color: var(--dange
 .pose-side { flex: 1 1 360px; min-width: 0; }
 .pose-canvas-wrap { position: relative; border-radius: 4px; overflow: hidden; }
 .pose-canvas-msg { position: absolute; inset: auto 0 0 0; padding: 8px 10px; background: rgba(0, 0, 0, 0.7); color: #fff; font-size: 12px; }
+.bx-draw-badge { position: absolute; top: 8px; left: 8px; padding: 4px 8px; border-radius: 4px; background: rgba(0, 0, 0, 0.75); color: #fff; font-size: 12px; pointer-events: none; }
 .pose-bands { margin-top: 8px; font-size: 12px; }
 .pose-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--border); }
 .pose-summary > div { display: flex; flex-direction: column; font-variant-numeric: tabular-nums; }
@@ -983,6 +984,10 @@ button.ov-sheet.ov-sheet-error { border-color: var(--danger); color: var(--dange
 .ov-sheet.cl-btn-failed, .ov-sheet.cl-btn-stopped { color: var(--danger); }
 
 /* Annotate tab (AnnotateTab.js) */
+.bx-zt0 { display: inline-flex; margin-left: 10px; font-size: 12px; font-weight: 400; text-transform: none; letter-spacing: 0; }
+.bx-zt0 input { margin: 0 4px; }
+.bx-scenes tr { height: 21px; }
+.bx-scenes td { padding-top: 0; padding-bottom: 0; line-height: 20px; white-space: nowrap; }
 .bx-reason { max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
 .bx-strip { display: flex; gap: 1px; margin-bottom: 6px; flex-wrap: wrap; }
 .bx-cell { flex: 1 1 4px; min-width: 4px; max-width: 18px; height: 10px; background: var(--border); cursor: pointer; border-radius: 1px; }
@@ -998,9 +1003,25 @@ button.ov-sheet.ov-sheet-error { border-color: var(--danger); color: var(--dange
 .bx-problems { border-top: 1px solid var(--border); padding: 6px 10px; font-size: 12px; }
 .bx-problems summary { cursor: pointer; }
 .bx-problems-list { max-height: 180px; }
+.bx-regions { border-bottom: 1px solid var(--border); font-size: 12px; max-height: 170px; overflow: auto; }
+.bx-regions-head { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
+.bx-region { cursor: pointer; padding: 2px 4px; border-radius: 4px; line-height: 1.35; }
+.bx-region:hover { background: var(--btn-hover); }
+.bx-region-on { outline: 1px solid #ff7a00; }
+.bx-region-n { display: inline-block; min-width: 16px; margin-right: 6px; text-align: center; background: #ff7a00; color: #000; font-weight: 700; border-radius: 3px; }
+.bx-inherited { color: #8b5cf6; font-weight: 700; margin-right: 2px; cursor: help; }
 .bx-flag { color: #d9a400; font-weight: 600; }
 .bx-cell.bx-flagged { background: #e0b400; }
 .bx-flags { background: color-mix(in srgb, #ffd400 18%, transparent); font-size: 12px; line-height: 1.45; max-height: 140px; overflow: auto; border-bottom: 1px solid var(--border); }
 .bx-source { margin-left: 8px; font-size: 11px; padding: 1px 6px; border-radius: 8px; border: 1px solid var(--border); font-weight: 500; }
 .bx-source-solver { border-color: var(--accent); }
 .bx-source-saved { border-color: var(--qc-good); }
+.bx-source-carried { border-color: #8b5cf6; }
+.bx-cell.bx-carried { background: #a78bfa; }
+.bx-view { display: flex; flex-direction: column; overflow: hidden; }
+.bx-view-body { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+.bx-stage { flex: 1 1 0; min-height: 200px; overflow: hidden; }
+@media (max-width: 1100px) { .bx-stage { flex-basis: 60vh; } }
+.bx-full { position: fixed; inset: 0; z-index: 1000; background: var(--bg); padding: 6px; box-sizing: border-box; display: flex; flex-direction: column; overflow: hidden; }
+.bx-full .sl-main { flex: 1 1 auto; min-height: 0; }
+.bx-full .sl-side { flex-basis: 260px; }

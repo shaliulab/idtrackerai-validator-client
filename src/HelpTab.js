@@ -39,12 +39,17 @@ const SHORTCUTS = [
     [<><Key>Ctrl</Key>+<Key>0</Key> / <Key>1</Key> / <Key>2</Key> / <Key>3</Key> / <Key>4</Key> / <Key>5</Key> / <Key>6</Key> / <Key>7</Key> / <Key>8</Key> / <Key>9</Key></>, 'Switch to Data collector / Group viewer / PE / Ethograms / QC / Pose / Metadata overview / Data management / Monitor / How to use (the tabs, left to right)'],
   ]],
   ['Annotate', [
-    [<><Key>1</Key>…<Key>9</Key></>, 'Local identity of the selected box (of the next box drawn when none is selected)'],
+    [<><Key>1</Key>…<Key>9</Key> or <Key>Shift</Key>+<Key>1</Key>…<Key>9</Key></>, 'Local identity of the selected box (of the next box drawn when none is selected)'],
+    [<><Key>Shift</Key>+<Key>0</Key>, <Key>Ctrl</Key>+<Key>Shift</Key>+<Key>1</Key>…<Key>9</Key></>, 'Local identity 10, 11…19'],
     [<Key>Enter</Key>, 'Save the frame and open the next one'],
-    [<><Key>←</Key> / <Key>→</Key></>, 'Previous / next frame of the scenes (Shift: scene)'],
+    [<><Key>←</Key> / <Key>→</Key> or <Key>D</Key> / <Key>F</Key></>, 'Previous / next frame of the scenes (Shift: scene), D / F as in CVAT'],
     [<><Key>U</Key> / <Key>Del</Key> / <Key>Tab</Key></>, 'No label / delete the box / next box'],
     [<Key>P</Key>, 'Copy the boxes of the last frame saved'],
-    [<><Key>F</Key> / <Key>Shift</Key>+<Key>F</Key></>, 'Next / previous frame flagged by the solver'],
+    [<><Key>Z</Key> / <Key>Shift</Key>+<Key>Z</Key></>, 'Zoom to the next region to look at (dashed orange, listed under "Where to look") / the whole frame'],
+    [<Key>M</Key>, 'Full screen: only the frame, its navigation and the labels (M or Esc leaves it)'],
+    ['Carry labels (checkbox)', 'A label you change is carried to the next frames of the scene along the fly\'s idtrackerai fragment (until it ends or a frame you saved); those frames are saved when you leave them'],
+    ['↳ on a box', 'Its label comes from a frame you saved where you gave it to the same idtrackerai fragment (in this chunk), not from this frame: the integration does the same. Leave it if it looks right'],
+    [<><Key>G</Key> / <Key>Shift</Key>+<Key>G</Key></>, 'Next / previous frame flagged by the solver and not saved yet (also ◀ ⚑ / ⚑ ▶)'],
     [<><Key>Ctrl</Key>+<Key>Z</Key></>, 'Undo in this frame'],
   ]],
   ['Data collector', [
@@ -512,7 +517,7 @@ export default function HelpTab() {
           </p>
           <p>
             A frame not saved yet opens with the machine's proposal: one box around each tracked blob, with its local identity
-            (dashed <b>?</b> = no identity). Fix what is wrong, then <Key>Enter</Key> saves the frame and opens the next one.
+            (dashed <b>?</b> = no identity). Fix what is wrong, then <Key>Enter</Key> saves the frame and opens the next one (<Key>Ctrl</Key>+<Key>S</Key>, <b>Save all</b>, stays here and saves this frame and every frame of each scene you opened in this session, as each would open: its proposal with the labels and tracks carried into it. Frames of scenes you never opened are left alone). Closing or reloading the page while something is not saved yet makes the browser ask first.
             Edits are also saved when you leave the frame; a proposal you did not touch is not. Saved frames turn green in the
             strip above the image and count as validated.
           </p>
@@ -521,13 +526,14 @@ export default function HelpTab() {
             pipeline (<code>predict --assign</code> and <code>complete</code>), run on the scenes. When the solver decides that
             idtrackerai swapped two flies, the swap is carried into the next scenes of the chunk. Boxes it is unsure of carry
             a <b>!</b> (yellow: check, red: decide yourself; the reason is in the boxes table) and the frames where a person
-            must act are marked ⚑. <Key>F</Key> jumps to the next one. Frames you saved are kept when proposing again, and their
+            must act are marked ⚑. <Key>G</Key> jumps to the next one (<Key>Shift</Key>+<Key>G</Key>: previous). Frames you saved are kept when proposing again, and their
             labels guide the solver.
           </p>
           <ul>
-            <li>Drag on the image draws a box, drag a box moves it, the corners of the selected box resize it.</li>
-            <li><Key>1</Key>…<Key>9</Key> label the selected box (two digits typed quickly with 10+ flies); a local identity already on another box swaps with it. <Key>U</Key> removes the label, <Key>Del</Key> the box.</li>
+            <li>Press <b>N</b> (<b>New shape</b>) and drag on the image to draw a box of this frame only, or <b>Shift+N</b> (<b>New track</b>) for a box that stays in the next frames (marked ▸) until you hide it with <b>H</b> (<b>Hide track</b>; Del on a track's box does the same). A carried track box replaces the box with its local identity and the boxes it overlaps; on a frame you saved, the saved boxes stay: a box with the track's local identity joins the track, and if there is none the track's box is added. Press the same key again or Esc to cancel. Drag inside a box to move it; drag near its edges or corners to resize it. Drag outside the boxes to pan the frame; a click there deselects.</li>
+            <li><Key>1</Key>…<Key>9</Key> (or <Key>Shift</Key>+<Key>1</Key>…<Key>9</Key>) label the selected box; <Key>Shift</Key>+<Key>0</Key> is 10 and <Key>Ctrl</Key>+<Key>Shift</Key>+<Key>1</Key>…<Key>9</Key> are 11…19 (two digits typed quickly also work with 10+ flies); a local identity already on another box swaps with it. <Key>U</Key> removes the label, <Key>Del</Key> the box.</li>
             <li>Tags FMB, NEW-FRAGMENT and CROSSING (buttons) mean the same as in CVAT.</li>
+            <li>With <b>Carry labels</b> on, a local identity you give a box goes to every box of the same idtrackerai fragment in the frames of the chunk not saved yet (from the nearest frame where you gave it, before, else after; marked ↳), as soon as you open them, in any scene. Frames of the chunk you already saved are relabelled too (their boxes on those fragments; a local identity already used there swaps), so a swap fixed in one frame is fixed in the whole chunk.</li>
             <li><Key>P</Key> copies the boxes of the last frame saved; “Machine proposal” starts again from the tracking.</li>
           </ul>
           <p>
@@ -535,6 +541,11 @@ export default function HelpTab() {
             It writes the validated tables as feathers in <code>flyhostel/validation</code> without touching the database, and lists the annotated
             frames that still have problems above the legend. <b>Write validated tables…</b> then runs <code>save-human-annotations</code>,
             which replaces the <code>_VAL</code> tables of the database.
+          </p>
+          <p>
+            The integration's output (in the console, and <code>validator_problem_blocks.csv</code>) gives each run of frames with problems
+            a link such as <code>/?tab=annotate&amp;experiment=FlyHostel1_3X_…&amp;frame=123456</code>: opening it loads that experiment
+            (unless it is loaded) and shows that frame here, as the CVAT links did.
           </p>
         </Section>
 

@@ -410,7 +410,7 @@ function App() {
   hasDatabaseRef.current = experimentInfo.has_database;
   useEffect(() => {
     const onKey = (e) => {
-      if (!e.ctrlKey || e.metaKey || e.altKey) return;   // Ctrl only, not Cmd/Alt combos
+      if (!e.ctrlKey || e.shiftKey || e.metaKey || e.altKey) return;   // Ctrl only, not Cmd/Alt/Shift combos (Ctrl+Shift+digit: PE fly, Annotate identity 10+)
       if (e.key === '1') { e.preventDefault(); setActiveTab('group_viewer'); }
       else if (e.key === '2') { e.preventDefault(); if (hasDatabaseRef.current) setActiveTab('proboscis_extension'); }
       else if (e.key === '3') { e.preventDefault(); if (hasDatabaseRef.current) setActiveTab('ethogram'); }
@@ -700,6 +700,42 @@ function App() {
     setActiveTab(tab);
   }, [currentExperiment, frameNumber, log, onExperimentLoaded]);
 
+  // Links ?tab=annotate&experiment=<name>&frame=<n> (server links.py, printed by flyhostel's
+  // integrate-human-annotations): load the experiment unless it is the loaded one, then open the tab at that frame.
+  const [annotateRequest, setAnnotateRequest] = useState(null);   // { experiment, frameNumber, nonce }
+  const linkHandled = useRef(false);
+  useEffect(() => {
+    if (linkHandled.current) return;
+    linkHandled.current = true;
+    const params = new URLSearchParams(window.location.search);
+    const experiment = params.get('experiment');
+    const frame = Number.parseInt(params.get('frame'), 10);
+    const tab = params.get('tab') || 'annotate';
+    if (!experiment || !Number.isFinite(frame) || !['annotate', 'group_viewer'].includes(tab)) return;
+    // a reload keeps what was done since, not the link
+    window.history.replaceState(null, '', window.location.pathname + window.location.hash);
+    const flat = (name) => (name || '').replace(/\//g, '_').replace(/_arenas_(\d+)$/, '_arena$1');
+    (async () => {
+      try {
+        const { data } = await api.get('/api/current_experiment');
+        const info = typeof data === 'string' ? JSON.parse(data) : data;
+        if (flat(info?.experiment) !== flat(experiment)) {
+          await postLoad(experiment);
+          log('info', `Loaded ${experiment}`);
+          setPickerKey((k) => k + 1);
+        }
+        await onExperimentLoaded(frame);
+      } catch (err) {
+        log('error', `Link: failed to load ${experiment}: ${err.response?.data?.error ?? err.message}`);
+        return;
+      }
+      setIsPlaying(false);
+      if (tab === 'annotate') setAnnotateRequest({ experiment: flat(experiment), frameNumber: frame, nonce: Date.now() });
+      setActiveTab(tab);
+      log('info', `Link: ${experiment}, frame ${frame}`);
+    })();
+  }, [log, onExperimentLoaded]);
+
   const switchToFly = useCallback(async (flyId) => {
     const experiment = flyId.split('__')[0];
     const current = selectedFly?.split('__')[0];
@@ -984,6 +1020,7 @@ function App() {
           active={activeTab === 'annotate'}
           currentExperiment={currentExperiment}
           viewerFrame={frameNumber}
+          request={annotateRequest}
           onOpenFrame={(fn) => {
             setIsPlaying(false);
             setFrameNumber(fn);
