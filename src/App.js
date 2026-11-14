@@ -21,6 +21,7 @@ import HelpTab from './HelpTab';
 import OverviewTab from './OverviewTab';
 import DataManagementTab from './DataManagementTab';
 import QcTab from './QcTab';
+import EthoscopeTab from './EthoscopeTab';
 import PoseTab from './PoseTab';
 import SleapLabelsTab from './SleapLabelsTab';
 import AnnotateTab from './AnnotateTab';
@@ -352,6 +353,24 @@ function App() {
   }, []);
 
   useEffect(() => { fetchCurrentExperiment(); }, [fetchCurrentExperiment]);
+
+  // Ethoscope tab: enabled when a fly of the loaded experiment has an ethoscope run, here or
+  // on cv1 (the tab then offers to copy it)
+  const [ethoscopeAvailable, setEthoscopeAvailable] = useState(false);
+  useEffect(() => {
+    if (!currentExperiment) { setEthoscopeAvailable(false); return undefined; }
+    let stale = false;
+    api.get('/api/ethoscope/flies')
+      .then(({ data }) => {
+        const d = typeof data === 'string' ? JSON.parse(data) : data;
+        if (!stale) setEthoscopeAvailable(!!(d?.available || d?.downloadable));
+      })
+      .catch(() => { if (!stale) setEthoscopeAvailable(false); });
+    return () => { stale = true; };
+  }, [currentExperiment]);
+  useEffect(() => {
+    if (!ethoscopeAvailable) setActiveTab((tab) => (tab === 'ethoscope' ? 'group_viewer' : tab));
+  }, [ethoscopeAvailable]);
 
   // Blobs table "etho" button: show that fly's ethogram at the displayed frame.
   const [ethogramRequest, setEthogramRequest] = useState(null);   // { fly, frameNumber, nonce }
@@ -828,6 +847,7 @@ function App() {
         <Tab id="group_viewer" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+1">Group viewer</Tab>
         <Tab id="proboscis_extension" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+2" disabled={noDatabase}>Proboscis extension (PE)</Tab>
         <Tab id="ethogram" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+3" disabled={noDatabase}>Ethograms</Tab>
+        <Tab id="ethoscope" activeTab={activeTab} setActiveTab={setActiveTab} disabled={!ethoscopeAvailable}>Ethoscope</Tab>
         <Tab id="qc" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+4" disabled={noDatabase}>QC</Tab>
         <Tab id="annotate" activeTab={activeTab} setActiveTab={setActiveTab} disabled={noDatabase}>Annotate</Tab>
         <Tab id="pose" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+5" disabled={noDatabase}>Pose</Tab>
@@ -1018,6 +1038,10 @@ function App() {
             onOpenInPose={openPose}
           />
         </Suspense>
+      </div>
+
+      <div className="tab-panel" style={{ display: activeTab === 'ethoscope' ? 'block' : 'none' }}>
+        <EthoscopeTab active={activeTab === 'ethoscope'} currentExperiment={currentExperiment} />
       </div>
 
       <div className="tab-panel" style={{ display: activeTab === 'qc' ? 'block' : 'none' }}>

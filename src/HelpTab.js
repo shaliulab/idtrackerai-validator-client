@@ -12,6 +12,7 @@ const SECTIONS = [
   { id: 'help-viewer', title: 'Group viewer' },
   { id: 'help-pe', title: 'Proboscis extension (PE)' },
   { id: 'help-ethogram', title: 'Ethograms' },
+  { id: 'help-ethoscope', title: 'Ethoscope' },
   { id: 'help-qc', title: 'QC' },
   { id: 'help-annotate', title: 'Annotate' },
   { id: 'help-pose', title: 'Pose' },
@@ -459,6 +460,47 @@ export default function HelpTab() {
               folder gets one made with deepethogram from its single-animal video, which takes ~30 s;
               its progress shows in the console, and the labels are written when it is done.
             </li>
+          </ul>
+        </Section>
+
+        <Section id="help-ethoscope" title="Ethoscope">
+          <p>
+            Sleep of the experiment's flies in the ethoscope they lived in before the FlyHostel,
+            scored as in FSLRetho. The tab is grayed out when no fly of the experiment has an
+            ethoscope run, neither here nor on cv1 (where the ethoscopes save their results).
+          </p>
+          <ul>
+            <li>
+              Each fly's run is found from its metadata row: <i>machine_name</i>, <i>date</i> (the last
+              run that machine started on that day) and <i>region_id</i> (its ROI). Flies without a run
+              are listed with the reason.
+            </li>
+            <li>
+              A run that is only on cv1 is listed with its size and a <b>Download from cv1</b> button,
+              which copies it into the server's ethoscope results (progress in the console); the
+              traces appear once it is copied. A run still being written is copied as it is at
+              that moment.
+            </li>
+            <li>
+              Sleep = not moving for at least 5 min (max velocity detector in 10 s windows, movement
+              threshold 0.0048, movement ignored 6 s after an interaction). <i>Scoring ▾</i> changes these;
+              <i>FSLRetho defaults</i> restores them.
+            </li>
+            <li>
+              Time is ZT (hours since ZT0 of the day the run started, from <i>reference_hour</i>). Dark
+              phases of LD are shaded.
+            </li>
+            <li>
+              <i>Each fly</i>: one row per fly, % of time asleep per bin. <i>Average</i>: mean ± SEM of the
+              ticked flies, optionally one line per genotype or sex. Tick flies one by one, or use
+              <i>all</i>, <i>none</i>, <i>only &lt;genotype&gt;</i>.
+            </li>
+            <li>
+              Each trace stops when the fly went into the FlyHostel (<i>flyhostel_date</i> + <i>flyhostel_time</i>)
+              and at its last movement before that: the ethoscope goes on recording the empty tube,
+              which would score as sleep. <i>Cut at the end</i> in the table says how much was left out.
+            </li>
+            <li><i>CSV</i> downloads the fraction asleep per bin of the ticked flies.</li>
           </ul>
         </Section>
 
