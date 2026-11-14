@@ -1126,6 +1126,36 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
       .catch((err) => log('error', `Propose: ${errorOf(err)}`));
   }, [info, trackJob, log, fetchInfo]);
 
+  // scene_qc.csv made here: make-identogram + auto-annotate-qc (the validation pipeline's first steps) as a job
+  const [preparing, setPreparing] = useState(false);
+  const prepare = useCallback(() => {
+    const again = info?.source?.kind === 'scene_qc';
+    if (again && !window.confirm('Make scene_qc.csv again? The scenes listed can change; boxes you saved are kept.')) return;
+    const follow = (job) => {
+      setPreparing(true);
+      return trackJob(job).then((done) => {
+        setPreparing(false);
+        if (!done) return;
+        const steps = done.result?.steps || [];
+        if (done.status === 'done') log('success', `Scenes prepared: ${done.result?.scenes ?? '?'} scenes to check`);
+        else {
+          const failed = steps.find((st) => st.exit_code !== 0);
+          if (failed) log('error', `${failed.command}\n${failed.tail.slice(-15).join('\n')}`);
+        }
+        fetchInfo();
+      });
+    };
+    api.post('/api/annotate/prepare', { force: again })
+      .then((r) => follow(unwrap(r.data)))
+      .catch((err) => {
+        // already running (e.g. started before a reload): follow that job
+        const running = err.response?.status === 409 && err.response.data?.job;
+        if (running) { log('info', 'The scenes of this experiment are being prepared already'); follow(running); return; }
+        setPreparing(false);
+        log('error', `Prepare scenes: ${errorOf(err)}`);
+      });
+  }, [info, trackJob, log, fetchInfo]);
+
   const toggleFull = useCallback(() => {
     if (full) {
       if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
@@ -1244,6 +1274,11 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
           {pending > 0 ? 'Saving…' : dirty ? 'Edited (saved when you leave the frame)' : frame?.saved ? `Saved by ${frame.author} · ${fmtTime(frame.updated)}` : frame ? 'Proposal, not saved' : ''}
         </span>
         <span className="spacer" />
+        <button onClick={prepare} disabled={!info || preparing}
+                className={info && info.source?.kind !== 'scene_qc' ? 'btn-primary' : undefined}
+                title="Run make-identogram and auto-annotate-qc (the first steps of the validation pipeline) in the background: they write flyhostel/validation/scene_qc.csv, the scenes listed here, which Propose needs. Can take a long time on many flies / chunks; follow it in the console">
+          {preparing ? 'Preparing scenes…' : info?.source?.kind === 'scene_qc' ? 'Prepare scenes again' : 'Prepare scenes'}
+        </button>
         <button onClick={propose} disabled={!scenes.length || info?.source?.kind !== 'scene_qc'}
                 title="Run yolov7-cvat propose: YOLO detections + the identity solver of the CVAT pipeline (predict --assign, complete), swaps carried from clip to clip. Unsaved frames then open with its boxes; GPU, minutes to hours">
           {info?.proposal_run ? 'Propose again' : 'Propose (YOLO + solver)'}
@@ -1286,6 +1321,11 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
             <div className="qc-muted qc-pad">
               No scenes to check: this experiment has no flyhostel/validation/scene_qc.csv (made by the validation pipeline before CVAT)
               and the QC tab has not run on it. Any frame can still be opened with Frame.
+              <div style={{ marginTop: 8 }}>
+                <button className="btn-primary" onClick={prepare} disabled={preparing}>
+                  {preparing ? 'Preparing scenes…' : 'Prepare scenes'}
+                </button>
+              </div>
             </div>
           )}
           <SceneList scenes={shownScenes} currentK={currentScene?.k} onPick={pick} zt0={zt0} />

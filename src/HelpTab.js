@@ -515,6 +515,8 @@ export default function HelpTab() {
             Validation of multi-fly experiments with boxes, in place of CVAT (which stays available). Each fly gets one box
             labelled with its <b>local identity</b> (1…N, the labels of the CVAT tasks). The list holds the failed scenes of the
             validation pipeline (<code>flyhostel/validation/scene_qc.csv</code>), else the runs of bad frames of the QC tab.
+            An experiment without scene_qc.csv gets it from <b>Prepare scenes</b>: make-identogram and auto-annotate-qc run in
+            the background (follow them in the console; long on many flies), then the list fills.
           </p>
           <p>
             A frame not saved yet opens with the machine's proposal: one box around each tracked blob, with its local identity
