@@ -11,6 +11,7 @@ import api from './api';
 import Splitter from './Splitter';
 
 const POLL_INTERVAL_MS = 500;
+const RECENT_JOBS_S = 3600;  // after a reload, jobs that ended within this long are listed
 const DEFAULT_HEIGHT = 180;     // body height (px); the user can drag it
 const MIN_HEIGHT = 60;
 export const CONSOLE_HEADER_HEIGHT = 26;
@@ -134,6 +135,26 @@ export function ConsoleProvider({ children }) {
     }
     return job;
   }, [append, log]);
+
+  // After a reload: follow the jobs still running on the server again, and list those that ended in the
+  // last hour (their results were for the page that started them; a file to download is not fetched).
+  const reattached = useRef(false);
+  useEffect(() => {
+    if (reattached.current) return;
+    reattached.current = true;
+    api.get('/api/jobs').then((r) => {
+      const { jobs = [], now } = unwrap(r.data) || {};
+      const at = (t) => new Date(t * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      jobs.filter((j) => j.status !== 'running' && j.ended && now - j.ended < RECENT_JOBS_S)
+        .reverse()
+        .forEach((j) => log(j.status === 'failed' ? 'warning' : 'info',
+          `Earlier: ${j.title} ${j.status === 'failed' ? `failed at ${at(j.ended)}: ${j.error}` : `ended at ${at(j.ended)}`}`));
+      jobs.filter((j) => j.status === 'running').forEach((j) => {
+        log('info', `Following again: ${j.title} (started ${at(j.started)})`);
+        trackJob(j);
+      });
+    }).catch(() => { /* older server without /api/jobs, or not signed in */ });
+  }, [log, trackJob]);
 
   const api_ = useMemo(() => ({ log, trackJob }), [log, trackJob]);
   const state = useMemo(
