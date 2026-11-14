@@ -1,11 +1,12 @@
 // selectComponent.js
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useSyncExternalStore } from "react";
 import CreatableSelect from 'react-select/creatable';
 import api from './api';
 import { FIRST_FRAME } from './constants';
 import { useConsole } from './MessageConsole';
 import { copyText } from './utils';
+import { checkCanLoad, getAnnotateState, subscribe } from './loadGuard';
 
 // Module-level so it isn't a new object on every render (which would make the
 // effect below need it as a dependency).
@@ -41,7 +42,9 @@ const selectStyles = {
 
 const unwrap = (data) => (typeof data === 'string' ? JSON.parse(data) : data);
 
+// every load goes through here: refused while the Annotate tab is saving (loadGuard.js)
 export async function postLoad(experiment) {
+  checkCanLoad();
   const response = await api.post('/api/load', { experiment });
   return unwrap(response.data);
 }
@@ -54,6 +57,8 @@ const SelectComponent = ({ onExperimentChange }) => {
   const [current, setCurrent] = useState("");
   const [paths, setPaths] = useState(null);    // {basedir, realpath} of the loaded experiment
   const { log } = useConsole();
+  const annotate = useSyncExternalStore(subscribe, getAnnotateState);
+  const saving = annotate.saving > 0;
 
   useEffect(() => {
     api.get('/api/list')
@@ -119,7 +124,8 @@ const SelectComponent = ({ onExperimentChange }) => {
   // Typing a path not in the list and pressing Enter "creates" it: load it as typed.
   return (
     <div className="exp-picker" onKeyDown={e => e.stopPropagation()}>
-      <div title="Experiment: pick one, or type its path and press Enter">
+      <div title={saving ? 'Annotations are being saved: the experiment can change once they are written'
+                         : 'Experiment: pick one, or type its path and press Enter'}>
         <CreatableSelect
           options={options}
           value={current ? { value: current, label: current } : null}
@@ -127,7 +133,7 @@ const SelectComponent = ({ onExperimentChange }) => {
           onCreateOption={handleLoad}
           formatCreateLabel={(input) => `Load "${input}"`}
           isLoading={isLoading || isSwitching}
-          isDisabled={isSwitching}
+          isDisabled={isSwitching || saving}
           placeholder={defaultOption.label}
           noOptionsMessage={() => "Type an experiment path, e.g. FlyHostel4/6X/2023-08-31_13-00-00"}
           styles={selectStyles}

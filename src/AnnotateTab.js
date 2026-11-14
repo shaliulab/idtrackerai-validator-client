@@ -15,6 +15,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import api, { apiUrl } from './api';
 import { useElementSize, useFillHeight } from './layout';
 import { useConsole } from './MessageConsole';
+import { setAnnotateState } from './loadGuard';
 
 const unwrap = (data) => (typeof data === 'string' ? JSON.parse(data) : data);
 const errorOf = (err) => err.response?.data?.error || err.message;
@@ -741,6 +742,9 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
   // saved, saves still on their way): the browser asks first
   const unsavedRef = useRef(false);
   unsavedRef.current = Boolean(dirty) || edits.current.size > 0 || pending > 0;
+  // the experiment picker waits for the saves and asks before dropping unsaved edits (loadGuard.js)
+  useEffect(() => { setAnnotateState({ saving: pending, unsaved: Boolean(dirty) || edits.current.size > 0 }); });
+  useEffect(() => () => setAnnotateState({ saving: 0, unsaved: false }), []);
   useEffect(() => {
     const onUnload = (e) => {
       if (!unsavedRef.current) return undefined;

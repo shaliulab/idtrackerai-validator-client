@@ -520,7 +520,7 @@ export default function HelpTab() {
           </p>
           <p>
             A frame not saved yet opens with the machine's proposal: one box around each tracked blob, with its local identity
-            (dashed <b>?</b> = no identity). Fix what is wrong, then <Key>Enter</Key> saves the frame and opens the next one (<Key>Ctrl</Key>+<Key>S</Key>, <b>Save all</b>, stays here and saves this frame and every frame of each scene you opened in this session, as each would open: its proposal with the labels and tracks carried into it. Frames of scenes you never opened are left alone). Closing or reloading the page while something is not saved yet makes the browser ask first.
+            (dashed <b>?</b> = no identity). Fix what is wrong, then <Key>Enter</Key> saves the frame and opens the next one (<Key>Ctrl</Key>+<Key>S</Key>, <b>Save all</b>, stays here and saves this frame and every frame of each scene you opened in this session, as each would open: its proposal with the labels and tracks carried into it. Frames of scenes you never opened are left alone). Closing or reloading the page while something is not saved yet makes the browser ask first. The experiment picker is grayed out while saves are on their way, and loading another experiment with annotations not saved yet asks first (they would be dropped).
             Edits are also saved when you leave the frame; a proposal you did not touch is not. Saved frames turn green in the
             strip above the image and count as validated.
           </p>
