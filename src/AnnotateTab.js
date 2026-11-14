@@ -74,14 +74,41 @@ const fragmentsOf = (boxes, machine) => {
   out.shared.forEach((f, i) => { out[i] = null; });
   return out;
 };
-// labels a person gave in a frame (fragment -> local identity): boxes with a local identity whose fragment had no box,
-// or a box with another label, before the change
-const assignedFragments = (before, after, machine) => {
-  const fb = fragmentsOf(before, machine);
+// NEW-FRAGMENT tags split a fragment (flyhostel's integration gives the tagged fly a new fragment from that frame to the
+// end of the chunk): labels are carried within a stretch only. tagFragments: the fragments the tags of a frame split
+// (per tag the row inside it nearest its centre, as the server's tag_fragments)
+const tagFragments = (boxes, machine) => {
+  const out = new Set();
+  for (const b of boxes) {
+    if (b.label !== 'NEW-FRAGMENT') continue;
+    let best = null;
+    for (const m of machine || []) {
+      if (m.fragment == null || !inBox(b, m)) continue;
+      const d = Math.hypot(m.x - (b.x0 + b.x1) / 2, m.y - (b.y0 + b.y1) / 2);
+      if (!best || d < best[0]) best = [d, m.fragment];
+    }
+    if (best) out.add(best[1]);
+  }
+  return out;
+};
+// "<fragment>" up to its first tag, then "<fragment>@<frame of the last tag at or before fn>" (server segment_key).
+// splits: fragment -> [frames]
+const segmentKey = (f, fn, splits) => {
+  if (f == null) return null;
+  let start = null;
+  for (const s of splits?.get(f) || []) if (s <= fn && (start == null || s > start)) start = s;
+  return start == null ? String(f) : `${f}@${start}`;
+};
+// segment keys of the boxes of frame fn
+const keysOf = (boxes, machine, fn, splits) => fragmentsOf(boxes, machine).map((f) => segmentKey(f, fn, splits));
+// labels a person gave in a frame (segment key -> local identity): boxes with a local identity whose fragment had no
+// box, or a box with another label, before the change
+const assignedFragments = (before, after, machine, fn, splits) => {
+  const fb = keysOf(before, machine, fn, splits);
   const was = new Map();
   before.forEach((b, i) => { if (fb[i] != null) was.set(fb[i], b.label); });
   const out = new Map();
-  fragmentsOf(after, machine).forEach((f, i) => {
+  keysOf(after, machine, fn, splits).forEach((f, i) => {
     const { label } = after[i];
     if (f != null && /^\d+$/.test(label) && was.get(f) !== label) out.set(f, label);
   });
@@ -89,11 +116,11 @@ const assignedFragments = (before, after, machine) => {
 };
 // those labels on the boxes of another frame of the chunk (as the server's inherit_labels: per fragment the label of the
 // nearest frame before, else after, marked inherited); a local identity already on another box swaps with it.
-// byFrag: fragment -> [[frame, label]] sorted by frame
-const inheritFragments = (boxes, machine, byFrag, fn) => {
+// byFrag: segment key -> [[frame, label]] sorted by frame
+const inheritFragments = (boxes, machine, byFrag, fn, splits) => {
   if (!byFrag || !byFrag.size) return boxes;
   const out = boxes.map((b) => ({ ...b }));
-  fragmentsOf(out, machine).forEach((f, i) => {
+  keysOf(out, machine, fn, splits).forEach((f, i) => {
     const list = f != null && byFrag.get(f);
     if (!list || !list.length) return;
     const before = list.filter(([n]) => n < fn);
@@ -110,10 +137,10 @@ const inheritFragments = (boxes, machine, byFrag, fn) => {
   });
   return out;
 };
-// label changes of a frame: fragment -> new local identity, for the boxes whose fragment had another label before
-const changedFragments = (before, after, machine) => {
-  const fb = fragmentsOf(before, machine);
-  const fa = fragmentsOf(after, machine);
+// label changes of a frame: segment key -> new local identity, for the boxes whose fragment had another label before
+const changedFragments = (before, after, machine, fn, splits) => {
+  const fb = keysOf(before, machine, fn, splits);
+  const fa = keysOf(after, machine, fn, splits);
   const was = new Map();
   before.forEach((b, i) => { if (fb[i] != null) was.set(fb[i], b.label); });
   const out = new Map();
@@ -579,7 +606,9 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
   const latest = useRef(0);
   const trackOut = useRef(new Map());               // frame -> its track boxes when it was left (carried to frame + 1)
   const hiddenAt = useRef(new Map());               // track -> frame where it was hidden (not carried from there on)
-  const fragLabels = useRef(new Map());             // chunk -> fragment -> [[frame, label]]: labels given in this session
+  const fragLabels = useRef(new Map());             // chunk -> segment key -> [[frame, label]]: labels given in this session
+  const serverSplits = useRef(new Map());           // chunk -> fragment -> [frames]: NEW-FRAGMENT tags of the saved frames
+  const localTags = useRef(new Map());              // chunk -> frame -> Set(fragments): tags of the frames edited here
   const worked = useRef(new Set());                 // scenes (k) opened in this session: Save writes all their frames
   const lastSaved = useRef(null);                   // boxes of the last frame saved (for "copy previous")
   const digits = useRef({ text: '', t: 0 });
@@ -659,26 +688,42 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
   })), [cached]);
   const dataOf = useCallback((fn) => cached(datas.current, fn, (n) => queue.current.then(() => api.get(`/api/annotate/frame/${n}`)).then((r) => unwrap(r.data))), [cached]);  // after the saves sent
   const forget = useCallback((fn) => { if (fn == null) datas.current.clear(); else datas.current.delete(fn); }, []);
-  useEffect(() => { images.current.clear(); datas.current.clear(); edits.current.clear(); trackOut.current.clear(); hiddenAt.current.clear(); fragLabels.current.clear(); worked.current.clear(); }, [currentExperiment]);
+  useEffect(() => { images.current.clear(); datas.current.clear(); edits.current.clear(); trackOut.current.clear(); hiddenAt.current.clear(); fragLabels.current.clear(); serverSplits.current.clear(); localTags.current.clear(); worked.current.clear(); }, [currentExperiment]);
   useEffect(() => { datas.current.clear(); }, [reloadKey, info?.proposal_run?.t]);
   useEffect(() => { edits.current.clear(); setEditsVersion((v) => v + 1); }, [info?.proposal_run?.t]);
 
   // a frame as shown: unsaved, its carried edits, then the labels given in this session to its fragments (anywhere in
   // the chunk, with "Carry labels"); then the tracks of the frame before, kept until hidden
+  // where the NEW-FRAGMENT tags split the fragments of a chunk: the saved frames' (server), the frames edited here
+  // as they are now; `here` = [frame, its boxes] of a frame being changed
+  const splitsOf = useCallback((chunk, here) => {
+    const out = new Map();
+    const local = new Map(localTags.current.get(chunk) || []);
+    if (here) local.set(here[0], tagFragments(here[1], here[2]));
+    for (const [f, frames] of serverSplits.current.get(chunk) || []) out.set(f, frames.filter((n) => !local.has(n)));
+    for (const [n, frags] of local) for (const f of frags) out.set(f, [...(out.get(f) || []), n]);
+    return out;
+  }, []);
   const compose = useCallback((fn, v) => {
     let shown = v.boxes;
+    if (v.fragment_splits) serverSplits.current.set(v.chunk, new Map(Object.entries(v.fragment_splits).map(([f, fs]) => [Number(f), fs])));
     if (!v.saved) {
       shown = edits.current.get(fn)?.boxes ?? shown;
-      if (carry) shown = inheritFragments(shown, v.machine, fragLabels.current.get(v.chunk), fn);
+      if (carry) shown = inheritFragments(shown, v.machine, fragLabels.current.get(v.chunk), fn, splitsOf(v.chunk));
     }
     const prev = trackOut.current.get(fn - 1) ?? datas.current.get(fn - 1)?.value?.boxes?.filter((b) => b.track);
     return withTracks(shown, prev, hiddenAt.current, fn, v.saved);
-  }, [carry]);
+  }, [carry, splitsOf]);
   const composeRef = useRef(compose);
   composeRef.current = compose;
   const recordLabels = useCallback((before, after) => {
     if (current == null || !frame?.machine || frame.frame_number !== current) return;
-    const given = assignedFragments(before, after, frame.machine);
+    // this frame's tags as they are now (also for the boxes before the change: a tag added alone gives no label)
+    const tags = tagFragments(after, frame.machine);
+    if (!localTags.current.has(frame.chunk)) localTags.current.set(frame.chunk, new Map());
+    localTags.current.get(frame.chunk).set(current, tags);
+    const splits = splitsOf(frame.chunk);
+    const given = assignedFragments(before, after, frame.machine, current, splits);
     if (!given.size) return;
     if (!fragLabels.current.has(frame.chunk)) fragLabels.current.set(frame.chunk, new Map());
     const byFrag = fragLabels.current.get(frame.chunk);
@@ -694,7 +739,7 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
     const { chunk } = frame;
     setPending((n) => n + 1);
     const p = queue.current.then(() => api.post('/api/annotate/relabel_fragments', {
-      experiment: currentExperiment, frame_number: fn, mapping: Object.fromEntries(given),
+      experiment: currentExperiment, frame_number: fn, mapping: Object.fromEntries(given), tags: [...tags],
     }))
       .then((r) => {
         const d = unwrap(r.data);
@@ -706,7 +751,7 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
       .catch((err) => log('error', `Frame ${fn}: the saved frames of chunk ${chunk} were not relabelled: ${errorOf(err)}`))
       .finally(() => setPending((n) => n - 1));
     queue.current = p;
-  }, [current, frame, carry, currentExperiment, log]);
+  }, [current, frame, carry, currentExperiment, log, splitsOf]);
 
   // open a frame
   useEffect(() => {
@@ -974,7 +1019,7 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
         if (gen !== carryGen.current) return;
         if (d.saved) break;
         const base = edits.current.get(n)?.boxes ?? d.boxes;
-        const frags = fragmentsOf(base, d.machine);
+        const frags = keysOf(base, d.machine, n, splitsOf(d.chunk));
         for (const f of [...live.keys()]) if (!frags.includes(f)) live.delete(f);
         if (!live.size) break;
         edits.current.set(n, { boxes: applyLabels(base, frags, live, from), from });
@@ -986,11 +1031,11 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
       setEditsVersion((v) => v + 1);
       if (last > from) log('info', `Frame ${from}: labels carried to frames ${from + 1}–${last} (${[...mapping].map(([f, l]) => `fragment ${f} → ${l}`).join(', ')})`);
     })();
-  }, [sceneOf, dataOf, log]);
+  }, [sceneOf, dataOf, log, splitsOf]);
   const carryChange = useCallback((before, after) => {
     if (!carry || current == null || !frame?.machine) return;
-    propagate(current, changedFragments(before, after, frame.machine));
-  }, [carry, current, frame, propagate]);
+    propagate(current, changedFragments(before, after, frame.machine, current, splitsOf(frame.chunk, [current, after, frame.machine])));
+  }, [carry, current, frame, propagate, splitsOf]);
 
   const commit = useCallback((next, opts = {}) => {
     const before = opts.before || boxes;
