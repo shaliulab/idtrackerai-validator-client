@@ -607,6 +607,11 @@ export default function HelpTab() {
             Validation of multi-fly experiments with boxes, in place of CVAT (which stays available). Each fly gets one box
             labelled with its <b>local identity</b> (1…N, the labels of the CVAT tasks). The list holds the failed scenes of the
             validation pipeline (<code>flyhostel/validation/scene_qc.csv</code>), else the runs of bad frames of the QC tab.
+            It also holds the <b>chunk boundaries</b> (⇄) the integration may link wrongly. The integration gives a fly
+            the same identity in the next chunk by taking, in the first frame of that chunk, the fly nearest to where it
+            was in the last frame. A boundary is listed when a fly is missing on either side, the nearest one is more than
+            30 px away, or another fly is less than 50 px further away. Check that each fly keeps its label across it;
+            a boundary already in a scene adds its reason there.
             An experiment without scene_qc.csv gets it from <b>Prepare scenes</b>: make-identogram and auto-annotate-qc run in
             the background (follow them in the console; long on many flies), then the list fills.
           </p>
@@ -632,7 +637,10 @@ export default function HelpTab() {
             <li><Key>P</Key> copies the boxes of the last frame saved; “Machine proposal” starts again from the tracking.</li>
           </ul>
           <p>
-            <b>Integrate</b> runs <code>integrate-human-annotations --source validator</code> over a ZT range (empty: the frames annotated).
+            <b>Integrate</b> runs <code>integrate-human-annotations --source validator</code> over a ZT range. Without one it covers
+            every tracked chunk, so the end of the recording is not left out when your last saved frame is earlier; tick
+            <b>Annotated only</b> to integrate only from the first to the last frame you saved. While it runs, <b>■ Stop</b> kills it
+            (nothing is written), e.g. when you notice a missing annotation.
             It writes the validated tables as feathers in <code>flyhostel/validation</code> without touching the database, and lists the annotated
             frames that still have problems above the legend. <b>Write validated tables…</b> then runs <code>save-human-annotations</code>,
             which replaces the <code>_VAL</code> tables of the database.

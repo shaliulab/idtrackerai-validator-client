@@ -555,7 +555,12 @@ const SceneList = React.memo(function SceneList({ scenes, currentK, onPick, zt0 
                   {s.clock != null ? `ZT ${fmtZtShort(s.clock / 3600 - zt0)}` : "–"}
                 </td>
                 <td className="qc-muted">{s.done}/{s.length}{s.flags ? <span className="bx-flag" title={`${s.flags} flagged frame(s) not saved yet`}> ⚑{s.flags}</span> : null}</td>
-                <td className="qc-muted bx-reason">{s.reason}</td>
+                <td className="qc-muted bx-reason">
+                  {s.boundary != null && (
+                    <span className="bx-boundary" title={`Holds a chunk boundary (first frame of the next chunk: ${s.boundary.toLocaleString()}) that the integration may link wrongly: check that each fly keeps its label across it`}>⇄ </span>
+                  )}
+                  {s.reason}
+                </td>
               </tr>
             ))}
           </tbody>
@@ -582,6 +587,8 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
   const [pending, setPending] = useState(0);
   const [jump, setJump] = useState('');
   const [zt, setZt] = useState({ start: '', end: '' });
+  const [onlyAnnotated, setOnlyAnnotated] = useState(false);   // integrate first..last saved frame instead of all tracking
+  const [integrating, setIntegrating] = useState(null);       // running integrate / save job
   const [rootEl, setRootEl] = useState(null);
   const [stageEl, setStageEl] = useState(null);
   const [full, setFull] = useState(false);
@@ -1285,16 +1292,36 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
   const integrate = useCallback((mode) => {
     if (mode === 'save' && !window.confirm(
       'Write IDENTITY_VAL, ROI_0_VAL and CONCATENATION_VAL of this experiment\'s database from the last integration? The validated tables are replaced.')) return;
-    api.post('/api/annotate/integrate', { mode, start_zt: zt.start, end_zt: zt.end })
-      .then((r) => trackJob(unwrap(r.data)))
+    api.post('/api/annotate/integrate', { mode, start_zt: zt.start, end_zt: zt.end, range: onlyAnnotated ? 'annotated' : 'tracked' })
+      .then((r) => { const job = unwrap(r.data); setIntegrating(job); return trackJob(job); })
       .then((job) => {
+        setIntegrating(null);
         if (!job) return;
         const res = job.result;
-        if (res?.tail) log(job.status === 'done' ? 'success' : 'error', `${res.command}\n${res.tail.slice(-15).join('\n')}`);
+        if (res?.stopped) log('warning', `${res.command}: stopped`);
+        else if (res?.tail) log(job.status === 'done' ? 'success' : 'error', `${res.command}\n${res.tail.slice(-15).join('\n')}`);
         fetchInfo();
       })
-      .catch((err) => log('error', `${mode === 'save' ? 'Write validated tables' : 'Integrate'}: ${errorOf(err)}`));
-  }, [zt, trackJob, log, fetchInfo]);
+      .catch((err) => { setIntegrating(null); log('error', `${mode === 'save' ? 'Write validated tables' : 'Integrate'}: ${errorOf(err)}`); });
+  }, [zt, onlyAnnotated, trackJob, log, fetchInfo]);
+
+  // the unsure chunk boundaries are checked in the background (slow on a cold disk): ask again until they are in
+  const boundariesPending = !!info && info.source && info.source.boundaries === null;
+  useEffect(() => {
+    if (!active || !boundariesPending) return undefined;
+    const timer = setTimeout(fetchInfo, 5000);
+    return () => clearTimeout(timer);
+  }, [active, boundariesPending, info, fetchInfo]);
+
+  // an integration started before this page was loaded (the console follows it again)
+  const runningIntegration = integrating || info?.integrating || null;
+  const stopIntegration = useCallback(() => {
+    if (!window.confirm('Stop the running integration? Nothing is written; run Integrate again when ready.')) return;
+    api.post('/api/annotate/integrate/stop')
+      .then(() => log('info', 'Integration stopped'))
+      .catch((err) => log('error', `Stop integration: ${errorOf(err)}`))
+      .finally(() => { setIntegrating(null); fetchInfo(); });
+  }, [log, fetchInfo]);
 
   const mainHeight = full ? null : fillHeight ? fillHeight - 60 : 640;
   const stageW = Math.max(200, Math.floor(stage.width));
@@ -1338,17 +1365,29 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
           </span>
         )}
         <span className="toolbar-sep" />
-        <label className="field" title="ZT range integrated (hours, as integrate-human-annotations --start-zt / --end-zt). Empty: the frames annotated">
+        <label className="field" title="ZT range integrated (hours, as integrate-human-annotations --start-zt / --end-zt). Empty: every tracked chunk (or only from the first to the last saved frame with 'Annotated only')">
           ZT
           <input type="number" placeholder="start" value={zt.start} style={{ width: 64 }} onChange={(e) => setZt((z) => ({ ...z, start: e.target.value }))} />
           –
           <input type="number" placeholder="end" value={zt.end} style={{ width: 64 }} onChange={(e) => setZt((z) => ({ ...z, end: e.target.value }))} />
         </label>
-        <button onClick={() => integrate('integrate')} disabled={!doneFrames}
-                title="Run integrate-human-annotations --source validator: the boxes crossed with the tracking, validated tables written as feathers in flyhostel/validation (the database is not touched)">
-          Integrate
-        </button>
-        <button onClick={() => integrate('save')} disabled={!doneFrames}
+        <label className="field" title="Without ZT range: integrate only from the first to the last saved frame (--frames-from-annotation) instead of every tracked chunk">
+          <input type="checkbox" checked={onlyAnnotated} disabled={zt.start !== '' || zt.end !== ''}
+                 onChange={(e) => setOnlyAnnotated(e.target.checked)} />
+          Annotated only
+        </label>
+        {runningIntegration ? (
+          <button className="btn-danger" onClick={stopIntegration}
+                  title={`Kill ${runningIntegration.title || 'the running integration'} (and its worker processes), e.g. to add a missing annotation first`}>
+            ■ Stop
+          </button>
+        ) : (
+          <button onClick={() => integrate('integrate')} disabled={!doneFrames}
+                  title="Run integrate-human-annotations --source validator: the boxes crossed with the tracking, validated tables written as feathers in flyhostel/validation (the database is not touched)">
+            Integrate
+          </button>
+        )}
+        <button onClick={() => integrate('save')} disabled={!doneFrames || !!runningIntegration}
                 title="Run save-human-annotations: write the last integration into the database's _VAL tables">
           Write validated tables…
         </button>
@@ -1359,6 +1398,9 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
           <header className="card-header">
             <span>Scenes to check</span>
             <span className="ov-count">{info?.source?.kind === 'scene_qc' ? 'scene_qc.csv' : info?.source?.kind === 'qc' ? 'QC tab' : ''}</span>
+            <span className="ov-count" title="Chunk boundaries the integration may link wrongly (⇄ in the list)">
+              {boundariesPending ? '· checking chunk boundaries…' : info?.source?.boundaries ? `· ${info.source.boundaries} ⇄` : ''}
+            </span>
           </header>
           <div className="sl-filters">
             {FILTERS.map(([k, label]) => (

@@ -477,6 +477,7 @@ body.resizing-row, body.resizing-row * { cursor: row-resize !important; user-sel
 }
 
 /* ── Destructive actions ── */
+.bx-boundary { color: var(--accent); font-weight: 600; }
 .btn-danger {
   color: var(--danger);
   border-color: var(--danger);
