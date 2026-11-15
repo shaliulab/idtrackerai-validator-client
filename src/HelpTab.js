@@ -103,6 +103,7 @@ const SHORTCUTS = [
   ['Leg movements', [
     [<><Key>1</Key>–<Key>7</Key></>, 'What the fly does: middle legs, grooming, walk / turn, one shift, pose error, other, unsure (same key again removes it)'],
     [<><Key>l</Key> / <Key>r</Key> / <Key>b</Key></>, 'Leg seen moving: left / right / both (same key again removes it)'],
+    [<><Key>t</Key> / <Key>o</Key> / <Key>x</Key></>, 'The moving leg touches the other fly / does not touch it / no other fly in the clip (same key again removes it)'],
     [<><Key>0</Key> / <Key>Backspace</Key></>, 'Clear the review of the event'],
     [<><Key>←</Key> / <Key>→</Key></>, 'Previous / next event'],
     [<><Key>n</Key> / <Key>Shift</Key>+<Key>n</Key></>, 'Next / previous event without a verdict'],
@@ -389,7 +390,10 @@ export default function HelpTab() {
               <b>Top card:</b> the queue: every event of one fly, or a <i>random sample of every fly</i> (the same size and seed
               always give the same events, so you can stop and continue later). Narrow it to the events <i>while immobile</i>{' '}
               (the fly had been immobile for at least 10 s in its sleep trace), of the <i>middle legs alone</i> (no front or hind
-              leg stroke at the same time), or both. Playback speed, seconds shown before and after the event, loop.{' '}
+              leg stroke at the same time), or both. <i>Counted movements</i> are the events the classifier counts as real
+              middle-leg movements in the per-fly counts (<code>leg_movements_per_fly.py</code>): all of them, those <i>near
+              another fly</i> (during a contact, centroids within 4 mm, or in the 10 s after it) or those <i>away from other
+              flies</i>. Playback speed, seconds shown before and after the event, loop.{' '}
               <i>Hide detector's call</i> hides the trace and the detector's columns, to judge from the movie only.{' '}
               <i>⤓ reviews (csv)</i> downloads every review with the detector's numbers of the event.
             </li>
@@ -403,7 +407,10 @@ export default function HelpTab() {
             <li>
               <b>Verdict:</b> <i>middle legs</i> (a middle leg moves repeatedly, the other legs stay still), <i>grooming</i>{' '}
               (with the front or hind legs), <i>walk / turn</i>, <i>one shift</i> (a single posture adjustment), <i>pose
-              error</i> (nothing moves, the keypoints jump), <i>other</i>, <i>unsure</i>; which leg you saw moving; notes.
+              error</i> (nothing moves, the keypoints jump), <i>other</i>, <i>unsure</i>; which leg you saw moving; whether the
+              moving leg <i>touches the other fly</i>, <i>does not touch it</i>, or there is <i>no other fly</i> in the clip
+              (the event line says which fly was near, and the classifier's probability, unless the detector's call is hidden);
+              notes.
               Every change is saved at once (<code>leg_annotations.db</code>, next to the PE annotations), with your user name.
             </li>
           </ul>
