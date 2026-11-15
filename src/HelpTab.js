@@ -11,6 +11,7 @@ const SECTIONS = [
   { id: 'help-start', title: 'Getting started' },
   { id: 'help-viewer', title: 'Group viewer' },
   { id: 'help-pe', title: 'Proboscis extension (PE)' },
+  { id: 'help-legs', title: 'Leg movements' },
   { id: 'help-ethogram', title: 'Ethograms' },
   { id: 'help-ethoscope', title: 'Ethoscope' },
   { id: 'help-qc', title: 'QC' },
@@ -98,6 +99,15 @@ const SHORTCUTS = [
     [<><Key>Ctrl</Key>+<Key>Shift</Key>+<Key>1</Key>–<Key>9</Key></>, 'Select the Nth fly'],
     ['Drag on a trace', 'Scrub the burst video'],
     [<><Key>Shift</Key>+drag on the distance trace</>, 'Draw a ground-truth event'],
+  ]],
+  ['Leg movements', [
+    [<><Key>1</Key>–<Key>7</Key></>, 'What the fly does: middle legs, grooming, walk / turn, one shift, pose error, other, unsure (same key again removes it)'],
+    [<><Key>l</Key> / <Key>r</Key> / <Key>b</Key></>, 'Leg seen moving: left / right / both (same key again removes it)'],
+    [<><Key>0</Key> / <Key>Backspace</Key></>, 'Clear the review of the event'],
+    [<><Key>←</Key> / <Key>→</Key></>, 'Previous / next event'],
+    [<><Key>n</Key> / <Key>Shift</Key>+<Key>n</Key></>, 'Next / previous event without a verdict'],
+    [<><Key>Space</Key> / <Key>Enter</Key></>, 'Play or pause / play the event again'],
+    ['Click on the trace', 'Seek the movie there'],
   ]],
   ['Ethograms', [
     [<><Key>↑</Key> / <Key>↓</Key></>, 'Previous / next fly'],
@@ -364,6 +374,39 @@ export default function HelpTab() {
             experiment name to confirm. The rows are first saved to a backup file next to the
             database. The automatic segmentation is kept.
           </p>
+        </Section>
+
+        <Section id="help-legs" title="Leg movements">
+          <p>
+            Validation of the <b>middle-leg movement detector</b> (<code>leg_movements.py</code> of the analysis repository): from
+            the raw pose, it finds a middle leg whose tip moves away from its resting position and back at least 3 times, while
+            the thorax stays in place. Here you watch every event and say what the fly is really doing. The tab does not need a
+            loaded experiment: events of any fly are played in that fly's movie (the one of the Ethograms tab).
+          </p>
+          <h3>Layout</h3>
+          <ul>
+            <li>
+              <b>Top card:</b> the queue: every event of one fly, or a <i>random sample of every fly</i> (the same size and seed
+              always give the same events, so you can stop and continue later). Narrow it to the events <i>while immobile</i>{' '}
+              (the fly had been immobile for at least 10 s in its sleep trace), of the <i>middle legs alone</i> (no front or hind
+              leg stroke at the same time), or both. Playback speed, seconds shown before and after the event, loop.{' '}
+              <i>Hide detector's call</i> hides the trace and the detector's columns, to judge from the movie only.{' '}
+              <i>⤓ reviews (csv)</i> downloads every review with the detector's numbers of the event.
+            </li>
+            <li>
+              <b>Movie and trace:</b> the event plays in a loop. The trace is what the detector saw: for every leg tip, its
+              distance from its resting position in body lengths (middle left: blue solid; middle right: orange dashed; front:
+              green dotted; hind: purple dash-dot), the stroke threshold (0.08), the strokes of each middle leg (bars), and the
+              speed of the thorax (strokes do not count above the dashed line). The shaded band is the event; the vertical line
+              follows the movie; click to seek.
+            </li>
+            <li>
+              <b>Verdict:</b> <i>middle legs</i> (a middle leg moves repeatedly, the other legs stay still), <i>grooming</i>{' '}
+              (with the front or hind legs), <i>walk / turn</i>, <i>one shift</i> (a single posture adjustment), <i>pose
+              error</i> (nothing moves, the keypoints jump), <i>other</i>, <i>unsure</i>; which leg you saw moving; notes.
+              Every change is saved at once (<code>leg_annotations.db</code>, next to the PE annotations), with your user name.
+            </li>
+          </ul>
         </Section>
 
         <Section id="help-ethogram" title="Ethograms">

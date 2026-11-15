@@ -34,6 +34,7 @@ import MessageConsole, { useConsole, useConsoleState, consoleHeight } from './Me
 
 // Loaded (with hls.js) off the viewer's critical path.
 const EthogramViewer = lazy(() => import('./EthogramViewer'));
+const LegValidator = lazy(() => import('./LegValidator'));
 const DataCollectorTab = lazy(() => import('./DataCollectorTab'));
 
 // ── Theme tokens ──────────────────────────────────────────────────────────
@@ -360,13 +361,20 @@ function App() {
   useEffect(() => {
     if (!currentExperiment) { setEthoscopeAvailable(false); return undefined; }
     let stale = false;
-    api.get('/api/ethoscope/flies')
+    let timer = null;
+    // one retry: a failure (e.g. a request racing the experiment switch) must not gray the tab out
+    const check = (retry) => api.get('/api/ethoscope/flies')
       .then(({ data }) => {
         const d = typeof data === 'string' ? JSON.parse(data) : data;
         if (!stale) setEthoscopeAvailable(!!(d?.available || d?.downloadable));
       })
-      .catch(() => { if (!stale) setEthoscopeAvailable(false); });
-    return () => { stale = true; };
+      .catch(() => {
+        if (stale) return;
+        if (retry) timer = setTimeout(() => check(false), 3000);
+        else setEthoscopeAvailable(false);
+      });
+    check(true);
+    return () => { stale = true; clearTimeout(timer); };
   }, [currentExperiment]);
   useEffect(() => {
     if (!ethoscopeAvailable) setActiveTab((tab) => (tab === 'ethoscope' ? 'group_viewer' : tab));
@@ -846,6 +854,7 @@ function App() {
         <Tab id="data_collector" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+0">Data collector</Tab>
         <Tab id="group_viewer" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+1">Group viewer</Tab>
         <Tab id="proboscis_extension" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+2" disabled={noDatabase}>Proboscis extension (PE)</Tab>
+        <Tab id="leg_movements" activeTab={activeTab} setActiveTab={setActiveTab}>Leg movements</Tab>
         <Tab id="ethogram" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+3" disabled={noDatabase}>Ethograms</Tab>
         <Tab id="ethoscope" activeTab={activeTab} setActiveTab={setActiveTab} disabled={!ethoscopeAvailable}>Ethoscope</Tab>
         <Tab id="qc" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+4" disabled={noDatabase}>QC</Tab>
@@ -1019,6 +1028,13 @@ function App() {
             active={activeTab === 'proboscis_extension'}
             onRequestFly={switchToFly}
         />
+      </div>
+
+      {/* Leg movements: events of any fly (its own queue, not the loaded experiment) */}
+      <div className="tab-panel" style={{ display: activeTab === 'leg_movements' ? 'block' : 'none' }}>
+        <Suspense fallback={<div style={{ padding: 12 }}>Loading…</div>}>
+          <LegValidator active={activeTab === 'leg_movements'} />
+        </Suspense>
       </div>
 
       <div style={{ display: activeTab === 'ethogram' ? 'block' : 'none' }}>
