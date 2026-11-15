@@ -756,6 +756,15 @@ export default function HelpTab() {
               table counts those videos (one per chunk of a fly). <i>Arena</i> keeps (only) or drops
               (exclude) the flies recorded in an arena of a multi-arena recording
               (<code>…/arenas/&lt;n&gt;</code>), as opposed to a normal petri dish.
+              <i>First night</i> keeps the experiments where every fly is on its first night in the
+              FlyHostel (only) or those with a fly that was already there the night before (exclude).
+              It is detected automatically, not read from <code>experiment_order</code>: a fly with the
+              same ethoscope, date and ROI (<code>machine_name</code>, <code>date</code>,{' '}
+              <code>region_id</code>) in an experiment of the same FlyHostel the day before is on its
+              second night. The <i>First night</i> column of the table shows ✓, <i>no (night 2)</i> or{' '}
+              <i>k/N back</i> (hover: each fly and where it was the day before), and the fly properties{' '}
+              <i>Night in the FlyHostel (auto)</i> / <i>Previous experiment of the fly (auto)</i> can be
+              charted and exported.
             </li>
             <li>
               <i>Cohoused with (other genotypes)</i> is the genotypes of the other flies of a fly's

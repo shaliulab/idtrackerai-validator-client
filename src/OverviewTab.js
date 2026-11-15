@@ -29,6 +29,7 @@ const EXPERIMENT_PROPS = {
   year: 'Year',
   has_val: 'Validated tables (_VAL)',
   analyzed: 'Analyzed (has a database)',
+  first_night: 'First night in the FlyHostel (auto)',
 };
 
 const LABELS = {
@@ -47,6 +48,8 @@ const LABELS = {
   node: 'Tracking node',
   region_id: 'Region id',
   fly_no: 'Fly no.',
+  flyhostel_night: 'Night in the FlyHostel (auto)',
+  previous_experiment: 'Previous experiment of the fly (auto)',
 };
 const labelOf = (prop) => LABELS[prop] || prop.replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase());
 
@@ -96,6 +99,7 @@ function buildRows(experiments) {
       year: e.date ? e.date.slice(0, 4) : undefined,
       has_val: e.has_val ? 'yes' : 'no',
       analyzed: e.analyzed === false ? 'no' : 'yes',
+      first_night: e.first_night ?? undefined,
     };
     // _others: genotypes of the other flies of the experiment (missing ones left out).
     // cohoused_with: those different from the fly's own, or ALONE / SAME_ONLY.
@@ -141,8 +145,10 @@ function applyFilters(rows, filters, except) {
 // and `to` (inclusive, YYYY-MM-DD). `nGenotype` / `nCohoused`: exact number of
 // flies of each of the two genotypes in the experiment (any if empty).
 // `analyzed` / `validated` / `deg` / `arena`: 'yes' keeps only, 'no' excludes those experiments (any if empty).
+// `firstNight`: 'yes' keeps experiments where every fly is on its first night in the FlyHostel,
+// 'no' those with a fly back from the day before (overview.py, annotate_nights).
 const EMPTY_QUERY = { genotype: '', cohoused: '', nGenotype: '', nCohoused: '', from: '', to: '',
-  analyzed: '', validated: '', deg: '', arena: '' };
+  analyzed: '', validated: '', deg: '', arena: '', firstNight: '' };
 
 // Validated: _VAL tables, or a single fly (never validated: its tracking is final).
 // The NX of an arena's path is the recording's, so an arena counts its metadata rows.
@@ -167,6 +173,8 @@ function applyQuery(rows, q) {
     if (!matches(q.validated, isValidated(row._exp))) return false;
     if (!matches(q.deg, hasDegLabels(row._exp))) return false;
     if (!matches(q.arena, isArena(row._exp))) return false;
+    if (q.firstNight === 'yes' && row._exp.first_night !== 'yes') return false;
+    if (q.firstNight === 'no' && !(row._exp.repeat_flies > 0)) return false;
     if ((q.genotype || q.cohoused) && row._noFly) return false;
     if (q.genotype && row.genotype !== q.genotype) return false;
     if (q.genotype && q.nGenotype && (row._counts[q.genotype] || 0) !== Number(q.nGenotype)) return false;
@@ -244,6 +252,7 @@ function QueryPanel({ rows, query, setQuery, stats, dateRange }) {
   if (query.validated) parts.push(<> {query.validated === 'yes' ? 'validated' : 'not validated'}</>);
   if (query.deg) parts.push(<> {query.deg === 'yes' ? 'with' : 'without'} DEG labels</>);
   if (query.arena) parts.push(<> {query.arena === 'yes' ? 'in an arena' : 'in a petri dish'}</>);
+  if (query.firstNight) parts.push(<> {query.firstNight === 'yes' ? 'on the first night of every fly' : 'with a fly back for another night'}</>);
   if (query.from || query.to) parts.push(<> recorded {query.from ? `from ${query.from}` : ''} {query.to ? `to ${query.to}` : ''}</>);
 
   return (
@@ -298,6 +307,11 @@ function QueryPanel({ rows, query, setQuery, stats, dateRange }) {
               title="At least one fly has labelled frames in a deepethogram project (ground truth ethogram)" />
       <Toggle label="Arena" value={query.arena} onChange={(v) => setQuery((q) => ({ ...q, arena: v }))}
               title="Only: flies in an arena of a multi-arena recording (…/arenas/<n>); exclude: flies in a normal petri dish" />
+      <Toggle label="First night" value={query.firstNight} onChange={(v) => setQuery((q) => ({ ...q, firstNight: v }))}
+              title={'Detected automatically: a fly with the same ethoscope, date and ROI (machine_name, date, region_id) '
+                + 'in an experiment of the same FlyHostel the day before is not on its first night.\n'
+                + 'Only: every fly whose ethoscope run is known is on its first night; '
+                + 'exclude: at least one fly was already there the night before'} />
       {queryActive(query) && <button className="ov-link" onClick={() => setQuery(EMPTY_QUERY)}>Clear</button>}
       {queryActive(query) && (
         <div className="ov-query-result">
@@ -503,6 +517,7 @@ const TABLE_COLUMNS = [
   ['duration_h', 'Duration (h)'],
   ['light_cycle', 'Light cycle'],
   ['has_val', 'Validated'],
+  ['first_night', 'First night'],
   ['deg_videos', 'DEG'],
   ['sheet', 'Sheet'],
 ];
@@ -722,6 +737,7 @@ function ExperimentTable({ rows, onOpen, current, active, onUpdateMetadata, shee
                   {e.light_cycle}{e.light_cycle_flags?.length > 0 && <span className="ov-warn"> ⚠</span>}
                 </td>
                 <td>{e.has_val ? '✓' : ''}</td>
+                <FirstNightCell e={e} />
                 <td title={e.deg_videos ? `${e.deg_videos} DEG videos (chunk of a fly) with labelled frames` : undefined}>
                   {e.deg_videos || ''}
                 </td>
@@ -761,19 +777,48 @@ function ExperimentTable({ rows, onOpen, current, active, onUpdateMetadata, shee
   );
 }
 
+// Is this the first night in the FlyHostel of the experiment's flies? (overview.py, annotate_nights)
+function FirstNightCell({ e }) {
+  if (!e.first_night) {
+    return <td style={{ color: 'var(--subtext)' }} title="Unknown: no fly has machine_name, date and region_id in its metadata">?</td>;
+  }
+  const order = [...new Set(e.flies.map((f) => f.experiment_order).filter(Boolean))].join(', ');
+  const lines = e.flies.filter((f) => f.flyhostel_night).map((f, i) => `${f.identity ? `Fly ${f.identity}` : `Row ${i + 1}`} `
+    + `(${f.machine_name} ${f.date} ROI ${f.region_id}): night ${f.flyhostel_night}`
+    + (f.previous_experiment ? `, the day before in ${f.previous_experiment}` : ''));
+  const unknown = e.flies.length - e.known_flies;
+  const title = [
+    e.first_night === 'yes' ? 'First night in the FlyHostel of every fly'
+      : e.first_night === 'no' ? 'Every fly was already in the FlyHostel the day before'
+        : `${e.repeat_flies} of ${e.known_flies} flies were already in the FlyHostel the day before`,
+    ...lines,
+    unknown > 0 ? `${unknown} fly row(s) without machine_name / date / region_id` : null,
+    order ? `experiment_order in the sheet: ${order}` : null,
+    'Detected from the ethoscope run of each fly (machine_name, date, region_id) in the same FlyHostel the day before',
+  ].filter(Boolean).join('\n');
+  const nights = Math.max(...e.flies.map((f) => Number(f.flyhostel_night) || 0));
+  return (
+    <td title={title}>
+      {e.first_night === 'yes' ? '✓'
+        : <span className="ov-badge ov-badge-repeat">{e.first_night === 'no' ? `no (night ${nights})` : `${e.repeat_flies}/${e.known_flies} back`}</span>}
+    </td>
+  );
+}
+
 const csvCell = (v) => {
   const s = v == null ? '' : String(v);
   return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 };
 
 function downloadCsv(rows, columns) {
-  const header = ['experiment', 'flyhostel', 'group_size', 'date', 'start_time', 'duration_h', 'has_val', 'analyzed', ...columns];
+  const header = ['experiment', 'flyhostel', 'group_size', 'date', 'start_time', 'duration_h', 'has_val', 'analyzed',
+    'first_night', ...columns];
   const lines = [header.join(',')];
   for (const r of rows) {
     if (r._noFly) continue;
     const e = r._exp;
     lines.push([e.experiment, e.flyhostel, e.group_size, e.date, e.start_time, e.duration_h, e.has_val, e.analyzed !== false,
-      ...columns.map((c) => r[c])].map(csvCell).join(','));
+      e.first_night ?? '', ...columns.map((c) => r[c])].map(csvCell).join(','));
   }
   const url = URL.createObjectURL(new Blob([lines.join('\n') + '\n'], { type: 'text/csv' }));
   const a = document.createElement('a');
@@ -785,7 +830,8 @@ function downloadCsv(rows, columns) {
 
 const TOGGLE_TEXT = { yes: 'only', no: 'excluded' };
 const QUERY_LABELS = { genotype: 'genotype', nGenotype: 'its flies', cohoused: 'living with', nCohoused: 'how many',
-  from: 'from', to: 'to', analyzed: 'analyzed', validated: 'validated', deg: 'DEG labels', arena: 'arena' };
+  from: 'from', to: 'to', analyzed: 'analyzed', validated: 'validated', deg: 'DEG labels', arena: 'arena',
+  firstNight: 'first night' };
 
 // Everything that hides experiments (search, the stored query, bar filters) in one
 // banner, so a restriction left over from earlier is not missed.

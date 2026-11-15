@@ -557,6 +557,7 @@ body.resizing-row, body.resizing-row * { cursor: row-resize !important; user-sel
 .ov-query-hint { color: var(--subtext); font-size: 12px; }
 .ov-badge { margin-left: 6px; padding: 0 6px; border-radius: 8px; font-family: var(--font, inherit); font-size: 11px;
   background: var(--surface-2); border: 1px solid var(--border); color: var(--subtext); white-space: nowrap; }
+.ov-badge-repeat { margin-left: 0; background: var(--accent-soft); border-color: var(--accent-soft); color: var(--text); }
 .ov-badge-loaded { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
 .ov-table tbody tr.ov-loaded td.mono { font-weight: 600; }
 .ov-table tbody tr.ov-flash { animation: ov-flash 1.6s ease-out; }
