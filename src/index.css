@@ -1032,6 +1032,23 @@ button.ov-sheet.ov-sheet-error { border-color: var(--danger); color: var(--dange
    One column: panels shown side by side on a desktop are stacked, fixed
    heights computed for the window give way to the content's, wide tables
    scroll inside their card instead of the page. */
+/* Drive exchange tab (DriveExchangeTab.js) */
+.xc .card-header .spacer { flex: 1; }
+.xc-link { background: none; border: none; padding: 0; color: var(--accent); cursor: pointer; font: inherit; text-decoration: underline; }
+.xc-badge-bad { background: var(--danger-soft); border-color: var(--danger); color: var(--text); }
+.xc-help { color: var(--text); line-height: 1.5; }
+.xc-help ol { margin: 4px 0; padding-left: 20px; }
+.xc-help code { background: var(--accent-soft); padding: 0 4px; border-radius: 4px; }
+.xc-body { display: flex; flex-direction: column; gap: 8px; }
+.xc-body > .toolbar { padding: 0; }
+.xc-line { color: var(--subtext); }
+.xc-h { margin: 6px 0 0; font-size: 13px; }
+.xc-plan { border: 1px solid var(--border-strong); border-radius: var(--radius); padding: 8px 10px; display: flex; flex-direction: column; gap: 8px; }
+.xc-plan > .toolbar { padding: 0; }
+.xc-warn { color: var(--danger); }
+.xc-conflicts { max-height: 320px; }
+.xc-choice { display: flex; gap: 6px; align-items: flex-start; cursor: pointer; }
+
 @media (max-width: 760px) {
   html, body { overflow-x: hidden; }
   /* 16px: iOS zooms into any focused field with smaller text */

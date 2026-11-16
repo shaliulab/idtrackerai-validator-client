@@ -570,7 +570,7 @@ const SceneList = React.memo(function SceneList({ scenes, currentK, onPick, zt0 
   );
 });
 
-export default function AnnotateTab({ active, currentExperiment, viewerFrame, onOpenFrame, request }) {
+export default function AnnotateTab({ active, currentExperiment, viewerFrame, onOpenFrame, request, refresh }) {
   const { log, trackJob } = useConsole();
   const [info, setInfo] = useState(null);           // /api/annotate/scenes
   const [loading, setLoading] = useState(false);
@@ -639,6 +639,16 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
     setCurrent(null); setFrame(null); setBoxes([]); setLoaded([]); undo.current = []; lastSaved.current = null;
     fetchInfo();
   }, [active, currentExperiment, fetchInfo]);
+
+  // `refresh` bumped (the Drive exchange tab merged annotations in): read the scenes and the frames again
+  const refreshSeen = useRef(refresh);
+  useEffect(() => {
+    if (refresh === refreshSeen.current) return;
+    refreshSeen.current = refresh;
+    if (!fetchedFor.current) return;
+    fetchInfo();
+    setReloadKey((k) => k + 1);
+  }, [refresh, fetchInfo]);
 
   const annotated = useMemo(() => new Map((info?.annotated || []).map((a) => [a.frame_number, a])), [info]);
   const flagged = useMemo(() => new Set(info?.flagged || []), [info]);

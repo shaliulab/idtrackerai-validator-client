@@ -26,6 +26,7 @@ import PoseTab from './PoseTab';
 import SleapLabelsTab from './SleapLabelsTab';
 import AnnotateTab from './AnnotateTab';
 import MonitorTab from './MonitorTab';
+import DriveExchangeTab from './DriveExchangeTab';
 import ValidationCsvBuilder from './ValidationCsvBuilder';
 import CvatLinks from './CvatLinks';
 import RoiPanel from './RoiPanel';
@@ -222,6 +223,18 @@ function App() {
   const noDatabase = experimentInfo.has_database
     ? null : 'Not available: the loaded experiment has no database (not analyzed yet)';
   const [pickerKey, setPickerKey] = useState(0);
+  // Server modules left out of this install (GET /api/features: flyhostel not installed, e.g. an annotator's
+  // install): their tabs are grayed out
+  const [missing, setMissing] = useState({});
+  useEffect(() => {
+    api.get('/api/features').then((r) => setMissing(r.data?.missing || {})).catch(() => {});
+  }, []);
+  const missingTab = (...modules) => {
+    const gone = modules.filter((m) => missing[m]);
+    return gone.length ? `Not available in this install (needs flyhostel): ${gone.join(', ')}` : null;
+  };
+  // Bumped after the Drive exchange tab merged annotations into the loaded experiment: the Annotate tab reloads
+  const [annotateRefresh, setAnnotateRefresh] = useState(0);
   // Bumped after the PE annotations are wiped: remounts PEValidator so it reloads.
   const [peReloadKey, setPeReloadKey] = useState(0);
   const consoleState = useConsoleState();
@@ -442,14 +455,16 @@ function App() {
   // Ctrl+1 … Ctrl+9 switch tabs
   const hasDatabaseRef = useRef(true);
   hasDatabaseRef.current = experimentInfo.has_database;
+  const missingRef = useRef({});
+  missingRef.current = missing;
   useEffect(() => {
     const onKey = (e) => {
       if (!e.ctrlKey || e.shiftKey || e.metaKey || e.altKey) return;   // Ctrl only, not Cmd/Alt/Shift combos (Ctrl+Shift+digit: PE fly, Annotate identity 10+)
       if (e.key === '1') { e.preventDefault(); setActiveTab('group_viewer'); }
-      else if (e.key === '2') { e.preventDefault(); if (hasDatabaseRef.current) setActiveTab('proboscis_extension'); }
-      else if (e.key === '3') { e.preventDefault(); if (hasDatabaseRef.current) setActiveTab('ethogram'); }
+      else if (e.key === '2') { e.preventDefault(); if (hasDatabaseRef.current && !missingRef.current.pe_validation) setActiveTab('proboscis_extension'); }
+      else if (e.key === '3') { e.preventDefault(); if (hasDatabaseRef.current && !missingRef.current.ethogram) setActiveTab('ethogram'); }
       else if (e.key === '4') { e.preventDefault(); if (hasDatabaseRef.current) setActiveTab('qc'); }
-      else if (e.key === '5') { e.preventDefault(); if (hasDatabaseRef.current) setActiveTab('pose'); }
+      else if (e.key === '5') { e.preventDefault(); if (hasDatabaseRef.current && !missingRef.current.pose) setActiveTab('pose'); }
       else if (e.key === '6') { e.preventDefault(); setActiveTab('overview'); }
       else if (e.key === '7') { e.preventDefault(); setActiveTab('data_management'); }
       else if (e.key === '8') { e.preventDefault(); setActiveTab('monitor'); }
@@ -851,16 +866,17 @@ function App() {
 
       {/* ── Tabs ── */}
       <nav className="tabs">
-        <Tab id="data_collector" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+0">Data collector</Tab>
+        <Tab id="data_collector" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+0" disabled={missingTab('data_collector')}>Data collector</Tab>
         <Tab id="group_viewer" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+1">Group viewer</Tab>
-        <Tab id="proboscis_extension" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+2" disabled={noDatabase}>Proboscis extension (PE)</Tab>
-        <Tab id="leg_movements" activeTab={activeTab} setActiveTab={setActiveTab}>Leg movements</Tab>
-        <Tab id="ethogram" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+3" disabled={noDatabase}>Ethograms</Tab>
+        <Tab id="proboscis_extension" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+2" disabled={noDatabase || missingTab('pe_validation')}>Proboscis extension (PE)</Tab>
+        <Tab id="leg_movements" activeTab={activeTab} setActiveTab={setActiveTab} disabled={missingTab('leg_validation')}>Leg movements</Tab>
+        <Tab id="ethogram" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+3" disabled={noDatabase || missingTab('ethogram')}>Ethograms</Tab>
         <Tab id="ethoscope" activeTab={activeTab} setActiveTab={setActiveTab} disabled={!ethoscopeAvailable}>Ethoscope</Tab>
         <Tab id="qc" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+4" disabled={noDatabase}>QC</Tab>
         <Tab id="annotate" activeTab={activeTab} setActiveTab={setActiveTab} disabled={noDatabase}>Annotate</Tab>
-        <Tab id="pose" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+5" disabled={noDatabase}>Pose</Tab>
-        <Tab id="sleap_labels" activeTab={activeTab} setActiveTab={setActiveTab} disabled={noDatabase}>SLEAP labels</Tab>
+        <Tab id="drive_exchange" activeTab={activeTab} setActiveTab={setActiveTab}>Drive exchange</Tab>
+        <Tab id="pose" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+5" disabled={noDatabase || missingTab('pose')}>Pose</Tab>
+        <Tab id="sleap_labels" activeTab={activeTab} setActiveTab={setActiveTab} disabled={noDatabase || missingTab('sleap_labels')}>SLEAP labels</Tab>
         <Tab id="overview" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+6">Metadata overview</Tab>
         <Tab id="data_management" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+7">Data management</Tab>
         <Tab id="monitor" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+8">Monitor</Tab>
@@ -1080,11 +1096,25 @@ function App() {
           currentExperiment={currentExperiment}
           viewerFrame={frameNumber}
           request={annotateRequest}
+          refresh={annotateRefresh}
           onOpenFrame={(fn) => {
             setIsPlaying(false);
             setFrameNumber(fn);
             setActiveTab('group_viewer');
           }}
+        />
+      </div>
+
+      <div className="tab-panel" style={{ display: activeTab === 'drive_exchange' ? 'block' : 'none' }}>
+        <DriveExchangeTab
+          active={activeTab === 'drive_exchange'}
+          currentExperiment={currentExperiment}
+          onOpenExperiment={openExperiment}
+          onOpenFrame={(fn) => {
+            setAnnotateRequest({ experiment: (currentExperiment || '').replace(/\//g, '_').replace(/_arenas_(\d+)$/, '_arena$1'), frameNumber: fn, nonce: Date.now() });
+            setActiveTab('annotate');
+          }}
+          onAnnotationsChanged={() => setAnnotateRefresh((k) => k + 1)}
         />
       </div>
 

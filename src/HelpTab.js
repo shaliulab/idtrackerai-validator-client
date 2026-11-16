@@ -16,6 +16,7 @@ const SECTIONS = [
   { id: 'help-ethoscope', title: 'Ethoscope' },
   { id: 'help-qc', title: 'QC' },
   { id: 'help-annotate', title: 'Annotate' },
+  { id: 'help-exchange', title: 'Drive exchange' },
   { id: 'help-pose', title: 'Pose' },
   { id: 'help-sleap', title: 'SLEAP labels' },
   { id: 'help-gpu-queue', title: 'GPU queue' },
@@ -649,6 +650,40 @@ export default function HelpTab() {
             The integration's output (in the console, and <code>validator_problem_blocks.csv</code>) gives each run of frames with problems
             a link such as <code>/?tab=annotate&amp;experiment=FlyHostel1_3X_…&amp;frame=123456</code>: opening it loads that experiment
             (unless it is loaded) and shows that frame here, as the CVAT links did.
+          </p>
+        </Section>
+
+        <Section id="help-exchange" title="Drive exchange">
+          <p>
+            Lets people running their own copy of this app annotate experiments (in the <b>Annotate</b> tab) on their
+            computer. Experiments and annotations go through one Google Drive folder that the publisher shares with every
+            annotator as Editor. Each person connects to it once with <code>rclone config</code> (a Google Drive remote,
+            e.g. named <code>gdrive</code>); <b>How to set up</b> in the tab lists the steps. Your Google login stays in rclone's
+            own configuration and is never sent to this app. Set <b>Shared folder</b> (e.g. <code>gdrive:FlyHostelExchange</code>) and
+            <b> Your name</b>, then Save. Your name goes on the frames you save when the app has no login.
+          </p>
+          <p>
+            <b>Publisher</b> (the lab): load the experiment, prepare its scenes in the Annotate tab, then <b>Publish to Drive</b>.
+            <b> Whole experiment</b> sends the experiment folder as it is; unticked, only what annotating needs would be sent
+            (short clips of the scenes), which is not available yet. <b>Update annotations on Drive</b> sends only a snapshot of
+            the annotations here (with everyone's merged work and the solver's proposals) and the scenes. Under <b>Annotators</b>,
+            <b> Check</b> downloads someone's annotations and compares them with yours; nothing is written until you <b>Apply</b>.
+          </p>
+          <p>
+            <b>Annotator</b>: under <b>Experiments on Drive</b>, <b>Download</b> an experiment (it goes into your videos folder),
+            <b> Open</b> it and annotate in the Annotate tab. <b>Upload my annotations</b> sends your copy to the shared folder;
+            <b> Check for updates</b> brings in the publisher's latest snapshot (other people's merged work, new proposals, scenes).
+          </p>
+          <p>
+            A check lists the frames it would take, and the frames saved differently on both sides since you last
+            exchanged (<i>conflicts</i>). For each conflict, keep the version here or take the other one; <i>the newest save</i>
+            picks by save time. Click a frame number to look at it in the Annotate tab, and save the frame open there before
+            applying, otherwise your unsaved edit would overwrite what comes in. Your own work coming back through the
+            publisher is recognised and never shows up as a conflict.
+          </p>
+          <p>
+            Annotators can run this app without flyhostel and idtrackerai (<code>pip install ".[annotator]"</code>): then the
+            tabs that need them are grayed out, and new boxes start around the tracked centroids instead of the segmented blobs.
           </p>
         </Section>
 
