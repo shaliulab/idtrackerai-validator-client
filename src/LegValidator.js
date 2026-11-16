@@ -45,7 +45,7 @@ const SELECTIONS = [
   { id: 'alone_immobile', label: 'middle legs alone, while immobile' },
   { id: 'clean', label: 'clean pose' },
   { id: 'clean_alone_immobile', label: 'clean pose, middle legs alone, while immobile' },
-  { id: 'model', label: 'model: events it is least sure about (~half real)' },
+  { id: 'model', label: 'model: review queue of the classifier (leg_movements_model.py: uncertain or contact events)' },
   { id: 'movements', label: 'counted movements (classifier), all' },
   { id: 'movements_near', label: 'counted movements, near another fly' },
   { id: 'movements_away', label: 'counted movements, away from other flies' },
