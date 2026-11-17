@@ -32,10 +32,11 @@ const WHICH = [
   { id: 'right', key: 'r' },
   { id: 'both', key: 'b' },
 ];
-// does the moving leg touch the other fly? (keys t / o / x)
+// does the moving leg touch the other fly, during the movement or in the second before it? (keys t / g / o / x)
 const TOUCHES = [
-  { id: 'yes', key: 't', label: 'touches it', title: 'the moving leg touches the other fly', color: '#E69F00' },
-  { id: 'no', key: 'o', label: 'does not touch', title: 'another fly is in the clip, the moving leg does not touch it', color: '#56B4E9' },
+  { id: 'yes', key: 't', label: 'touches it', title: 'the moving leg clearly lands on the other fly (stays on it, or pushes it or its leg)', color: '#E69F00' },
+  { id: 'graze', key: 'g', label: 'graze / unclear', title: 'the leg barely brushes the other fly, or you cannot tell whether it touches', color: '#F0E442' },
+  { id: 'no', key: 'o', label: 'does not touch', title: 'another fly is in the clip, a gap stays between the moving leg and it', color: '#56B4E9' },
   { id: 'no_partner', key: 'x', label: 'no other fly', title: 'no other fly in the clip', color: '#BBBBBB' },
 ];
 const SELECTIONS = [
