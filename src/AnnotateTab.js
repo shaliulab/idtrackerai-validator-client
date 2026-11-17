@@ -1360,6 +1360,11 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
           {pending > 0 ? 'Saving…' : dirty ? 'Edited (saved when you leave the frame)' : frame?.saved ? `Saved by ${frame.author} · ${fmtTime(frame.updated)}` : frame ? 'Proposal, not saved' : ''}
         </span>
         <span className="spacer" />
+        {info?.bundle ? (
+          <span className="ov-count" title="Downloaded from the Drive exchange as a minimal bundle: only the scene frames are here. Upload your annotations from the Drive exchange tab">
+            Minimal bundle: scenes, proposals and the integration are made by the publisher
+          </span>
+        ) : (<>
         <button onClick={prepare} disabled={!info || preparing}
                 className={info && info.source?.kind !== 'scene_qc' ? 'btn-primary' : undefined}
                 title="Run make-identogram and auto-annotate-qc (the first steps of the validation pipeline) in the background: they write flyhostel/validation/scene_qc.csv, the scenes listed here, which Propose needs. Can take a long time on many flies / chunks; follow it in the console">
@@ -1401,13 +1406,14 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
                 title="Run save-human-annotations: write the last integration into the database's _VAL tables">
           Write validated tables…
         </button>
+        </>)}
       </div>}
 
       <div className="sl-main" style={mainHeight ? { height: mainHeight } : undefined}>
         {!full && <section className="card sl-list">
           <header className="card-header">
             <span>Scenes to check</span>
-            <span className="ov-count">{info?.source?.kind === 'scene_qc' ? 'scene_qc.csv' : info?.source?.kind === 'qc' ? 'QC tab' : ''}</span>
+            <span className="ov-count">{info?.source?.kind === 'scene_qc' ? 'scene_qc.csv' : info?.source?.kind === 'qc' ? 'QC tab' : info?.source?.kind === 'bundle' ? 'Drive bundle' : ''}</span>
             <span className="ov-count" title="Chunk boundaries the integration may link wrongly (⇄ in the list)">
               {boundariesPending ? '· checking chunk boundaries…' : info?.source?.boundaries ? `· ${info.source.boundaries} ⇄` : ''}
             </span>

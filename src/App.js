@@ -222,6 +222,8 @@ function App() {
   const [experimentInfo, setExperimentInfo] = useState({ has_database: true, has_blobs: false });
   const noDatabase = experimentInfo.has_database
     ? null : 'Not available: the loaded experiment has no database (not analyzed yet)';
+  // a minimal bundle of the Drive exchange holds only the scene frames, for the Annotate tab
+  const bundleOnly = experimentInfo.bundle ? 'Not available in a minimal bundle from the Drive exchange (only the scene frames)' : null;
   const [pickerKey, setPickerKey] = useState(0);
   // Server modules left out of this install (GET /api/features: flyhostel not installed, e.g. an annotator's
   // install): their tabs are grayed out
@@ -360,7 +362,7 @@ function App() {
       const { data } = await api.get('/api/current_experiment');
       const info = typeof data === 'string' ? JSON.parse(data) : data;
       setCurrentExperiment(info?.experiment ?? null);
-      setExperimentInfo({ has_database: info?.has_database ?? true, has_blobs: !!info?.has_blobs });
+      setExperimentInfo({ has_database: info?.has_database ?? true, has_blobs: !!info?.has_blobs, bundle: !!info?.bundle });
     } catch {
       setCurrentExperiment(null);
     }
@@ -454,7 +456,7 @@ function App() {
 
   // Ctrl+1 … Ctrl+9 switch tabs
   const hasDatabaseRef = useRef(true);
-  hasDatabaseRef.current = experimentInfo.has_database;
+  hasDatabaseRef.current = experimentInfo.has_database && !experimentInfo.bundle;
   const missingRef = useRef({});
   missingRef.current = missing;
   useEffect(() => {
@@ -644,6 +646,8 @@ function App() {
   useEffect(() => {
     if (!experimentInfo.has_database) {
       setActiveTab((tab) => (tab === 'proboscis_extension' || tab === 'ethogram' || tab === 'qc' || tab === 'pose' || tab === 'sleap_labels' || tab === 'annotate' ? 'group_viewer' : tab));
+    } else if (experimentInfo.bundle) {
+      setActiveTab((tab) => (tab === 'proboscis_extension' || tab === 'ethogram' || tab === 'qc' || tab === 'pose' || tab === 'sleap_labels' ? 'annotate' : tab));
     }
   }, [experimentInfo]);
 
@@ -868,15 +872,15 @@ function App() {
       <nav className="tabs">
         <Tab id="data_collector" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+0" disabled={missingTab('data_collector')}>Data collector</Tab>
         <Tab id="group_viewer" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+1">Group viewer</Tab>
-        <Tab id="proboscis_extension" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+2" disabled={noDatabase || missingTab('pe_validation')}>Proboscis extension (PE)</Tab>
+        <Tab id="proboscis_extension" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+2" disabled={noDatabase || bundleOnly || missingTab('pe_validation')}>Proboscis extension (PE)</Tab>
         <Tab id="leg_movements" activeTab={activeTab} setActiveTab={setActiveTab} disabled={missingTab('leg_validation')}>Leg movements</Tab>
-        <Tab id="ethogram" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+3" disabled={noDatabase || missingTab('ethogram')}>Ethograms</Tab>
+        <Tab id="ethogram" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+3" disabled={noDatabase || bundleOnly || missingTab('ethogram')}>Ethograms</Tab>
         <Tab id="ethoscope" activeTab={activeTab} setActiveTab={setActiveTab} disabled={!ethoscopeAvailable}>Ethoscope</Tab>
-        <Tab id="qc" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+4" disabled={noDatabase}>QC</Tab>
+        <Tab id="qc" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+4" disabled={noDatabase || bundleOnly}>QC</Tab>
         <Tab id="annotate" activeTab={activeTab} setActiveTab={setActiveTab} disabled={noDatabase}>Annotate</Tab>
         <Tab id="drive_exchange" activeTab={activeTab} setActiveTab={setActiveTab}>Drive exchange</Tab>
-        <Tab id="pose" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+5" disabled={noDatabase || missingTab('pose')}>Pose</Tab>
-        <Tab id="sleap_labels" activeTab={activeTab} setActiveTab={setActiveTab} disabled={noDatabase || missingTab('sleap_labels')}>SLEAP labels</Tab>
+        <Tab id="pose" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+5" disabled={noDatabase || bundleOnly || missingTab('pose')}>Pose</Tab>
+        <Tab id="sleap_labels" activeTab={activeTab} setActiveTab={setActiveTab} disabled={noDatabase || bundleOnly || missingTab('sleap_labels')}>SLEAP labels</Tab>
         <Tab id="overview" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+6">Metadata overview</Tab>
         <Tab id="data_management" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+7">Data management</Tab>
         <Tab id="monitor" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+8">Monitor</Tab>

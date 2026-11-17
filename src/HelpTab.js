@@ -664,8 +664,11 @@ export default function HelpTab() {
           </p>
           <p>
             <b>Publisher</b> (the lab): load the experiment, prepare its scenes in the Annotate tab, then <b>Publish to Drive</b>.
-            <b> Whole experiment</b> sends the experiment folder as it is; unticked, only what annotating needs would be sent
-            (short clips of the scenes), which is not available yet. <b>Update annotations on Drive</b> sends only a snapshot of
+            <b> Whole experiment</b> sends the experiment folder as it is (tens of GB). Unticked (the default), a
+            <b> minimal bundle</b> is made and sent: clips of the scene frames only, the database cut down to them, the blobs
+            segmented here and the scene list, a few hundred MB. Making it the first time reads every scene frame (about half
+            an hour for a thousand scenes); publishing again redoes only what changed. In a bundle only the scene frames can be
+            shown (others are blank), and the PE, Ethograms, QC, Pose and SLEAP tabs are grayed out. <b>Update annotations on Drive</b> sends only a snapshot of
             the annotations here (with everyone's merged work and the solver's proposals) and the scenes. Under <b>Annotators</b>,
             <b> Check</b> downloads someone's annotations and compares them with yours; nothing is written until you <b>Apply</b>.
           </p>

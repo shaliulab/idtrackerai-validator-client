@@ -4,7 +4,8 @@
 //
 // - Google Drive card: the rclone remote (configured once with `rclone config`) and your annotator name.
 // - Loaded experiment card. Publisher (or not shared yet): Publish to Drive ("Whole experiment" tick:
-//   the whole folder, or the minimum needed to annotate — not available yet), Update annotations on Drive
+//   the whole folder, or a minimal bundle: clips of the scene frames, cut-down database, contours,
+//   scenes; exchange_bundle.py), Update annotations on Drive
 //   (snapshot + scenes only), the annotators' uploads with Check (a merge plan). Annotator (downloaded from
 //   Drive): Upload my annotations, Check for updates (the publisher's newer snapshot: merged work of
 //   everyone, solver proposals, scenes).
@@ -126,7 +127,8 @@ function MergePlan({ plan, onApply, onCancel, onOpenFrame, applying }) {
       <div className="xc-plan-summary">
         From <b>{source}</b>: <b>{plan.take}</b> frame{plan.take === 1 ? '' : 's'} to take, {plan.same} already the same,{' '}
         <b className={plan.n_conflicts ? 'xc-warn' : undefined}>{plan.n_conflicts} conflict{plan.n_conflicts === 1 ? '' : 's'}</b>
-        {plan.kind === 'pull' && plan.refreshed?.length > 0 && <> · scenes refreshed</>}
+        {plan.kind === 'pull' && plan.bundle_updated && <> · <b>new bundle</b> (scenes and their frames updated)</>}
+        {plan.kind === 'pull' && !plan.bundle_updated && plan.refreshed?.length > 0 && <> · scenes refreshed</>}
       </div>
       {plan.n_conflicts > 0 && (
         <>
@@ -182,7 +184,7 @@ function MergePlan({ plan, onApply, onCancel, onOpenFrame, applying }) {
 function LoadedExperiment({ status, entry, currentExperiment, onChanged, onOpenFrame, onAnnotationsChanged }) {
   const { log, trackJob } = useConsole();
   const [local, setLocal] = useState(null);
-  const [whole, setWhole] = useStoredFlag('fh-exchange-whole', true);
+  const [whole, setWhole] = useStoredFlag('fh-exchange-whole', false);
   const [busy, setBusy] = useState(null);
   const [plan, setPlan] = useState(null);
   const [applying, setApplying] = useState(false);
@@ -218,9 +220,12 @@ function LoadedExperiment({ status, entry, currentExperiment, onChanged, onOpenF
   const imported = exchange?.imports || {};
 
   const publish = (annotationsOnly) => {
-    if (!annotationsOnly && !window.confirm(
-      `Upload ${experiment} (${formatBytes(local?.bytes || 0)}, ${local?.n_files} files) to ${status.remote}?` +
-      (manifest ? '\n\nIt is on Drive already: only what changed is sent.' : ''))) return;
+    if (!annotationsOnly && !window.confirm(whole
+      ? `Upload ${experiment} (${formatBytes(local?.bytes || 0)}, ${local?.n_files} files) to ${status.remote}?` +
+        (manifest ? '\n\nIt is on Drive already: only what changed is sent.' : '')
+      : `Make a minimal bundle of ${experiment} (clips of its scene frames, ~15 kB per frame; the first time it reads and ` +
+        `segments every scene frame, which takes a while) and upload it to ${status.remote}?` +
+        (manifest?.kind === 'minimal' ? '\n\nOnly the clips whose frames changed are made and sent again.' : ''))) return;
     job('publish', '/api/exchange/publish', { kind: whole ? 'full' : 'minimal', annotations_only: annotationsOnly },
       (j) => log('success', `${experiment} ${annotationsOnly ? 'annotations updated' : 'published'} on Drive (${formatBytes(j.result.bytes)})`));
   };
@@ -254,17 +259,17 @@ function LoadedExperiment({ status, entry, currentExperiment, onChanged, onOpenF
         {role !== 'annotator' && (
           <>
             <div className="toolbar">
-              <label className="field" title="Whole experiment: the experiment folder as it is (every tab works with it). Unticked: only what the Annotate tab needs (scene clips) — not available yet">
+              <label className="field" title="Whole experiment: the experiment folder as it is (every tab works with it). Unticked: a minimal bundle, only what the Annotate tab needs: clips of the scene frames, the database cut down to them, the blobs segmented here, the scenes">
                 <input type="checkbox" checked={whole} onChange={(e) => setWhole(e.target.checked)} />
                 Whole experiment
               </label>
               <span className="ov-count">
                 {local?.bytes != null && whole && `${formatBytes(local.bytes)}, ${local.n_files} files`}
-                {!whole && 'minimum to annotate: not available yet'}
+                {!whole && 'minimal bundle: scene frames only (made when publishing)'}
               </span>
               {local && !local.scene_qc && <span className="ov-badge xc-badge-bad" title="No flyhostel/validation/scene_qc.csv: annotators get only the unsure chunk boundaries as scenes. Prepare scenes in the Annotate tab first.">no scenes prepared</span>}
               <span className="spacer" style={{ flex: 1 }} />
-              <button className="solid" disabled={!connected || !!busy || !whole} onClick={() => publish(false)}
+              <button className="solid" disabled={!connected || !!busy || !!local?.bundle} onClick={() => publish(false)}
                       title={manifest ? 'Send what changed in the folder, the annotations and the manifest' : 'Upload the experiment to the shared folder'}>
                 <i className={`fa ${busy === 'publish' ? 'fa-spinner fa-spin' : 'fa-cloud-upload'}`} style={{ marginRight: 6 }} />
                 {manifest ? 'Publish again' : 'Publish to Drive'}
@@ -319,7 +324,8 @@ function LoadedExperiment({ status, entry, currentExperiment, onChanged, onOpenF
         {role === 'annotator' && (
           <>
             <div className="xc-line">
-              Downloaded {ago(exchange.downloaded_at)} from {exchange.publisher || 'the publisher'}'s Drive folder.
+              Downloaded {ago(exchange.downloaded_at)} from {exchange.publisher || 'the publisher'}'s Drive folder
+              {local?.bundle ? ` as a minimal bundle (${local.bundle.n_scenes} scenes, ${local.bundle.frames} frames: other frames are blank)` : ''}.
               {exchange.uploaded_at ? ` Your annotations were last uploaded ${ago(exchange.uploaded_at)}.` : ' Your annotations have not been uploaded yet.'}
               {manifest && manifest.published_at > (exchange.published_at || 0) && <b> The publisher has published updates.</b>}
             </div>
@@ -433,8 +439,10 @@ export default function DriveExchangeTab({ active, currentExperiment, onOpenExpe
                         {e.local.exists
                           ? (!loaded && <button onClick={() => onOpenExperiment(e.experiment)}>Open</button>)
                           : (
-                            <button className="solid" disabled={!m || m.kind !== 'full' || !!downloading}
-                                    title={m?.kind === 'full' ? 'Copy the experiment and its annotations to this computer' : 'Only whole experiments can be downloaded yet'}
+                            <button className="solid" disabled={!m || !!downloading}
+                                    title={m?.kind === 'minimal'
+                                      ? `Copy the minimal bundle (${m.bundle?.n_scenes ?? '?'} scenes, ${m.bundle?.frames ?? '?'} frames) and the annotations to this computer`
+                                      : 'Copy the experiment and its annotations to this computer'}
                                     onClick={() => download(e)}>
                               <i className={`fa ${downloading === e.experiment ? 'fa-spinner fa-spin' : 'fa-cloud-download'}`} style={{ marginRight: 6 }} />Download
                             </button>
