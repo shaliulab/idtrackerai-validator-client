@@ -60,3 +60,23 @@
 .es-warn { color: var(--eth-warn); }
 :root { --eth-warn: #b45309; }
 :root[data-theme="dark"] { --eth-warn: #fbbf24; }
+
+/* snapshots: hover thumbnails, chart marker, Snapshots card */
+.es-switch { font-size: 13px; }
+.es-clickable { cursor: pointer; }
+.es-snap-marker { stroke: var(--accent); stroke-width: 2; pointer-events: none; }
+.es-snaptip { position: absolute; pointer-events: none; z-index: 4; display: flex; flex-direction: column; gap: 6px;
+  background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.15); padding: 6px; }
+.es-snaptip-inline { position: static; box-shadow: none; border: none; padding: 6px 0 0; }
+.es-snaptip-item img { display: block; width: 360px; max-width: 100%; height: auto; background: var(--surface-2); }
+.es-snaptip-label { font-size: 12px; color: var(--subtext); margin-bottom: 2px; white-space: nowrap; }
+.es-header-toggle { cursor: pointer; user-select: none; }
+.es-browser { display: flex; flex-direction: column; gap: 6px; }
+.es-snap-slider { width: 100%; }
+.es-snap-img { display: block; width: 100%; height: auto; border-radius: var(--radius); background: var(--surface-2); }
+.es-snap-time { color: var(--text); }
+.es-state { font-weight: 600; }
+.es-state-asleep { color: var(--eth-series-1); }
+.es-state-awake { color: var(--eth-series-2); }
+.es-state-no-data { color: var(--subtext); }

@@ -1139,3 +1139,15 @@ button.ov-sheet.ov-sheet-error { border-color: var(--danger); color: var(--dange
 .leg-chip { display: inline-block; padding: 1px 6px; border-radius: 4px; color: #000; font-size: 12px; }
 .leg-export { font-size: 13px; color: var(--accent); text-decoration: none; }
 .leg-unclean { color: var(--subtext); font-style: italic; }
+
+/* Annotate tab: validation queue (ValidationQueue.js) */
+.vq-header { cursor: pointer; user-select: none; }
+.vq-actions { display: inline-flex; gap: 6px; }
+.vq-body { display: flex; flex-direction: column; gap: 6px; padding: 0 12px 10px; }
+.vq-filters { padding: 0; gap: 6px 14px; }
+.vq-scroll { max-height: 150px; }
+.vq-row-actions { white-space: nowrap; display: flex; gap: 4px; }
+.ov-table tbody tr.vq-hidden td { opacity: 0.55; }
+.ov-badge.vq-in_progress { background: var(--accent-soft); border-color: var(--accent); color: var(--text); }
+.ov-badge.vq-to_do { border-color: var(--accent); color: var(--text); }
+.ov-badge.vq-annotated { background: var(--surface-2); color: var(--text); }

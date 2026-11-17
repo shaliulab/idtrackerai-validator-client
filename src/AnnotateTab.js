@@ -16,6 +16,7 @@ import api, { apiUrl } from './api';
 import { useElementSize, useFillHeight } from './layout';
 import { useConsole } from './MessageConsole';
 import { setAnnotateState } from './loadGuard';
+import ValidationQueue from './ValidationQueue';
 
 const unwrap = (data) => (typeof data === 'string' ? JSON.parse(data) : data);
 const errorOf = (err) => err.response?.data?.error || err.message;
@@ -570,7 +571,7 @@ const SceneList = React.memo(function SceneList({ scenes, currentK, onPick, zt0 
   );
 });
 
-export default function AnnotateTab({ active, currentExperiment, viewerFrame, onOpenFrame, request, refresh }) {
+export default function AnnotateTab({ active, currentExperiment, viewerFrame, onOpenFrame, onOpenExperiment, request, refresh }) {
   const { log, trackJob } = useConsole();
   const [info, setInfo] = useState(null);           // /api/annotate/scenes
   const [loading, setLoading] = useState(false);
@@ -606,6 +607,8 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
   // ZT0 (hour of the folder names' clock, UTC): 12 unless changed here
   const [zt0, setZt0] = useState(() => { try { const v = localStorage.getItem('fh-annotate-zt0'); return v != null && v !== '' && !Number.isNaN(Number(v)) ? Number(v) : 12; } catch { return 12; } });
   useEffect(() => { try { localStorage.setItem('fh-annotate-zt0', String(zt0)); } catch { /* ignore */ } }, [zt0]);          // full screen: only the frame, its navigation and the labels
+  const [queueEl, setQueueEl] = useState(null);     // the validation queue card above the scenes
+  const queueSize = useElementSize(queueEl);
   const fillHeight = useFillHeight(rootEl, [active, info, full]);
   const stage = useElementSize(stageEl);
   const queue = useRef(Promise.resolve());
@@ -1333,16 +1336,23 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
       .finally(() => { setIntegrating(null); fetchInfo(); });
   }, [log, fetchInfo]);
 
-  const mainHeight = full ? null : fillHeight ? fillHeight - 60 : 640;
+  // 60: the toolbar; the queue card's height and the 12 px gap under it
+  const mainHeight = full ? null : fillHeight ? Math.max(320, fillHeight - 60 - (queueEl ? queueSize.height + 12 : 0)) : 640;
   const stageW = Math.max(200, Math.floor(stage.width));
   const stageH = Math.max(200, Math.floor(stage.height));
   const doneFrames = info?.annotated?.length || 0;
   const identityOf = (label) => (frame?.concatenation && /^\d+$/.test(label) ? frame.concatenation[label] : undefined);
 
-  if (!currentExperiment) return <div className="ov"><div className="card ov-controls toolbar">Load an experiment first.</div></div>;
+  const queueCard = (
+    <div ref={setQueueEl}>
+      <ValidationQueue active={active} currentExperiment={currentExperiment} onOpenExperiment={onOpenExperiment} />
+    </div>
+  );
+  if (!currentExperiment) return <div className="ov">{queueCard}<div className="card ov-controls toolbar">Load an experiment first, or open one of the queue.</div></div>;
 
   return (
     <div className={`ov${full ? ' bx-full' : ''}`} ref={setRootEl}>
+      {!full && queueCard}
       {!full && <div className="card ov-controls toolbar">
         <span className="ov-count">
           {info ? `${doneFrames.toLocaleString()} frames annotated · ${scenes.filter((s) => s.done === s.length).length} / ${scenes.length} scenes done` : loading ? 'Reading…' : ''}

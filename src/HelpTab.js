@@ -542,6 +542,15 @@ export default function HelpTab() {
               phases of LD are shaded.
             </li>
             <li>
+              <b>Snapshots</b>: the ethoscope saves a picture of the whole frame every ~5 min. With
+              <i> Snapshots on hover</i> (above the chart) the one nearest the pointer is shown cropped to the
+              fly's tube (<i>Each fly</i>: the row's fly; <i>Average</i>: the first 6 ticked flies). A click on the
+              chart opens it in the <b>Snapshots</b> card below (▸ / ▾ folds it): <i>Whole frame</i> (the fly's
+              tube outlined) or <i>Fly's ROI</i>, ◀ ▶ or ← → step one snapshot, −1 h / +1 h or Shift+← →
+              twelve, the slider any; the fly's state at that time (asleep / awake) is shown and its time
+              is marked on the chart. Snapshots after the fly went into the FlyHostel show an empty tube.
+            </li>
+            <li>
               <i>Each fly</i>: one row per fly, % of time asleep per bin. <i>Average</i>: mean ± SEM of the
               ticked flies, optionally one line per genotype or sex. Tick flies one by one, or use
               <i>all</i>, <i>none</i>, <i>only &lt;genotype&gt;</i>.
@@ -615,6 +624,17 @@ export default function HelpTab() {
             a boundary already in a scene adds its reason there.
             An experiment without scene_qc.csv gets it from <b>Prepare scenes</b>: make-identogram and auto-annotate-qc run in
             the background (follow them in the console; long on many flies), then the list fills.
+          </p>
+          <p>
+            <b>Validation queue</b> (the card at the top, ▸ / ▾ folds it): the analyzed experiments (a database in
+            index.txt) without the validated tables (ROI_0_VAL, IDENTITY_VAL and CONCATENATION_VAL), with your progress:
+            <b> In progress</b> (you saved frames of it, scenes are left; the one you worked on last first), <b>To do</b>
+            (scenes ready, nothing saved by you; oldest first), <b>Needs Prepare scenes</b> (no scene_qc.csv yet; shown with
+            the box of that name) and <b>Annotated</b> (every scene saved: Integrate and Write validated tables are left; once
+            written it leaves the queue). <b>Open next</b> loads the first one in progress or to do; <b>Open</b> loads that one,
+            both staying in this tab. <b>Hide</b> takes one out of your queue (the Hidden box shows them again). Groups only
+            leaves out experiments of one fly. Scenes done counts the scenes of scene_qc.csv whose frames are all saved, not
+            the chunk boundaries; your frames are the ones saved under your name (the login, else the Drive exchange name).
           </p>
           <p>
             A frame not saved yet opens with the machine's proposal: one box around each tracked blob, with its local identity

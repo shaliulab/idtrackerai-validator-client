@@ -714,14 +714,14 @@ function App() {
     await fetchFlies();
   }, [player, fetchCurrentExperiment, fetchFramerate, fetchFrameRange, fetchUseVal, fetchAnimalMetadata, fetchEthogramFlies, fetchInteractions, fetchFlies]);
 
-  // Overview table "Open": load that experiment and show it in the Group viewer.
-  const openExperiment = useCallback(async (experiment) => {
+  // Overview table "Open": load that experiment and show it in the Group viewer (or `tab`: the Annotate tab's queue).
+  const openExperiment = useCallback(async (experiment, tab = 'group_viewer') => {
     try {
       const data = await postLoad(experiment);
       log('info', `Loaded ${experiment}`);
       setPickerKey((k) => k + 1);
       await onExperimentLoaded(data.first_frame ?? FIRST_FRAME);
-      setActiveTab('group_viewer');
+      setActiveTab(tab);
     } catch (err) {
       log('error', `Failed to load ${experiment}: ${err.response?.data?.error ?? err.message}`);
     }
@@ -1101,6 +1101,7 @@ function App() {
           viewerFrame={frameNumber}
           request={annotateRequest}
           refresh={annotateRefresh}
+          onOpenExperiment={(experiment) => openExperiment(experiment, 'annotate')}
           onOpenFrame={(fn) => {
             setIsPlaying(false);
             setFrameNumber(fn);
