@@ -3,7 +3,7 @@
 // with this person's progress (GET /api/annotate/queue, box_annotations.validation_queue):
 // in progress (frames saved by me, scenes left), to do, needs Prepare scenes, annotated (every scene saved:
 // Integrate + Write validated tables left). Hide takes one out of my queue (kept on the server).
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import api from './api';
 import { useConsole } from './MessageConsole';
 
@@ -24,6 +24,42 @@ const ago = (t) => {
   return `${Math.round(s / 86400)} d ago`;
 };
 
+const META_LABELS = { light_cycle: 'light cycle', age_min: 'age min (d)', age_max: 'age max (d)', reference_hour: 'ZT0 (h)', GBX: 'GBX' };
+
+// metadata of the hovered row: GET /api/annotate/queue/meta (the database's ethoscope_metadata, per column the
+// values with their number of flies; the columns that vary in the metadata sheets)
+function MetaPopover({ meta, item, x, y }) {
+  const left = Math.min(x + 16, window.innerWidth - 380);
+  const below = y + 16 + 260 < window.innerHeight;
+  return (
+    <div className="vq-meta" style={{ left: Math.max(8, left), top: below ? y + 16 : undefined, bottom: below ? undefined : window.innerHeight - y + 12 }}>
+      <div className="vq-meta-title">{item.experiment}</div>
+      {!meta ? <div className="qc-muted">Reading…</div> : meta.error && !meta.columns?.length ? <div className="sl-error">{meta.error}</div> : (
+        <>
+          <div className="qc-muted vq-meta-sub">
+            {meta.flies} fl{meta.flies === 1 ? 'y' : 'ies'}
+            {' · '}{meta.arena != null ? `arena ${meta.arena} of a ${meta.group_size}X recording` : 'no arena'}
+            {meta.duration_h != null ? ` · ${meta.duration_h} h tracked` : ''}
+          </div>
+          <table className="vq-meta-table">
+            <tbody>
+              {meta.columns.map(([column, values]) => (
+                <tr key={column}>
+                  <th>{META_LABELS[column] || column}</th>
+                  <td>{values.map(([v, n], i) => (
+                    <span key={v}>{i ? ', ' : ''}{v}{values.length > 1 || n !== meta.flies ? <span className="qc-muted"> ×{n}</span> : null}</span>
+                  ))}</td>
+                </tr>
+              ))}
+              {!meta.columns.length && <tr><td className="qc-muted">No fly metadata in the database</td></tr>}
+            </tbody>
+          </table>
+        </>
+      )}
+    </div>
+  );
+}
+
 export default function ValidationQueue({ active, currentExperiment, onOpenExperiment }) {
   const { log } = useConsole();
   const [open, setOpen] = useState(() => stored('fh-annotate-queue-open', true));
@@ -33,6 +69,24 @@ export default function ValidationQueue({ active, currentExperiment, onOpenExper
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [opening, setOpening] = useState(null);
+  const [hover, setHover] = useState(null);          // {item, x, y}
+  const [metas, setMetas] = useState({});            // experiment -> /api/annotate/queue/meta
+  const hoverTimer = useRef(null);
+  const requested = useRef(new Set());
+  const onRowEnter = (item, e) => {
+    const { clientX: x, clientY: y } = e;
+    clearTimeout(hoverTimer.current);
+    hoverTimer.current = setTimeout(() => {
+      setHover({ item, x, y });
+      if (requested.current.has(item.experiment)) return;
+      requested.current.add(item.experiment);
+      api.get('/api/annotate/queue/meta', { params: { experiment: item.experiment } })
+        .then(({ data: d }) => setMetas((m) => ({ ...m, [item.experiment]: d })))
+        .catch((err) => setMetas((m) => ({ ...m, [item.experiment]: { error: err.response?.data?.error ?? err.message, columns: [] } })));
+    }, 250);
+  };
+  const onRowLeave = () => { clearTimeout(hoverTimer.current); setHover(null); };
+  useEffect(() => () => clearTimeout(hoverTimer.current), []);
 
   useEffect(() => store('fh-annotate-queue-open', open), [open]);
   useEffect(() => store('fh-annotate-queue-groups', groupsOnly), [groupsOnly]);
@@ -128,7 +182,8 @@ export default function ValidationQueue({ active, currentExperiment, onOpenExper
                   const [label, hint] = STATUS[it.status] || [it.status, ''];
                   const isLoaded = it.experiment === loaded;
                   return (
-                    <tr key={it.experiment} className={`${isLoaded ? 'ov-loaded' : ''}${it.hidden ? ' vq-hidden' : ''}`}>
+                    <tr key={it.experiment} className={`${isLoaded ? 'ov-loaded' : ''}${it.hidden ? ' vq-hidden' : ''}`}
+                        onMouseEnter={(e) => onRowEnter(it, e)} onMouseLeave={onRowLeave}>
                       <td><span className={`ov-badge vq-${it.status}`} title={it.error || hint}>{label}</span></td>
                       <td className="mono">
                         {it.experiment}
@@ -136,7 +191,7 @@ export default function ValidationQueue({ active, currentExperiment, onOpenExper
                         {it.experiment === next?.experiment && <span className="ov-badge ov-badge-repeat">next</span>}
                       </td>
                       <td className="qc-num">{it.n_animals ?? '?'}</td>
-                      <td className="qc-num" title={it.scene_source === 'qc' ? 'Scenes from the QC tab (no scene_qc.csv)' : 'Scenes of scene_qc.csv (chunk boundaries not counted)'}>
+                      <td className="qc-num" title="Scenes of scene_qc.csv (chunk boundaries not counted)">
                         {it.scenes ? `${it.scenes_done.toLocaleString()} / ${it.scenes.toLocaleString()}` : '–'}
                       </td>
                       <td className="qc-num" title={`${it.annotated.toLocaleString()} frames saved by anyone`}>{it.mine ? it.mine.toLocaleString() : ''}</td>
@@ -163,6 +218,7 @@ export default function ValidationQueue({ active, currentExperiment, onOpenExper
           </div>
         </div>
       )}
+      {open && hover && <MetaPopover meta={metas[hover.item.experiment]} item={hover.item} x={hover.x} y={hover.y} />}
     </section>
   );
 }

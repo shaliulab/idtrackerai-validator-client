@@ -542,6 +542,13 @@ export default function HelpTab() {
               phases of LD are shaded.
             </li>
             <li>
+              <i>Flies from</i>: <i>This experiment</i>, the <i>Whole ethoscope run</i> (every ROI of the runs these
+              flies were in) or the <i>Same-date batch</i> (every ROI of every ethoscope run started on the same date).
+              The other flies are named after their machine and ROI (dashed chips); their genotype, sex, ZT0 and when they
+              went into a FlyHostel come from the metadata sheets when listed there. The first time, scoring a whole run
+              takes about a minute (every ROI is read from disk).
+            </li>
+            <li>
               <b>Snapshots</b>: the ethoscope saves a picture of the whole frame every ~5 min. With
               <i> Snapshots on hover</i> (above the chart) the one nearest the pointer is shown cropped to the
               fly's tube (<i>Each fly</i>: the row's fly; <i>Average</i>: the first 6 ticked flies). A click on the
@@ -616,7 +623,7 @@ export default function HelpTab() {
           <p>
             Validation of multi-fly experiments with boxes, in place of CVAT (which stays available). Each fly gets one box
             labelled with its <b>local identity</b> (1…N, the labels of the CVAT tasks). The list holds the failed scenes of the
-            validation pipeline (<code>flyhostel/validation/scene_qc.csv</code>), else the runs of bad frames of the QC tab.
+            validation pipeline (<code>flyhostel/validation/scene_qc.csv</code>, the same as vsc-scripts' manual/validation/main.sh makes); the QC tab is not used.
             It also holds the <b>chunk boundaries</b> (⇄) the integration may link wrongly. The integration gives a fly
             the same identity in the next chunk by taking, in the first frame of that chunk, the fly nearest to where it
             was in the last frame. A boundary is listed when a fly is missing on either side, the nearest one is more than
@@ -633,7 +640,8 @@ export default function HelpTab() {
             the box of that name) and <b>Annotated</b> (every scene saved: Integrate and Write validated tables are left; once
             written it leaves the queue). <b>Open next</b> loads the first one in progress or to do; <b>Open</b> loads that one,
             both staying in this tab. <b>Hide</b> takes one out of your queue (the Hidden box shows them again). Groups only
-            leaves out experiments of one fly. Scenes done counts the scenes of scene_qc.csv whose frames are all saved, not
+            leaves out experiments of one fly. Hovering a row shows its metadata (genotypes, sex, light cycle, arena and
+            the other columns that vary in the metadata sheets, with the number of flies of each value). Scenes done counts the scenes of scene_qc.csv whose frames are all saved, not
             the chunk boundaries; your frames are the ones saved under your name (the login, else the Drive exchange name).
           </p>
           <p>

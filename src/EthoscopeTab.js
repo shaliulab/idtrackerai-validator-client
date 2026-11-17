@@ -37,7 +37,12 @@ const store = {
   set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* private mode */ } },
 };
 
-const flyLabel = (f) => `Fly ${f.identity}`;
+const flyLabel = (f) => f.label || `Fly ${f.identity}`;
+const SCOPES = [
+  ['experiment', 'This experiment', "The loaded experiment's flies"],
+  ['run', 'Whole ethoscope run', 'Every ROI of the ethoscope runs these flies were in'],
+  ['batch', 'Same-date batch', 'Every ROI of every ethoscope run started on the same date as these flies\' runs'],
+];
 const fmtZt = (s) => `ZT ${(s / 3600).toFixed(Math.abs(s % 3600) < 1 ? 0 : 1)}`;
 const fmtHours = (s) => (!s ? '0 h' : s < 3600 ? `${Math.round(s / 60)} min` : `${(s / 3600).toFixed(1)} h`);
 const fmtPct = (v) => (v == null ? '–' : `${(100 * v).toFixed(0)}%`);
@@ -91,7 +96,7 @@ function lightCycleOf(flies) {
 
 const SNAP_MAX_GAP = 600;
 const MAX_TIP_FLIES = 6;                  // Average: thumbnails in the tooltip                  // s: no snapshot shown farther than this from the pointer
-const snapUrl = (identity, id, crop = 'roi', w = 400) => apiUrl(`/api/ethoscope/snapshot/${identity}/${id}?crop=${crop}&w=${w}`);
+const snapUrl = (key, id, crop = 'roi', w = 400) => apiUrl(`/api/ethoscope/snapshot?fly=${encodeURIComponent(key)}&id=${id}&crop=${crop}&w=${w}`);
 
 // index of the snapshot nearest t in [[id, t], ...] sorted by t, or -1
 function nearestSnap(list, t) {
@@ -126,12 +131,12 @@ function SnapTip({ items, t, left, top, flipX, flipY, inline }) {
   return (
     <div className={inline ? 'es-snaptip es-snaptip-inline' : 'es-snaptip'} style={inline ? undefined : { left, top, transform: `translate(${flipX ? '-100%' : '0'}, ${flipY ? '-100%' : '0'})` }}>
       {shown.map(({ fly, id, st, after }) => (
-        <div key={fly.identity} className="es-snaptip-item">
+        <div key={fly.key} className="es-snaptip-item">
           <div className="es-snaptip-label">
             {flyLabel(fly)} · snapshot {fmtZt(st)}{Math.abs(st - t) >= 60 ? ` (${Math.round((st - t) / 60) > 0 ? '+' : ''}${Math.round((st - t) / 60)} min)` : ''}
             {after && <span className="es-warn"> · after the move</span>}
           </div>
-          <img src={snapUrl(fly.identity, id)} alt={`${flyLabel(fly)} at ${fmtZt(st)}`} width={360} />
+          <img src={snapUrl(fly.key, id)} alt={`${flyLabel(fly)} at ${fmtZt(st)}`} width={360} />
         </div>
       ))}
     </div>
@@ -230,7 +235,7 @@ function EachFlyChart({ rows, bin, domain, cycle, width, snaps, snapHover, onPic
       <svg width={width} height={height} onMouseMove={onMove} onMouseLeave={() => { setHover(null); setHoverRow(null); }} role="img"
         aria-label="Fraction of time asleep per bin, one row per fly"
         className={onPick ? 'es-clickable' : undefined}
-        onClick={() => { if (onPick && hover != null && hoverFly) onPick(hoverFly.identity, hover); }}>
+        onClick={() => { if (onPick && hover != null && hoverFly) onPick(hoverFly.key, hover); }}>
         {rows.map((row, i) => {
           const top = TOP + i * (ROW_H + GAP);
           const y = (v) => top + ROW_H - v * ROW_H;
@@ -238,7 +243,7 @@ function EachFlyChart({ rows, bin, domain, cycle, width, snaps, snapHover, onPic
           const area = bandPath(pts.map(([px, py]) => [px, py == null ? null : y(0), py]));
           const v = k != null && row.binned ? row.binned.values[k - row.binned.first] : undefined;
           return (
-            <g key={row.fly.identity}>
+            <g key={row.fly.key}>
               <Shading domain={domain} x={x} top={top} height={ROW_H} cycle={cycle} />
               <line className="es-grid" x1={LEFT} x2={width - M.right} y1={y(0)} y2={y(0)} />
               <line className="es-grid es-grid-faint" x1={LEFT} x2={width - M.right} y1={y(1)} y2={y(1)} />
@@ -252,14 +257,14 @@ function EachFlyChart({ rows, bin, domain, cycle, width, snaps, snapHover, onPic
             </g>
           );
         })}
-        {marker && rows.map((row, i) => (row.fly.identity === marker.identity && marker.t >= domain[0] && marker.t <= domain[1] ? (
+        {marker && rows.map((row, i) => (row.fly.key === marker.key && marker.t >= domain[0] && marker.t <= domain[1] ? (
           <line key="marker" className="es-snap-marker" x1={x(marker.t)} x2={x(marker.t)} y1={rowTop(i) - 3} y2={rowTop(i) + ROW_H + 3} />
         ) : null))}
         {hover != null && <line className="es-crosshair" x1={x(hover)} x2={x(hover)} y1={TOP} y2={height - 22} />}
         <XAxis ticks={ticks} x={x} y={height - 22} />
       </svg>
       {snapHover && hover != null && hoverFly && (
-        <SnapTip items={[{ fly: hoverFly, snaps: snaps?.[hoverFly.identity] }]} t={hover}
+        <SnapTip items={[{ fly: hoverFly, snaps: snaps?.[hoverFly.key] }]} t={hover}
           left={x(hover) > width * 0.6 ? x(hover) - 14 : x(hover) + 14} flipX={x(hover) > width * 0.6}
           // under the row, or above it for the last rows (stays inside the chart)
           top={hoverRow >= 2 && hoverRow >= rows.length - 2 ? rowTop(hoverRow) - 4 : rowTop(hoverRow) + ROW_H + 4}
@@ -288,7 +293,7 @@ function AverageChart({ groups, bin, domain, cycle, width, flies, snaps, snapHov
     <div className="es-chart" style={{ position: 'relative' }}>
       <svg width={width} height={H} onMouseMove={onMove} onMouseLeave={() => setHover(null)} role="img"
         aria-label="Mean fraction of time asleep per bin, ± SEM" className={onPick ? 'es-clickable' : undefined}
-        onClick={() => { if (onPick && hover != null && flies.length) onPick(flies[0].identity, hover); }}>
+        onClick={() => { if (onPick && hover != null && flies.length) onPick(flies[0].key, hover); }}>
         <Shading domain={domain} x={x} top={TOP} height={H - TOP - BOTTOM} cycle={cycle} />
         {[0, 0.25, 0.5, 0.75, 1].map((v) => (
           <g key={v} className="es-axis">
@@ -334,12 +339,12 @@ function AverageChart({ groups, bin, domain, cycle, width, flies, snaps, snapHov
             );
           })}
           {snapHover && (
-            <SnapTip items={flies.slice(0, MAX_TIP_FLIES).map((fly) => ({ fly, snaps: snaps?.[fly.identity] }))} t={hover} left={0} top={0} inline />
+            <SnapTip items={flies.slice(0, MAX_TIP_FLIES).map((fly) => ({ fly, snaps: snaps?.[fly.key] }))} t={hover} left={0} top={0} inline />
           )}
           {snapHover && flies.length > MAX_TIP_FLIES && <div className="es-muted">snapshots of the first {MAX_TIP_FLIES} selected flies</div>}
         </div>
       )}
-      <div className="es-xlabel">ZT (h) · line = mean, band = ± SEM{onPick && flies.length ? <span className="es-muted"> · click: open fly {flies[0].identity}'s snapshot below</span> : null}</div>
+      <div className="es-xlabel">ZT (h) · line = mean, band = ± SEM{onPick && flies.length ? <span className="es-muted"> · click: open {flyLabel(flies[0])}'s snapshot below</span> : null}</div>
     </div>
   );
 }
@@ -350,14 +355,14 @@ function SnapshotBrowser({ active, flies, snaps, browse, setBrowse, tw }) {
   useEffect(() => store.set('fh-ethoscope-snap-crop', crop), [crop]);
   const [el, setEl] = useState(null);
   const { width } = useElementSize(el);
-  const fly = flies.find((f) => f.identity === browse?.identity) || flies[0];
-  const info = fly ? snaps?.[fly.identity] : null;
+  const fly = flies.find((f) => f.key === browse?.key) || flies[0];
+  const info = fly ? snaps?.[fly.key] : null;
   const list = info?.snapshots || [];
   const idx = Math.min(Math.max(0, browse?.idx ?? 0), Math.max(0, list.length - 1));
   const snap = list[idx];
   const go = useCallback((i) => {
     if (!fly || !list.length) return;
-    setBrowse({ identity: fly.identity, idx: Math.min(Math.max(0, i), list.length - 1) });
+    setBrowse({ key: fly.key, idx: Math.min(Math.max(0, i), list.length - 1) });
   }, [fly, list.length, setBrowse]);
   // keys: ← → one snapshot, Shift ±12 (1 h), while the tab is shown (subscribed once, state in a ref)
   const keyRef = useRef({});
@@ -380,7 +385,7 @@ function SnapshotBrowser({ active, flies, snaps, browse, setBrowse, tw }) {
   useEffect(() => {
     if (!fly) return;
     [idx - 1, idx + 1, idx + 2].forEach((i) => {
-      if (list[i]) { const im = new Image(); im.src = snapUrl(fly.identity, list[i][0], crop, imgW); }
+      if (list[i]) { const im = new Image(); im.src = snapUrl(fly.key, list[i][0], crop, imgW); }
     });
   }, [fly, list, idx, crop, imgW]);
   if (!fly) return <div className="es-muted">No fly with an ethoscope run.</div>;
@@ -390,13 +395,13 @@ function SnapshotBrowser({ active, flies, snaps, browse, setBrowse, tw }) {
     <div className="es-browser" ref={setEl}>
       <div className="toolbar es-toolbar">
         <label className="field">Fly
-          <select value={fly.identity} onChange={(e) => {
-            const id = Number(e.target.value);
+          <select value={fly.key} onChange={(e) => {
+            const id = e.target.value;
             const next = snaps?.[id]?.snapshots;
             // keep the time when switching fly
-            setBrowse({ identity: id, idx: snap && next ? Math.max(0, nearestSnap(next, snap[1])) : 0 });
+            setBrowse({ key: id, idx: snap && next ? Math.max(0, nearestSnap(next, snap[1])) : 0 });
           }}>
-            {flies.map((f) => <option key={f.identity} value={f.identity}>{flyLabel(f)} · {f.machine_name} ROI {f.region_id}</option>)}
+            {flies.map((f) => <option key={f.key} value={f.key}>{flyLabel(f)}{f.in_experiment ? ` · ${f.machine_name} ROI ${f.region_id}` : ''}</option>)}
           </select>
         </label>
         <div className="ov-seg" role="group" aria-label="Snapshot crop">
@@ -423,7 +428,7 @@ function SnapshotBrowser({ active, flies, snaps, browse, setBrowse, tw }) {
       {!info && <div className="es-muted">Reading the snapshots…</div>}
       {info && !list.length && !info.error && <div className="es-muted">This run has no snapshots (IMG_SNAPSHOTS is empty).</div>}
       {snap && (
-        <img className="es-snap-img" src={snapUrl(fly.identity, snap[0], crop, imgW)} alt={`${flyLabel(fly)} at ${fmtZt(snap[1])}`}
+        <img className="es-snap-img" src={snapUrl(fly.key, snap[0], crop, imgW)} alt={`${flyLabel(fly)} at ${fmtZt(snap[1])}`}
           style={{ maxWidth: imgW }} />
       )}
     </div>
@@ -441,7 +446,8 @@ export default function EthoscopeTab({ active, currentExperiment }) {
   const [view, setView] = useState(() => store.get('fh-ethoscope-view', 'each'));
   const [bin, setBin] = useState(() => store.get('fh-ethoscope-bin', 30));
   const [groupBy, setGroupBy] = useState(() => store.get('fh-ethoscope-group', 'none'));
-  const [selected, setSelected] = useState(null);   // Set of identities, null = all
+  const [selected, setSelected] = useState(null);   // Set of fly keys, null = all
+  const [scope, setScope] = useState(() => store.get('fh-ethoscope-scope', 'experiment'));
   const [params, setParams] = useState(null);       // applied scoring parameters
   const [draft, setDraft] = useState(null);
   const [showParams, setShowParams] = useState(false);
@@ -449,13 +455,16 @@ export default function EthoscopeTab({ active, currentExperiment }) {
   const { width } = useElementSize(el);
   const [snapHover, setSnapHover] = useState(() => store.get('fh-ethoscope-snap-hover', true));
   const [browserOpen, setBrowserOpen] = useState(() => store.get('fh-ethoscope-snap-open', false));
-  const [snaps, setSnaps] = useState(null);         // /api/ethoscope/snapshots: identity -> {snapshots, roi, moved_t}
-  const [browse, setBrowse] = useState(null);       // {identity, idx} of the Snapshots card
+  const [snaps, setSnaps] = useState(null);         // /api/ethoscope/snapshots: fly key -> {snapshots, roi, moved_t}
+  const [browse, setBrowse] = useState(null);       // {key, idx} of the Snapshots card
   const browserRef = useRef(null);
 
   useEffect(() => store.set('fh-ethoscope-snap-hover', snapHover), [snapHover]);
   useEffect(() => store.set('fh-ethoscope-snap-open', browserOpen), [browserOpen]);
   useEffect(() => store.set('fh-ethoscope-view', view), [view]);
+  useEffect(() => store.set('fh-ethoscope-scope', scope), [scope]);
+  // other flies: score again, list their snapshots again
+  const changeScope = (v) => { setScope(v); setData(null); setSnaps(null); setSelected(null); setBrowse(null); };
   useEffect(() => store.set('fh-ethoscope-bin', bin), [bin]);
   useEffect(() => store.set('fh-ethoscope-group', groupBy), [groupBy]);
 
@@ -466,11 +475,11 @@ export default function EthoscopeTab({ active, currentExperiment }) {
   useEffect(() => {
     if (!active || !info?.available || snaps || !(snapHover || browserOpen)) return undefined;
     let stale = false;
-    api.get('/api/ethoscope/snapshots').then(({ data: d }) => {
+    api.get('/api/ethoscope/snapshots', { params: { scope } }).then(({ data: d }) => {
       if (!stale) setSnaps(unwrap(d).flies || {});
     }).catch((err) => { if (!stale) { setSnaps({}); log('error', `Ethoscope snapshots: ${err.response?.data?.error || err.message}`); } });
     return () => { stale = true; };
-  }, [active, info, snaps, snapHover, browserOpen, log]);
+  }, [active, info, snaps, snapHover, browserOpen, log, scope]);
 
   useEffect(() => {
     if (!active || info) return;
@@ -488,14 +497,14 @@ export default function EthoscopeTab({ active, currentExperiment }) {
   const load = useCallback(async (p) => {
     setLoading(true);
     try {
-      const { data: d } = await api.get('/api/ethoscope/sleep', { params: p });
+      const { data: d } = await api.get('/api/ethoscope/sleep', { params: { ...p, scope } });
       setData(unwrap(d));
     } catch (err) {
       log('error', `Ethoscope sleep: ${err.response?.data?.error || err.message}`);
     } finally {
       setLoading(false);
     }
-  }, [log]);
+  }, [log, scope]);
 
   useEffect(() => {
     if (active && info?.available && params && !data && !loading) load(params);
@@ -505,7 +514,7 @@ export default function EthoscopeTab({ active, currentExperiment }) {
   const missing = useMemo(() => (data?.flies || info?.flies || []).filter((f) => !f.path || (data && (!f.trace || f.trace.t0 == null))), [data, info]);
   const tw = data?.params?.time_window_length || 10;
   const binS = bin * 60;
-  const isSelected = useCallback((f) => selected == null || selected.has(f.identity), [selected]);
+  const isSelected = useCallback((f) => selected == null || selected.has(f.key), [selected]);
   const shown = useMemo(() => flies.filter(isSelected), [flies, isSelected]);
 
   const rows = useMemo(() => shown.map((fly) => ({ fly, binned: binTrace(fly.trace, tw, binS) })), [shown, tw, binS]);
@@ -548,7 +557,7 @@ export default function EthoscopeTab({ active, currentExperiment }) {
   }).filter(Boolean), [groupKeys, rows, groupBy]);
 
   const cycle = useMemo(() => lightCycleOf(shown.length ? shown : flies), [shown, flies]);
-  const summaries = useMemo(() => new Map(flies.map((f) => [f.identity, summarize(f.trace, tw)])), [flies, tw]);
+  const summaries = useMemo(() => new Map(flies.map((f) => [f.key, summarize(f.trace, tw)])), [flies, tw]);
 
   const runs = useMemo(() => {
     const m = new Map();
@@ -560,12 +569,12 @@ export default function EthoscopeTab({ active, currentExperiment }) {
     return [...m.entries()];
   }, [data, info]);
 
-  const toggle = (identity) => setSelected((s) => {
-    const next = new Set(s == null ? flies.map((f) => f.identity) : s);
-    if (next.has(identity)) next.delete(identity); else next.add(identity);
+  const toggle = (key) => setSelected((s) => {
+    const next = new Set(s == null ? flies.map((f) => f.key) : s);
+    if (next.has(key)) next.delete(key); else next.add(key);
     return next.size === flies.length ? null : next;
   });
-  const selectWhere = (pred) => setSelected(new Set(flies.filter(pred).map((f) => f.identity)));
+  const selectWhere = (pred) => setSelected(new Set(flies.filter(pred).map((f) => f.key)));
   const genotypes = useMemo(() => [...new Set(flies.map((f) => f.genotype).filter(Boolean))], [flies]);
   const sexes = useMemo(() => [...new Set(flies.map((f) => f.sex).filter(Boolean))], [flies]);
 
@@ -614,22 +623,22 @@ export default function EthoscopeTab({ active, currentExperiment }) {
 
   const applyParams = () => { setParams(draft); setData(null); };
   // a click on the chart: that fly's snapshot nearest t in the Snapshots card
-  const pickSnapshot = useCallback((identity, t) => {
-    const k = nearestSnap(snaps?.[identity]?.snapshots, t);
-    if (k < 0) { log('info', `Fly ${identity}: no snapshot`); return; }
-    setBrowse({ identity, idx: k });
+  const pickSnapshot = useCallback((key, t) => {
+    const k = nearestSnap(snaps?.[key]?.snapshots, t);
+    if (k < 0) { log('info', `${key}: no snapshot`); return; }
+    setBrowse({ key, idx: k });
     setBrowserOpen(true);
     setTimeout(() => browserRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 50);
   }, [snaps, log]);
   const marker = useMemo(() => {
     if (!browserOpen || !browse || !snaps) return null;
-    const s = snaps[browse.identity]?.snapshots?.[browse.idx];
-    return s ? { identity: browse.identity, t: s[1] } : null;
+    const s = snaps[browse.key]?.snapshots?.[browse.idx];
+    return s ? { key: browse.key, t: s[1] } : null;
   }, [browserOpen, browse, snaps]);
   const exportCsv = () => {
-    const lines = ['identity,genotype,sex,machine_name,region_id,bin_start_zt_s,bin_min,fraction_asleep'];
+    const lines = ['identity,in_experiment,experiment,genotype,sex,machine_name,run,region_id,bin_start_zt_s,bin_min,fraction_asleep'];
     rows.forEach(({ fly, binned }) => binned?.values.forEach((v, k) => {
-      if (v != null) lines.push([fly.identity, fly.genotype || '', fly.sex || '', fly.machine_name, fly.region_id, (binned.first + k) * binS, bin, v.toFixed(4)].join(','));
+      if (v != null) lines.push([fly.identity ?? '', fly.in_experiment ? 1 : 0, fly.experiment || '', fly.genotype || '', fly.sex || '', fly.machine_name, fly.run, fly.region_id, (binned.first + k) * binS, bin, v.toFixed(4)].join(','));
     }));
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([lines.join('\n')], { type: 'text/csv' }));
@@ -682,6 +691,11 @@ export default function EthoscopeTab({ active, currentExperiment }) {
                 </select>
               </label>
             )}
+            <label className="field" title="Plot also the other flies of the ethoscope runs (their genotype / sex from the metadata sheets when listed there)">Flies from
+              <select value={scope} onChange={(e) => changeScope(e.target.value)} disabled={loading}>
+                {SCOPES.map(([v, label, title]) => <option key={v} value={v} title={title}>{label}</option>)}
+              </select>
+            </label>
             <button onClick={() => setShowParams((s) => !s)} aria-expanded={showParams}>Scoring {showParams ? '▴' : '▾'}</button>
             <button onClick={exportCsv} disabled={!rows.length} title="Fraction asleep per bin of the selected flies">CSV</button>
           </div>
@@ -700,9 +714,10 @@ export default function EthoscopeTab({ active, currentExperiment }) {
           <div className="es-flies">
             <span className="es-muted">Flies:</span>
             {flies.map((f) => (
-              <label key={f.identity} className={`chip es-fly ${isSelected(f) ? 'on' : ''}`} title={`${f.machine_name} ROI ${f.region_id}`}>
-                <input type="checkbox" checked={isSelected(f)} onChange={() => toggle(f.identity)} />
-                {f.identity}{f.genotype ? <span className="es-muted"> {f.genotype}</span> : null}{f.sex ? <span className="es-muted"> {f.sex}</span> : null}
+              <label key={f.key} className={`chip es-fly ${isSelected(f) ? 'on' : ''}${f.in_experiment ? '' : ' es-extra'}`}
+                title={`${f.machine_name} ROI ${f.region_id}${f.in_experiment ? '' : f.experiment ? ` · went to ${f.experiment}` : f.in_sheet ? ' · stayed in the ethoscope' : ' · not in the metadata sheets'}`}>
+                <input type="checkbox" checked={isSelected(f)} onChange={() => toggle(f.key)} />
+                {f.in_experiment ? f.identity : flyLabel(f)}{f.genotype ? <span className="es-muted"> {f.genotype}</span> : null}{f.sex ? <span className="es-muted"> {f.sex}</span> : null}
               </label>
             ))}
             <button className="es-link" onClick={() => setSelected(null)}>all</button>
@@ -713,7 +728,7 @@ export default function EthoscopeTab({ active, currentExperiment }) {
           {downloadCard}
           {missing.length > 0 && (
             <div className="es-muted es-missing">
-              Without ethoscope data: {missing.map((f) => `fly ${f.identity} (${f.error || 'too little data'})`).join('; ')}
+              Without ethoscope data: {missing.map((f) => `${f.in_experiment ? `fly ${f.identity}` : flyLabel(f)} (${f.error || 'too little data'})`).join('; ')}
             </div>
           )}
         </div>
@@ -774,10 +789,10 @@ export default function EthoscopeTab({ active, currentExperiment }) {
               </thead>
               <tbody>
                 {flies.map((f) => {
-                  const s = summaries.get(f.identity);
+                  const s = summaries.get(f.key);
                   return (
-                    <tr key={f.identity} className={isSelected(f) ? '' : 'es-off'}>
-                      <td>{f.identity}</td><td>{f.genotype || ''}</td><td>{f.sex || ''}</td><td>{f.machine_name}</td><td>{f.region_id}</td>
+                    <tr key={f.key} className={isSelected(f) ? '' : 'es-off'}>
+                      <td title={f.experiment ? `went to ${f.experiment}` : undefined}>{f.in_experiment ? f.identity : flyLabel(f)}</td><td>{f.genotype || ''}</td><td>{f.sex || ''}</td><td>{f.machine_name}</td><td>{f.region_id}</td>
                       <td>{f.run}{f.trace.zt_aligned ? '' : ' (no reference_hour: t since start)'}</td>
                       <td>{s ? `${s.hours.toFixed(1)} h` : ''}</td>
                       <td>{fmtPct(s?.all)}</td><td>{fmtPct(s?.light)}</td><td>{fmtPct(s?.dark)}</td>

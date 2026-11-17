@@ -80,3 +80,4 @@
 .es-state-asleep { color: var(--eth-series-1); }
 .es-state-awake { color: var(--eth-series-2); }
 .es-state-no-data { color: var(--subtext); }
+.es-extra { border-style: dashed; }

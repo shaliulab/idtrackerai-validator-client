@@ -6,7 +6,7 @@
 // A frame not saved yet opens with the machine's proposal (one box per tracked blob, its local
 // identity); saving it (Enter) marks it validated. Edits of a frame are saved when leaving it;
 // an untouched proposal is not (Enter accepts it). The list holds the failed scenes of the
-// validation pipeline (scene_qc.csv), else the QC tab's runs of bad frames.
+// validation pipeline (scene_qc.csv, made by Prepare scenes); the QC tab's runs are not used.
 // "Propose" runs `yolov7-cvat propose` (the YOLO detections + identity solver of the CVAT pipeline's
 // predict --assign / complete, with the carry-over of swaps between clips): unsaved frames then open with its boxes,
 // the uncertain ones marked "!", and the frames it flagged (what a person must check) listed with ⚑ (G / Shift+G).
@@ -1423,7 +1423,7 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
         {!full && <section className="card sl-list">
           <header className="card-header">
             <span>Scenes to check</span>
-            <span className="ov-count">{info?.source?.kind === 'scene_qc' ? 'scene_qc.csv' : info?.source?.kind === 'qc' ? 'QC tab' : info?.source?.kind === 'bundle' ? 'Drive bundle' : ''}</span>
+            <span className="ov-count">{info?.source?.kind === 'scene_qc' ? 'scene_qc.csv' : info?.source?.kind === 'bundle' ? 'Drive bundle' : ''}</span>
             <span className="ov-count" title="Chunk boundaries the integration may link wrongly (⇄ in the list)">
               {boundariesPending ? '· checking chunk boundaries…' : info?.source?.boundaries ? `· ${info.source.boundaries} ⇄` : ''}
             </span>
@@ -1436,8 +1436,9 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
           </div>
           {info && !scenes.length && (
             <div className="qc-muted qc-pad">
-              No scenes to check: this experiment has no flyhostel/validation/scene_qc.csv (made by the validation pipeline before CVAT)
-              and the QC tab has not run on it. Any frame can still be opened with Frame.
+              No scenes to check: this experiment has no flyhostel/validation/scene_qc.csv yet. Prepare scenes makes it as the
+              validation pipeline does (make-identogram + auto-annotate-qc, vsc-scripts manual/validation/main.sh). Any frame can
+              still be opened with Frame.
               <div style={{ marginTop: 8 }}>
                 <button className="btn-primary" onClick={prepare} disabled={preparing}>
                   {preparing ? 'Preparing scenes…' : 'Prepare scenes'}
