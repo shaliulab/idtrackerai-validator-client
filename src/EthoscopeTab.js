@@ -435,6 +435,20 @@ function SnapshotBrowser({ active, flies, snaps, browse, setBrowse, tw }) {
   );
 }
 
+// progress of the running /api/ethoscope/sleep (flies scored); each fly reads its ROI table, slow from cold disks
+function ScoringProgress({ progress, block }) {
+  const total = progress?.total || 0;
+  const done = progress?.done || 0;
+  const frac = total ? done / total : 0;
+  return (
+    <span className={block ? 'es-progress es-progress-block' : 'es-progress'} role="progressbar"
+      aria-valuemin={0} aria-valuemax={total || 1} aria-valuenow={done}>
+      <span className="es-muted">Scoring sleep{total ? `: ${done} / ${total} flies` : '…'}</span>
+      <span className="es-progress-bar"><span style={{ width: `${(100 * frac).toFixed(1)}%` }} /></span>
+    </span>
+  );
+}
+
 // ── the tab ──────────────────────────────────────────────────────────────────
 
 export default function EthoscopeTab({ active, currentExperiment }) {
@@ -448,6 +462,8 @@ export default function EthoscopeTab({ active, currentExperiment }) {
   const [groupBy, setGroupBy] = useState(() => store.get('fh-ethoscope-group', 'none'));
   const [selected, setSelected] = useState(null);   // Set of fly keys, null = all
   const [scope, setScope] = useState(() => store.get('fh-ethoscope-scope', 'experiment'));
+  const [progress, setProgress] = useState(null);   // {done, total} of the running scoring
+  const [scopeCounts, setScopeCounts] = useState(null);   // /api/ethoscope/scopes: scope -> {flies, runs, in_sheet}
   const [params, setParams] = useState(null);       // applied scoring parameters
   const [draft, setDraft] = useState(null);
   const [showParams, setShowParams] = useState(false);
@@ -469,7 +485,16 @@ export default function EthoscopeTab({ active, currentExperiment }) {
   useEffect(() => store.set('fh-ethoscope-group', groupBy), [groupBy]);
 
   // new experiment: forget everything
-  useEffect(() => { setInfo(null); setData(null); setSelected(null); setSnaps(null); setBrowse(null); }, [currentExperiment]);
+  useEffect(() => { setInfo(null); setData(null); setSelected(null); setSnaps(null); setBrowse(null); setScopeCounts(null); }, [currentExperiment]);
+
+  // how many flies each "Flies from" option would plot (ROI_MAP of the runs only, nothing scored)
+  useEffect(() => {
+    if (!active || !info?.available || scopeCounts) return undefined;
+    let stale = false;
+    api.get('/api/ethoscope/scopes').then(({ data: d }) => { if (!stale) setScopeCounts(unwrap(d)); })
+      .catch(() => { if (!stale) setScopeCounts({}); });
+    return () => { stale = true; };
+  }, [active, info, scopeCounts]);
 
   // snapshots: listed once per experiment, when they are first wanted (hover or the card)
   useEffect(() => {
@@ -496,13 +521,23 @@ export default function EthoscopeTab({ active, currentExperiment }) {
 
   const load = useCallback(async (p) => {
     setLoading(true);
+    setProgress(null);
+    // the server counts the flies scored under this token; polled for the progress bar
+    const token = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const timer = setInterval(() => {
+      api.get('/api/ethoscope/sleep/progress', { params: { token } })
+        .then(({ data: d }) => { const v = unwrap(d); if (v) setProgress(v); })
+        .catch(() => { /* the bar just stops moving */ });
+    }, 700);
     try {
-      const { data: d } = await api.get('/api/ethoscope/sleep', { params: { ...p, scope } });
+      const { data: d } = await api.get('/api/ethoscope/sleep', { params: { ...p, scope, progress: token } });
       setData(unwrap(d));
     } catch (err) {
       log('error', `Ethoscope sleep: ${err.response?.data?.error || err.message}`);
     } finally {
+      clearInterval(timer);
       setLoading(false);
+      setProgress(null);
     }
   }, [log, scope]);
 
@@ -669,7 +704,7 @@ export default function EthoscopeTab({ active, currentExperiment }) {
           <span className="es-title">Ethoscope sleep</span>
           <span className="es-muted">{runs.map(([k, rois]) => `${k} (ROI ${rois.join(', ')})`).join(' · ')}</span>
           <span className="spacer" />
-          {loading && <span className="es-muted"><i className="fa fa-spinner fa-spin" /> scoring…</span>}
+          {loading && <ScoringProgress progress={progress} />}
         </div>
         <div className="card-body">
           <div className="toolbar es-toolbar">
@@ -693,7 +728,14 @@ export default function EthoscopeTab({ active, currentExperiment }) {
             )}
             <label className="field" title="Plot also the other flies of the ethoscope runs (their genotype / sex from the metadata sheets when listed there)">Flies from
               <select value={scope} onChange={(e) => changeScope(e.target.value)} disabled={loading}>
-                {SCOPES.map(([v, label, title]) => <option key={v} value={v} title={title}>{label}</option>)}
+                {SCOPES.map(([v, label, title]) => {
+                  const c = scopeCounts?.[v];
+                  return (
+                    <option key={v} value={v} title={title}>
+                      {label}{c ? ` (${c.flies} fl${c.flies === 1 ? 'y' : 'ies'}${v === 'experiment' ? '' : `, ${c.runs} run${c.runs === 1 ? '' : 's'}`})` : ''}
+                    </option>
+                  );
+                })}
               </select>
             </label>
             <button onClick={() => setShowParams((s) => !s)} aria-expanded={showParams}>Scoring {showParams ? '▴' : '▾'}</button>
@@ -749,7 +791,7 @@ export default function EthoscopeTab({ active, currentExperiment }) {
           )}
         </div>
         <div className="card-body" ref={setEl}>
-          {!data && <div className="es-muted">Scoring sleep…</div>}
+          {!data && (loading ? <ScoringProgress progress={progress} block /> : <div className="es-muted">Scoring sleep…</div>)}
           {data && !rows.length && <div className="es-muted">No fly selected.</div>}
           {data && rows.length > 0 && view === 'each' && (
             <EachFlyChart rows={rows} bin={binS} domain={domain} cycle={cycle} width={width}
