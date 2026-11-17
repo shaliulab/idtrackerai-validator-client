@@ -68,6 +68,11 @@ function SceneCoverage({ cov, zt0, chunksize }) {
         <b>Tracked</b> {range(cov.tracked)}{cov.tracked && chunksize ? ` (chunks ${chunk(cov.tracked.first)}–${chunk(cov.tracked.last)})` : ''}
         {cov.recorded && <> · <b>recorded</b> {range(cov.recorded)}{chunksize ? ` (to chunk ${chunk(cov.recorded.last)})` : ''}</>}
       </div>
+      {cov.outdated && !cov.untracked_chunks && (
+        <div className="bx-coverage-warn">
+          These scenes may be out of date: {cov.outdated}. Prepare scenes again to make them from the current tracking
+        </div>
+      )}
       {cov.untracked_chunks && (
         <div className="bx-coverage-warn">
           Chunks {cov.untracked_chunks[0]}–{cov.untracked_chunks[1]} were tracked after the scenes were made: Prepare scenes again to include them

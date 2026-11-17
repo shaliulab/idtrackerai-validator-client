@@ -183,7 +183,18 @@ export default function ValidationQueue({ active, currentExperiment, onOpenExper
       '\n\n("Whole experiment" in the Drive exchange tab chooses between the two.)')) return;
     setPublishing((p) => ({ ...p, [it.experiment]: true }));
     try {
-      const r = await api.post('/api/exchange/publish', { experiment: it.experiment, kind: whole ? 'full' : 'minimal' });
+      const body = { experiment: it.experiment, kind: whole ? 'full' : 'minimal' };
+      let r;
+      try {
+        r = await api.post('/api/exchange/publish', body);
+      } catch (err) {
+        // scene_qc.csv looks older than the tracking: ask, then send it anyway
+        const outdated = err.response?.status === 409 && err.response?.data?.outdated;
+        if (!outdated) throw err;
+        if (!window.confirm(`The scenes to check of ${it.experiment} (scene_qc.csv) may be out of date: ${outdated}.\n\n` +
+          'Open it and Prepare scenes again first to send the current ones. Publish the old scenes anyway?')) return;
+        r = await api.post('/api/exchange/publish', { ...body, outdated_ok: true });
+      }
       const done = await trackJob(r.data.job);
       if (done?.status === 'done') log('success', `${it.experiment} published on the Drive exchange`);
       else if (done?.status === 'failed') log('error', `Publishing ${it.experiment} failed: ${done.error}`);

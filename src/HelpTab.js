@@ -644,7 +644,8 @@ export default function HelpTab() {
             written it leaves the queue). <b>Open next</b> loads the first one in progress or to do; <b>Open</b> loads that one,
             both staying in this tab. <b>Publish</b> puts it on the Drive exchange for the annotators without loading it (a minimal bundle, or the whole
             folder when <i>Whole experiment</i> is ticked in the Drive exchange tab; <i>Publish again</i> sends only what changed),
-            and the Drive column says when it was published. <b>Hide</b> takes one out of your queue (the Hidden box shows them again). Groups only
+            and the Drive column says when it was published. Publishing sends the scenes of scene_qc.csv as they are: when the
+            tracking was redone after they were made, it asks first (Prepare scenes again to send current ones). <b>Hide</b> takes one out of your queue (the Hidden box shows them again). Groups only
             leaves out experiments of one fly. <b>Order</b>: the queue order above, <i>Oldest first</i> or <i>Newest first</i>
             (recording date); a click on a column header sorts by it, a second click reverses it. Open next follows the order shown. Hovering a row shows its metadata (genotypes, sex, light cycle, arena and
             the other columns that vary in the metadata sheets, with the number of flies of each value). Scenes done counts the scenes of scene_qc.csv whose frames are all saved, not

@@ -211,7 +211,16 @@ function LoadedExperiment({ status, entry, currentExperiment, onChanged, onOpenF
 
   const job = useCallback((what, path, body, done) => {
     setBusy(what);
-    return api.post(path, { experiment, ...body })
+    // a publish whose scene_qc.csv looks older than the tracking answers 409 with `outdated`: ask, then send it anyway
+    const post = (b) => api.post(path, { experiment, ...b }).catch((err) => {
+      const outdated = err.response?.status === 409 && err.response?.data?.outdated;
+      if (outdated && window.confirm(`The scenes to check (scene_qc.csv) may be out of date: ${outdated}.\n\n` +
+        'Prepare scenes again first (Annotate tab) to send the current ones. Publish the old scenes anyway?')) {
+        return api.post(path, { experiment, ...b, outdated_ok: true });
+      }
+      throw err;
+    });
+    return post(body)
       .then((r) => trackJob(unwrap(r.data).job))
       .then((j) => {
         if (j?.status === 'done') done?.(j);
