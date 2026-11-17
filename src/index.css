@@ -1159,3 +1159,4 @@ button.ov-sheet.ov-sheet-error { border-color: var(--danger); color: var(--dange
 .vq-meta-table { border-collapse: collapse; width: 100%; }
 .vq-meta-table th { text-align: left; font-weight: 600; color: var(--subtext); padding: 2px 10px 2px 0; white-space: nowrap; vertical-align: top; }
 .vq-meta-table td { padding: 2px 0; }
+.vq-sortable { cursor: pointer; user-select: none; white-space: nowrap; }

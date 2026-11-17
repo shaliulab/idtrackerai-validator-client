@@ -24,6 +24,30 @@ const ago = (t) => {
   return `${Math.round(s / 86400)} d ago`;
 };
 
+// sort keys of the columns (null / missing values last in both directions)
+const STATUS_RANK = { in_progress: 0, to_do: 1, no_scenes: 2, annotated: 3 };
+const COLUMNS = [
+  ['status', 'Status', (it) => STATUS_RANK[it.status] ?? 9],
+  ['experiment', 'Experiment', (it) => it.experiment],
+  ['n_animals', 'Flies', (it) => it.n_animals],
+  ['scenes', 'Scenes done', (it) => (it.scenes ? it.scenes_done / it.scenes : null)],
+  ['mine', 'My frames', (it) => it.mine || null],
+  ['last_mine', 'Last saved by me', (it) => it.last_mine],
+];
+const ORDERS = [
+  ['queue', 'Queue order', 'In progress (last worked on first), to do, Prepare scenes, annotated; then oldest first'],
+  ['date_asc', 'Oldest first', 'By recording date and time, oldest first'],
+  ['date_desc', 'Newest first', 'By recording date and time, newest first'],
+];
+const cmp = (a, b) => {
+  if (a == null && b == null) return 0;
+  if (a == null) return 1;
+  if (b == null) return -1;
+  return typeof a === 'string' ? a.localeCompare(b) : a - b;
+};
+// the recording's date_time, then the FlyHostel and arena (names sort the same way within a date)
+const dateKey = (it) => (it.date ? `${it.date} ${it.experiment}` : null);
+
 const META_LABELS = { light_cycle: 'light cycle', age_min: 'age min (d)', age_max: 'age max (d)', reference_hour: 'ZT0 (h)', GBX: 'GBX' };
 
 // metadata of the hovered row: GET /api/annotate/queue/meta (the database's ethoscope_metadata, per column the
@@ -65,6 +89,15 @@ export default function ValidationQueue({ active, currentExperiment, onOpenExper
   const [open, setOpen] = useState(() => stored('fh-annotate-queue-open', true));
   const [groupsOnly, setGroupsOnly] = useState(() => stored('fh-annotate-queue-groups', true));
   const [withPrepare, setWithPrepare] = useState(() => stored('fh-annotate-queue-prepare', false));
+  // {by: column id or 'queue' / 'date', dir: 1 | -1}: the order of the table and of Open next
+  const [sort, setSort] = useState(() => {
+    try { const v = JSON.parse(localStorage.getItem('fh-annotate-queue-sort')); if (v?.by) return v; } catch { /* default */ }
+    return { by: 'queue', dir: 1 };
+  });
+  useEffect(() => { try { localStorage.setItem('fh-annotate-queue-sort', JSON.stringify(sort)); } catch { /* ignore */ } }, [sort]);
+  const clickColumn = (id) => setSort((s) => (s.by === id ? { by: id, dir: -s.dir } : { by: id, dir: 1 }));
+  const orderValue = sort.by === 'queue' ? 'queue' : sort.by === 'date' ? (sort.dir > 0 ? 'date_asc' : 'date_desc') : '';
+  const setOrder = (v) => setSort(v === 'queue' ? { by: 'queue', dir: 1 } : { by: 'date', dir: v === 'date_asc' ? 1 : -1 });
   const [showHidden, setShowHidden] = useState(false);
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -111,13 +144,24 @@ export default function ValidationQueue({ active, currentExperiment, onOpenExper
     (!groupsOnly || it.n_animals == null || it.n_animals > 1)
     && (withPrepare || it.status !== 'no_scenes' || it.mine > 0 || it.experiment === loaded)
     && (showHidden || !it.hidden))), [data, groupsOnly, withPrepare, showHidden, loaded]);
+  // the server sends them in queue order; any other order is a stable sort of it
+  const sorted = useMemo(() => {
+    if (sort.by === 'queue') return items;
+    const key = sort.by === 'date' ? dateKey : COLUMNS.find(([id]) => id === sort.by)?.[2];
+    if (!key) return items;
+    return items.map((it, i) => [it, i]).sort(([a, i], [b, j]) => {
+      const ka = key(a), kb = key(b);
+      if (ka == null || kb == null) return cmp(ka, kb) || i - j;     // missing last either way
+      return sort.dir * cmp(ka, kb) || i - j;
+    }).map(([it]) => it);
+  }, [items, sort]);
   const counts = useMemo(() => {
     const c = {};
     items.forEach((it) => { if (!it.hidden) c[it.status] = (c[it.status] || 0) + 1; });
     return c;
   }, [items]);
   // next: the first one not hidden, not done, not loaded (in progress first, then to do)
-  const next = items.find((it) => !it.hidden && it.experiment !== loaded && (it.status === 'in_progress' || it.status === 'to_do'));
+  const next = sorted.find((it) => !it.hidden && it.experiment !== loaded && (it.status === 'in_progress' || it.status === 'to_do'));
 
   const openOne = async (experiment) => {
     setOpening(experiment);
@@ -148,7 +192,7 @@ export default function ValidationQueue({ active, currentExperiment, onOpenExper
         <span className="spacer" />
         <span onClick={(e) => e.stopPropagation()} className="vq-actions">
           <button className="btn-primary" disabled={!next || !!opening} onClick={() => openOne(next.experiment)}
-                  title={next ? `Load ${next.experiment} here` : 'Nothing left to annotate'}>
+                  title={next ? `Load ${next.experiment} here (the first one in progress or to do, in the order shown)` : 'Nothing left to annotate'}>
             {opening && next && opening === next.experiment ? 'Loading…' : 'Open next'}
           </button>
           <button onClick={fetchQueue} disabled={loading} title="Read the databases and annotations again">↻</button>
@@ -163,6 +207,12 @@ export default function ValidationQueue({ active, currentExperiment, onOpenExper
             <label className="field" title="Also list experiments without scene_qc.csv (Prepare scenes first: make-identogram + auto-annotate-qc, can take long)">
               <input type="checkbox" checked={withPrepare} onChange={(e) => setWithPrepare(e.target.checked)} /> Needing Prepare scenes
             </label>
+            <label className="field" title="Order of the table and of Open next; a click on a column header sorts by that column">Order
+              <select value={orderValue} onChange={(e) => setOrder(e.target.value)}>
+                {orderValue === '' && <option value="">By {COLUMNS.find(([id]) => id === sort.by)?.[1]} {sort.dir > 0 ? '▲' : '▼'}</option>}
+                {ORDERS.map(([v, label, title]) => <option key={v} value={v} title={title}>{label}</option>)}
+              </select>
+            </label>
             <label className="field">
               <input type="checkbox" checked={showHidden} onChange={(e) => setShowHidden(e.target.checked)} /> Hidden
             </label>
@@ -174,11 +224,17 @@ export default function ValidationQueue({ active, currentExperiment, onOpenExper
             <table className="pe-table ov-table">
               <thead>
                 <tr>
-                  <th>Status</th><th>Experiment</th><th>Flies</th><th>Scenes done</th><th>My frames</th><th>Last saved by me</th><th />
+                  {COLUMNS.map(([id, label]) => (
+                    <th key={id} className="vq-sortable" onClick={() => clickColumn(id)} title="Sort by this column (click again: reverse)"
+                        aria-sort={sort.by === id ? (sort.dir > 0 ? 'ascending' : 'descending') : 'none'}>
+                      {label}{sort.by === id ? (sort.dir > 0 ? ' ▲' : ' ▼') : ''}
+                    </th>
+                  ))}
+                  <th />
                 </tr>
               </thead>
               <tbody>
-                {items.map((it) => {
+                {sorted.map((it) => {
                   const [label, hint] = STATUS[it.status] || [it.status, ''];
                   const isLoaded = it.experiment === loaded;
                   return (
