@@ -629,6 +629,9 @@ export default function HelpTab() {
             was in the last frame. A boundary is listed when a fly is missing on either side, the nearest one is more than
             30 px away, or another fly is less than 50 px further away. Check that each fly keeps its label across it;
             a boundary already in a scene adds its reason there.
+            The top of the list says, in ZT, what the scene proposer <b>looked at</b> (the tracking data it read), where its
+            scenes start and end, and what is <b>tracked</b> and <b>recorded</b>; it warns in red when chunks were tracked after
+            the scenes were made (Prepare scenes again) or when idtrackerai stopped before the end of the recording.
             An experiment without scene_qc.csv gets it from <b>Prepare scenes</b>: make-identogram and auto-annotate-qc run in
             the background (follow them in the console; long on many flies), then the list fills.
           </p>

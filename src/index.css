@@ -1160,3 +1160,6 @@ button.ov-sheet.ov-sheet-error { border-color: var(--danger); color: var(--dange
 .vq-meta-table th { text-align: left; font-weight: 600; color: var(--subtext); padding: 2px 10px 2px 0; white-space: nowrap; vertical-align: top; }
 .vq-meta-table td { padding: 2px 0; }
 .vq-sortable { cursor: pointer; user-select: none; white-space: nowrap; }
+.bx-coverage { padding: 4px 10px 6px; font-size: 11.5px; line-height: 1.45; color: var(--text); border-bottom: 1px solid var(--border); }
+.bx-coverage b { font-weight: 600; color: var(--subtext); }
+.bx-coverage-warn { color: var(--danger); margin-top: 2px; }

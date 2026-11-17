@@ -41,6 +41,47 @@ const fmtZt = (h) => {
   const pad = (v) => String(v).padStart(2, '0');
   return `ZT ${sign}${pad(Math.floor(s / 3600))}:${pad(Math.floor((s % 3600) / 60))}:${pad(s % 60)} (${h.toFixed(2)} h)`;
 };
+// What the scene proposer (make-identogram + auto-annotate-qc) looked at, from /api/annotate/scenes `coverage`:
+// the tracking data it read, its first / last scene, and the tracked / recorded ranges, in ZT
+function SceneCoverage({ cov, zt0, chunksize }) {
+  if (!cov) return null;
+  const zt = (clock) => (clock == null ? '?' : fmtZtShort(clock / 3600 - zt0));
+  const range = (r) => (r ? `ZT ${zt(r.first_clock)} – ${zt(r.last_clock)}` : '?');
+  const chunk = (fn) => (chunksize ? Math.floor(fn / chunksize) : null);
+  const day = (t) => (t ? new Date(t * 1000).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '');
+  const tail = cov.input && cov.scenes && cov.input.last_clock != null && cov.scenes.last_clock != null
+    ? (cov.input.last_clock - cov.scenes.last_clock) / 3600 : null;
+  const notTracked = cov.recorded && cov.tracked && chunksize && chunk(cov.recorded.last) > chunk(cov.tracked.last);
+  return (
+    <div className="bx-coverage">
+      <div title={cov.input_path || ''}>
+        <b>Looked at</b> {cov.input ? `${range(cov.input)} (chunks ${chunk(cov.input.first)}–${chunk(cov.input.last)})` : 'unknown (no tracking_data.feather)'}
+        {cov.input_mtime ? <span className="qc-muted"> · tracking read {day(cov.input_mtime)}</span> : null}
+      </div>
+      {cov.scenes && (
+        <div>
+          <b>Scenes</b> {range(cov.scenes)}
+          {tail != null && tail >= 0.5 && <span className="qc-muted"> · none in the last {tail.toFixed(1)} h it looked at</span>}
+        </div>
+      )}
+      <div>
+        <b>Tracked</b> {range(cov.tracked)}{cov.tracked && chunksize ? ` (chunks ${chunk(cov.tracked.first)}–${chunk(cov.tracked.last)})` : ''}
+        {cov.recorded && <> · <b>recorded</b> {range(cov.recorded)}{chunksize ? ` (to chunk ${chunk(cov.recorded.last)})` : ''}</>}
+      </div>
+      {cov.untracked_chunks && (
+        <div className="bx-coverage-warn">
+          Chunks {cov.untracked_chunks[0]}–{cov.untracked_chunks[1]} were tracked after the scenes were made: Prepare scenes again to include them
+        </div>
+      )}
+      {notTracked && !cov.untracked_chunks && (
+        <div className="bx-coverage-warn">
+          idtrackerai tracked only up to chunk {chunk(cov.tracked.last)} of {chunk(cov.recorded.last)}: the scenes cannot go past ZT {zt(cov.tracked.last_clock)}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // idtrackerai fragment of each box: the machine row whose centroid is inside the box, nearest its centre,
 // one row per box (touching flies: overlapping boxes) -> [fragment or null]. Tag boxes (FMB, NEW-FRAGMENT, …) take
 // no row. A row inside a box with a local identity that got no row of its own is one blob holding two flies (a
@@ -1428,6 +1469,7 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
               {boundariesPending ? '· checking chunk boundaries…' : info?.source?.boundaries ? `· ${info.source.boundaries} ⇄` : ''}
             </span>
           </header>
+          <SceneCoverage cov={info?.coverage} zt0={zt0} chunksize={info?.chunksize} />
           <div className="sl-filters">
             {FILTERS.map(([k, label]) => (
               <button key={k} className={filter === k ? 'btn-primary' : undefined} onClick={() => setFilter(k)}>{label}</button>
