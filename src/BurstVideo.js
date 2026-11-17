@@ -204,7 +204,8 @@ export default function BurstVideo({ src, poseUrl, videoRef, width = 320, height
         <PanelMessage width={width} height={height}
                       title="pose needs the video" path={msg.path} />
       ) : (
-        <div style={{ width, height, flexShrink: 0 }}>
+        <div style={{ width, height, flexShrink: 0 }}
+             data-pose={pose ? `${pose.fly}_burst_${pose.burst_id}` : ''}>
           <canvas ref={(el) => { plainRef.current = el; if (plainExportRef) plainExportRef.current = el; }}
                   style={{ width: '100%', height: '100%', display: 'block',
                            border: '1px solid #ddd', objectFit: 'contain' }} />

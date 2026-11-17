@@ -160,6 +160,8 @@ function App() {
   const [recordingFramerate, setRecordingFramerate] = useState(null);
   const [flies, setFlies] = useState([]);
   const [selectedFly, setSelectedFly] = useState(null);
+  // fly a ?tab=proboscis_extension link asks for: kept selected when the fly list (re)loads
+  const peLinkFly = useRef(null);
   const [showPose, setShowPose] = useState(false);   // controls BOTH request + draw
   // Last left click on the frame, in native pixels (picks blobs / points in the Validation CSV card)
   const [frameClick, setFrameClick] = useState(null);
@@ -317,7 +319,7 @@ function App() {
       setFlies(parsed);
 
       if (parsed.length) {
-        setSelectedFly(parsed[0]);
+        setSelectedFly(parsed.includes(peLinkFly.current) ? peLinkFly.current : parsed[0]);
       } else {
         setSelectedFly(null);
       }
@@ -756,11 +758,46 @@ function App() {
   // Links ?tab=annotate&experiment=<name>&frame=<n> (server links.py, printed by flyhostel's
   // integrate-human-annotations): load the experiment unless it is the loaded one, then open the tab at that frame.
   const [annotateRequest, setAnnotateRequest] = useState(null);   // { experiment, frameNumber, nonce }
+  // ?tab=proboscis_extension&experiment=<name>&fly=<identity or fly id>[&burst=<burst_id>]: the PE tab
+  // on that fly and burst (server links.py pe_url; pe_composition.py records the video button from it)
+  const [peRequest, setPeRequest] = useState(null);   // { fly, burstId, nonce }
   const linkHandled = useRef(false);
   useEffect(() => {
     if (linkHandled.current) return;
     linkHandled.current = true;
     const params = new URLSearchParams(window.location.search);
+    if (['proboscis_extension', 'pe'].includes(params.get('tab'))) {
+      const experiment = params.get('experiment');
+      const flyParam = params.get('fly') ?? params.get('identity');
+      const burst = Number.parseInt(params.get('burst') ?? params.get('burst_id'), 10);
+      if (!experiment || !flyParam) return;
+      window.history.replaceState(null, '', window.location.pathname + window.location.hash);
+      const flatName = (name) => (name || '').replace(/\//g, '_').replace(/_arenas_(\d+)$/, '_arena$1');
+      const flyId = flyParam.includes('__')
+        ? flyParam : `${flatName(experiment)}__${String(Number.parseInt(flyParam, 10)).padStart(2, '0')}`;
+      peLinkFly.current = flyId;
+      (async () => {
+        try {
+          const { data } = await api.get('/api/current_experiment');
+          const info = typeof data === 'string' ? JSON.parse(data) : data;
+          if (flatName(info?.experiment) !== flatName(experiment)) {
+            const loaded = await postLoad(experiment);
+            log('info', `Loaded ${experiment}`);
+            setPickerKey((k) => k + 1);
+            await onExperimentLoaded(loaded?.first_frame ?? FIRST_FRAME);
+          }
+        } catch (err) {
+          log('error', `Link: failed to load ${experiment}: ${err.response?.data?.error ?? err.message}`);
+          return;
+        }
+        setIsPlaying(false);
+        setSelectedFly(flyId);
+        setPeRequest({ fly: flyId, burstId: Number.isFinite(burst) ? burst : null, nonce: Date.now() });
+        setActiveTab('proboscis_extension');
+        log('info', `Link: ${flyId}${Number.isFinite(burst) ? `, burst ${burst}` : ''}`);
+      })();
+      return;
+    }
     const experiment = params.get('experiment');
     const frame = Number.parseInt(params.get('frame'), 10);
     const tab = params.get('tab') || 'annotate';
@@ -1047,6 +1084,7 @@ function App() {
             theme={theme}
             active={activeTab === 'proboscis_extension'}
             onRequestFly={switchToFly}
+            request={peRequest}
         />
       </div>
 

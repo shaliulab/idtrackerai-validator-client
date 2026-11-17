@@ -54,7 +54,7 @@ const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 // /pe/trace            GET
 // /pe/media/videos     GET
 
-export default function PEValidator({ fly, active, onRequestFly, animalMetadata, theme }) {
+export default function PEValidator({ fly, active, onRequestFly, animalMetadata, theme, request }) {
 
   const [auditMode, setAuditMode] = useState(false);
   const [auditIds, setAuditIds] = useState([]);
@@ -278,6 +278,16 @@ const downloadBurstVideo = useCallback(async () => {
       setBurstIdx(idx);
       setNotice(null);
     }, [burstIds]);
+
+  // a link (App.js peRequest) names a burst: go to it once this fly's bouts are loaded
+  const requestDone = useRef(null);
+  useEffect(() => {
+    if (!request || request.burstId == null || requestDone.current === request.nonce) return;
+    if (request.fly !== fly || loading || !bouts.length) return;
+    if (!String(bouts[0].trace_stem || '').startsWith(`${fly}_burst_`)) return;   // previous fly's bouts
+    requestDone.current = request.nonce;
+    jumpToBurstId(request.burstId);
+  }, [request, fly, loading, bouts, jumpToBurstId]);
 
 
   const scrubbingRef = useRef(false);
@@ -787,7 +797,7 @@ const downloadBurstVideo = useCallback(async () => {
               </span>
 
               <span className="spacer" />
-              <button onClick={downloadBurstVideo} disabled={recording}
+              <button onClick={downloadBurstVideo} disabled={recording} data-action="pe-record-video"
                       title="record this burst's visualization to a .webm">
                 {recording ? 'recording…' : '⤓ video'}
               </button>
@@ -863,7 +873,9 @@ const downloadBurstVideo = useCallback(async () => {
         </section>
 
         {/* ── Media: video | pose | distance + confidence traces ── */}
-        <section className="card pe-media" style={{ height: mediaH, marginTop: GAP }}>
+        <section className="card pe-media" style={{ height: mediaH, marginTop: GAP }}
+                 data-fly={fly} data-burst-id={burstId ?? ''}
+                 data-trace-burst={trace?.burst_id ?? ''} data-segments={segs ? '1' : '0'}>
           <BurstVideo
             src={burstClip}
             poseUrl={burstPose}
