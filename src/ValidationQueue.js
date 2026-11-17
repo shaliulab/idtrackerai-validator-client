@@ -33,6 +33,8 @@ const COLUMNS = [
   ['scenes', 'Scenes done', (it) => (it.scenes ? it.scenes_done / it.scenes : null)],
   ['mine', 'My frames', (it) => it.mine || null],
   ['last_mine', 'Last saved by me', (it) => it.last_mine],
+  // Drive exchange: published (when), downloaded copies after, never shared last
+  ['exchange', 'Drive', (it) => (it.exchange?.role === 'publisher' ? it.exchange.published_at : it.exchange ? 0 : null)],
 ];
 const ORDERS = [
   ['queue', 'Queue order', 'In progress (last worked on first), to do, Prepare scenes, annotated; then oldest first'],
@@ -85,7 +87,8 @@ function MetaPopover({ meta, item, x, y }) {
 }
 
 export default function ValidationQueue({ active, currentExperiment, onOpenExperiment }) {
-  const { log } = useConsole();
+  const { log, trackJob } = useConsole();
+  const [publishing, setPublishing] = useState({});     // experiment -> true while its publish job runs
   const [open, setOpen] = useState(() => stored('fh-annotate-queue-open', true));
   const [groupsOnly, setGroupsOnly] = useState(() => stored('fh-annotate-queue-groups', true));
   const [withPrepare, setWithPrepare] = useState(() => stored('fh-annotate-queue-prepare', false));
@@ -166,6 +169,30 @@ export default function ValidationQueue({ active, currentExperiment, onOpenExper
   const openOne = async (experiment) => {
     setOpening(experiment);
     try { await onOpenExperiment(experiment); } finally { setOpening(null); }
+  };
+  // Publish to the Drive exchange as the Drive exchange tab does (its "Whole experiment" tick picks the kind)
+  const publish = async (it) => {
+    let whole = false;
+    try { whole = JSON.parse(localStorage.getItem('fh-exchange-whole')) === true; } catch { /* minimal */ }
+    const again = it.exchange?.role === 'publisher';
+    const what = whole
+      ? `Upload the whole experiment folder of ${it.experiment} (tens of GB) to the Drive exchange?`
+      : `Make a minimal bundle of ${it.experiment} (clips of its scene frames, the database cut down to them; the first time it ` +
+        `reads and segments every scene frame, about half an hour for a thousand scenes) and upload it to the Drive exchange?`;
+    if (!window.confirm(what + (again ? '\n\nIt is on Drive already: only what changed is sent.' : '') +
+      '\n\n("Whole experiment" in the Drive exchange tab chooses between the two.)')) return;
+    setPublishing((p) => ({ ...p, [it.experiment]: true }));
+    try {
+      const r = await api.post('/api/exchange/publish', { experiment: it.experiment, kind: whole ? 'full' : 'minimal' });
+      const done = await trackJob(r.data.job);
+      if (done?.status === 'done') log('success', `${it.experiment} published on the Drive exchange`);
+      else if (done?.status === 'failed') log('error', `Publishing ${it.experiment} failed: ${done.error}`);
+      fetchQueue();
+    } catch (err) {
+      log('error', `Publish ${it.experiment}: ${err.response?.data?.error ?? err.message}`);
+    } finally {
+      setPublishing((p) => { const n = { ...p }; delete n[it.experiment]; return n; });
+    }
   };
   const hide = async (experiment, hidden) => {
     try {
@@ -252,12 +279,29 @@ export default function ValidationQueue({ active, currentExperiment, onOpenExper
                       </td>
                       <td className="qc-num" title={`${it.annotated.toLocaleString()} frames saved by anyone`}>{it.mine ? it.mine.toLocaleString() : ''}</td>
                       <td className="qc-muted" title={it.last_mine ? new Date(it.last_mine * 1000).toLocaleString() : ''}>{ago(it.last_mine)}</td>
+                      <td>
+                        {it.exchange?.role === 'publisher' && (
+                          <span className="ov-badge" title={`Published ${it.exchange.kind === 'full' ? 'whole' : 'as a minimal bundle'} ${new Date(it.exchange.published_at * 1000).toLocaleString()}`}>
+                            published {ago(it.exchange.published_at)}
+                          </span>
+                        )}
+                        {it.exchange?.role === 'annotator' && (
+                          <span className="ov-badge" title={`Downloaded from the Drive exchange (published by ${it.exchange.publisher || '?'})`}>downloaded</span>
+                        )}
+                      </td>
                       <td className="vq-row-actions">
                         {!isLoaded && (
                           <button onClick={() => openOne(it.experiment)} disabled={!!opening}>
                             {opening === it.experiment ? 'Loading…' : 'Open'}
                           </button>
                         )}
+                        <button onClick={() => publish(it)}
+                                disabled={!!publishing[it.experiment] || it.exchange?.role === 'annotator' || !it.scenes}
+                                title={it.exchange?.role === 'annotator' ? 'A copy downloaded from Drive: upload its annotations from the Drive exchange tab'
+                                  : !it.scenes ? 'No scene_qc.csv yet: Prepare scenes first (a bundle holds the scene frames)'
+                                    : 'Publish it on the Drive exchange for the annotators (the Drive exchange tab shows the rest)'}>
+                          {publishing[it.experiment] ? 'Publishing…' : it.exchange?.role === 'publisher' ? 'Publish again' : 'Publish'}
+                        </button>
                         <button onClick={() => hide(it.experiment, !it.hidden)}
                                 title={it.hidden ? 'Back into my queue' : 'Take it out of my queue (Hidden shows it again)'}>
                           {it.hidden ? 'Unhide' : 'Hide'}
@@ -267,7 +311,7 @@ export default function ValidationQueue({ active, currentExperiment, onOpenExper
                   );
                 })}
                 {data && !items.length && (
-                  <tr><td colSpan={7} className="qc-muted">Nothing here with these filters.</td></tr>
+                  <tr><td colSpan={8} className="qc-muted">Nothing here with these filters.</td></tr>
                 )}
               </tbody>
             </table>
