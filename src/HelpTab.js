@@ -104,7 +104,8 @@ const SHORTCUTS = [
   ['Leg movements', [
     [<><Key>1</Key>–<Key>7</Key></>, 'What the fly does: middle legs, grooming, walk / turn, one shift, pose error, other, unsure (same key again removes it)'],
     [<><Key>l</Key> / <Key>r</Key> / <Key>b</Key></>, 'Leg seen moving: left / right / both (same key again removes it)'],
-    [<><Key>t</Key> / <Key>o</Key> / <Key>x</Key></>, 'The moving leg touches the other fly / does not touch it / no other fly in the clip (same key again removes it)'],
+    [<><Key>t</Key> / <Key>g</Key> / <Key>o</Key> / <Key>x</Key></>, 'The moving leg touches the other fly / grazes it / does not touch it / no other fly in the clip (same key again removes it)'],
+    [<><Key>p</Key> / <Key>Shift</Key>+<Key>P</Key></>, 'The other fly touches the focal fly / does not (same key again removes it)'],
     [<><Key>0</Key> / <Key>Backspace</Key></>, 'Clear the review of the event'],
     [<><Key>←</Key> / <Key>→</Key></>, 'Previous / next event'],
     [<><Key>n</Key> / <Key>Shift</Key>+<Key>n</Key></>, 'Next / previous event without a verdict'],
@@ -409,8 +410,10 @@ export default function HelpTab() {
               <b>Verdict:</b> <i>middle legs</i> (a middle leg moves repeatedly, the other legs stay still), <i>grooming</i>{' '}
               (with the front or hind legs), <i>walk / turn</i>, <i>one shift</i> (a single posture adjustment), <i>pose
               error</i> (nothing moves, the keypoints jump), <i>other</i>, <i>unsure</i>; which leg you saw moving; whether the
-              moving leg <i>touches the other fly</i>, <i>does not touch it</i>, or there is <i>no other fly</i> in the clip
-              (the event line says which fly was near, and the classifier's probability, unless the detector's call is hidden);
+              moving leg <i>touches the other fly</i>, <i>grazes it</i> (barely brushes it, or you cannot tell), <i>does not touch
+              it</i>, or there is <i>no other fly</i> in the clip (the event line says which fly was near, and the classifier's
+              probability, unless the detector's call is hidden); separately, whether the <i>other fly touches the focal fly</i>
+              (any part of it, during the movement or the second before: an event can be "does not touch" and "touched by partner");
               notes.
               Every change is saved at once (<code>leg_annotations.db</code>, next to the PE annotations), with your user name.
             </li>

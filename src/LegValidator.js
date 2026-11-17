@@ -6,7 +6,8 @@
 // thorax speed) and saves a verdict per event (/api/legs/*, leg_validation.py). The queue is one fly's events or a random sample of
 // every fly's (same size and seed = same queue, so a review can be continued later). The selections "counted movements" sample the
 // events the classifier counts as real movements (leg_movements_per_fly.py, model/movements.csv), all, near another fly or away from
-// others; for those a review also says whether the moving leg touches the other fly (keys t / o / x).
+// others; for those a review also says whether the moving leg touches the other fly (keys t / g / o / x) and, separately, whether
+// the other fly touches the focal fly (touched by partner, keys p / Shift+P).
 //
 // Colours: Okabe-Ito, and every leg also has its own line type (left middle solid, right middle dashed, front dotted, hind dash-dot).
 
@@ -38,6 +39,12 @@ const TOUCHES = [
   { id: 'graze', key: 'g', label: 'graze / unclear', title: 'the leg barely brushes the other fly, or you cannot tell whether it touches', color: '#F0E442' },
   { id: 'no', key: 'o', label: 'does not touch', title: 'another fly is in the clip, a gap stays between the moving leg and it', color: '#56B4E9' },
   { id: 'no_partner', key: 'x', label: 'no other fly', title: 'no other fly in the clip', color: '#BBBBBB' },
+];
+// does the other fly touch the focal fly (any part of it, during the movement or in the second before it)? Separate from TOUCHES,
+// which is what the focal fly's moving leg does: an event can be 'does not touch' and 'touched by partner'. (keys p / Shift+P)
+const PARTNER = [
+  { id: 'yes', key: 'p', label: 'yes', title: 'the other fly touches the focal fly (walks into it, its legs land on it...)', color: '#CC79A7' },
+  { id: 'no', key: 'P', label: 'no', title: 'the other fly does not touch the focal fly', color: '#56B4E9' },
 ];
 const SELECTIONS = [
   { id: 'all', label: 'all events' },
@@ -353,7 +360,8 @@ export default function LegValidator({ active }) {
     try {
       await api.post(`${API}/annotate`, {
         fly: e.fly, event: e.event, start: e.start, end: e.end, leg: e.leg,
-        verdict: next.verdict, which_leg: next.which_leg, touches: next.touches, notes: next.notes,
+        verdict: next.verdict, which_leg: next.which_leg, touches: next.touches,
+        touched_by_partner: next.touched_by_partner, notes: next.notes,
       });
       if (Boolean(next.verdict) !== Boolean(e.verdict)) loadFlies();   // reviewed counts of the fly list
     } catch (err) {
@@ -382,6 +390,9 @@ export default function LegValidator({ active }) {
   const setTouches = useCallback((t) => {
     if (event) save(event, { touches: event.touches === t ? null : t });
   }, [event, save]);
+  const setPartner = useCallback((t) => {
+    if (event) save(event, { touched_by_partner: event.touched_by_partner === t ? null : t });
+  }, [event, save]);
 
   // ── keyboard ──
   useEffect(() => {
@@ -390,12 +401,14 @@ export default function LegValidator({ active }) {
       if (typing(e) || e.ctrlKey || e.metaKey || e.altKey) return;
       const n = Number(e.key);
       if (n >= 1 && n <= VERDICTS.length) { e.preventDefault(); setVerdict(VERDICTS[n - 1].id); return; }
+      const pt = PARTNER.find((x) => x.key === e.key);
+      if (pt) { e.preventDefault(); setPartner(pt.id); return; }
       const w = WHICH.find((x) => x.key === e.key.toLowerCase());
       if (w) { e.preventDefault(); setWhichLeg(w.id); return; }
       const tc = TOUCHES.find((x) => x.key === e.key.toLowerCase());
       if (tc) { e.preventDefault(); setTouches(tc.id); return; }
       if (e.key === '0' || e.key === 'Backspace' || e.key === 'Delete') {
-        e.preventDefault(); if (event) save(event, { verdict: null, which_leg: null, touches: null, notes: '' }); return;
+        e.preventDefault(); if (event) save(event, { verdict: null, which_leg: null, touches: null, touched_by_partner: null, notes: '' }); return;
       }
       if (e.key === 'ArrowRight' || e.key === 'ArrowDown') { e.preventDefault(); go(idx + 1); return; }
       if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') { e.preventDefault(); go(idx - 1); return; }
@@ -410,7 +423,7 @@ export default function LegValidator({ active }) {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [active, event, idx, go, nextUnreviewed, setVerdict, setWhichLeg, setTouches, save, startLoop]);
+  }, [active, event, idx, go, nextUnreviewed, setVerdict, setWhichLeg, setTouches, setPartner, save, startLoop]);
 
   // keep the selected row in view
   useEffect(() => {
@@ -573,6 +586,20 @@ export default function LegValidator({ active }) {
                 );
               })}
             </span>
+            <span className="pe-group">
+              touched by partner
+              {event && PARTNER.map((pt) => {
+                const on = event.touched_by_partner === pt.id;
+                return (
+                  <button key={pt.id} onClick={() => setPartner(pt.id)} title={`${pt.title} (${pt.key === 'P' ? 'Shift+P' : pt.key})`}
+                          style={{ fontWeight: on ? 'bold' : 'normal', background: on ? pt.color : 'var(--btn-bg)',
+                                   color: on ? '#000' : 'var(--text)',
+                                   border: on ? '2px solid var(--text)' : '1px solid var(--border-strong)' }}>
+                    <span className="leg-key">{pt.key === 'P' ? '⇧P' : pt.key}</span>{pt.label}
+                  </button>
+                );
+              })}
+            </span>
             <span className="pe-group" style={{ flex: 1, minWidth: 200 }}>
               notes
               <input type="text" value={notesDraft} style={{ flex: 1 }} disabled={!event}
@@ -600,6 +627,7 @@ export default function LegValidator({ active }) {
                 <th>verdict</th>
                 <th>leg seen</th>
                 <th>touches</th>
+                <th title="the other fly touches the focal fly">touched by partner</th>
                 <th>notes</th>
               </tr>
             </thead>
@@ -631,6 +659,7 @@ export default function LegValidator({ active }) {
                   </td>
                   <td>{e.which_leg || ''}</td>
                   <td>{TOUCHES.find((tc) => tc.id === e.touches)?.label || ''}</td>
+                  <td>{e.touched_by_partner || ''}</td>
                   <td style={{ maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis' }}>{e.notes}</td>
                 </tr>
               ))}
@@ -639,7 +668,8 @@ export default function LegValidator({ active }) {
         </div>
         <div className="pe-keys">
           keys: <b>1–7</b> verdict (same key again clears it) · <b>l</b>/<b>r</b>/<b>b</b> leg seen: left / right / both ·{' '}
-          <b>t</b>/<b>o</b>/<b>x</b> the moving leg touches the other fly / does not / no other fly ·{' '}
+          <b>t</b>/<b>g</b>/<b>o</b>/<b>x</b> the moving leg touches the other fly / grazes / does not / no other fly ·{' '}
+          <b>p</b>/<b>Shift+P</b> the other fly touches the focal fly / does not ·{' '}
           <b>0</b>/<b>Backspace</b> clear the review · <b>←/→</b> events · <b>n</b>/<b>Shift+n</b> next / previous unreviewed ·{' '}
           <b>Space</b> play/pause · <b>Enter</b> replay · click the trace to seek
         </div>
