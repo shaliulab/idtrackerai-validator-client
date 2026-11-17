@@ -100,12 +100,23 @@ function DriveSettings({ status, onSaved }) {
             every annotator as <b>Editor</b>. Each person connects to it with <a href="https://rclone.org/drive/" target="_blank" rel="noreferrer">rclone</a>;
             your Google login stays in rclone's own configuration and is never sent to this server.</p>
           <ol>
-            <li>Install rclone (<a href="https://rclone.org/install/" target="_blank" rel="noreferrer">rclone.org/install</a>) on the computer running this server.</li>
-            <li>Run <code>rclone config</code>, choose <b>n</b> (new remote), name it <code>{remoteName}</code>, storage <b>drive</b>, scope <b>1</b> (full access) and sign in with Google when asked.</li>
-            <li>Publisher: make a folder in your Drive (e.g. <code>FlyHostelExchange</code>), share it with the annotators as Editor, and set <b>Shared folder</b> to <code>{remoteName}:FlyHostelExchange</code>.</li>
-            <li>Annotators: open the shared folder in Drive and either add a shortcut to it in My Drive (then <code>{remoteName}:FlyHostelExchange</code>),
-              or, during <code>rclone config</code>, set <b>root_folder_id</b> to the id at the end of the folder's link (then <code>{remoteName}:</code>).</li>
-            <li>Set <b>Your name</b> and Save. Annotators then Download an experiment below, annotate it in the Annotate tab, and Upload their annotations.</li>
+            <li><b>Publisher</b> (once per annotator): in Google Drive, share the exchange folder (e.g. <code>FlyHostelExchange</code>) with
+              the annotator's Google account as <b>Editor</b> and send them its link, <code>https://drive.google.com/drive/folders/&lt;FOLDER_ID&gt;</code>.
+              The folder id is not a secret (sharing gives the access); your OAuth client id and secret are never needed by anyone else.</li>
+            <li>Install the current rclone on the computer running this server (<a href="https://rclone.org/install/" target="_blank" rel="noreferrer">rclone.org/install</a>,
+              e.g. <code>curl https://rclone.org/install.sh | sudo bash</code>). Not the Linux distribution's package: it is usually too old to sign in to Google.</li>
+            <li>Run <code>rclone config</code>: <b>n</b> (new remote), name <code>{remoteName}</code>, storage <b>drive</b>;
+              leave <b>client_id</b> and <b>client_secret</b> empty (Enter); scope <b>1</b> (full access: <i>drive.file</i> would hide the other people's files);
+              <b>root_folder_id</b>: the <code>&lt;FOLDER_ID&gt;</code> of the link; <b>service_account_file</b>: Enter; advanced config <b>n</b>;
+              web browser <b>y</b> and sign in with the Google account the folder is shared with; Shared Drive <b>n</b>; keep <b>y</b>, then <b>q</b>.
+              On a computer without a browser (ssh) answer <b>n</b> and run the <code>rclone authorize "drive"</code> it prints on one that has a browser
+              (same rclone version), then paste the result back.</li>
+            <li>Check: <code>rclone lsd {remoteName}:</code> lists the published experiments, without error.</li>
+            <li>Set <b>Shared folder</b> to <code>{remoteName}:</code> (remote name and colon, nothing after it: root_folder_id already points at the folder),
+              <b>Your name</b> (it labels your uploads), and Save: the badge says connected. Instead of root_folder_id, a shortcut to the shared
+              folder in My Drive also works; the shared folder is then <code>{remoteName}:FlyHostelExchange</code>.</li>
+            <li>Annotators then <b>Download</b> an experiment below, annotate it in the Annotate tab, <b>Upload my annotations</b>, and <b>Check for updates</b> for the publisher's newer versions.</li>
+            <li>Never paste the output of <code>rclone config</code> / <code>rclone config show</code> into a chat or email: it holds the sign-in token, which opens the whole Drive of that account.</li>
           </ol>
         </div>
       )}
