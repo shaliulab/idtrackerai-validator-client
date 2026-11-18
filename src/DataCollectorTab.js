@@ -30,6 +30,7 @@ function store(key, value) {
 
 function fetchState(e) {
   if (e.fetching) return ['fetching', 'dm-warn'];
+  if (!e.remote && !e.wanted_files) return ['empty folder', 'dm-none'];
   if (e.wanted_files && e.here_files === e.wanted_files) return ['here', 'dm-ok'];
   if (e.here_files > 0) return [`${e.here_files}/${e.wanted_files} files here`, 'dm-warn'];
   return ['not here', 'dm-none'];
@@ -309,7 +310,7 @@ function FetchCard({ active, onEdit, editing, onOpenExperiment }) {
       const data = unwrap((await api.get('/api/collector/dates')).data);
       setDates(data.dates);
       setRemote(data);
-      setError(null);
+      setError(data.remote_error ? `${data.host}: ${data.remote_error} (only the experiments here are listed)` : null);
       setDate((d) => (d && data.dates.some((x) => x.date === d) ? d : data.dates[0]?.date || ''));
     } catch (err) {
       setError(`cv2: ${errorOf(err)}`);
@@ -327,8 +328,8 @@ function FetchCard({ active, onEdit, editing, onOpenExperiment }) {
     try {
       const data = unwrap((await api.get(`/api/collector/date/${date}`, { params: { zt_limit: ztLimit } })).data);
       setListing(data);
-      setError(null);
-      setSelected(new Set(data.experiments.filter((e) => e.missing_bytes > 0 && !e.fetching).map((e) => e.experiment)));
+      setError(data.remote_error ? `${remote?.host || 'cv2'}: ${data.remote_error} (only the experiments here are listed)` : null);
+      setSelected(new Set(data.experiments.filter((e) => e.remote && e.missing_bytes > 0 && !e.fetching).map((e) => e.experiment)));
     } catch (err) {
       setError(errorOf(err));
     } finally {
@@ -413,6 +414,7 @@ function FetchCard({ active, onEdit, editing, onOpenExperiment }) {
   };
 
   const experiments = listing?.experiments || [];
+  const fetchable = experiments.filter((e) => e.remote);
   const selectedBytes = experiments.filter((e) => selected.has(e.experiment)).reduce((s, e) => s + e.missing_bytes, 0);
   const toggle = (name) => setSelected((s) => { const n = new Set(s); if (n.has(name)) n.delete(name); else n.add(name); return n; });
 
@@ -435,6 +437,7 @@ function FetchCard({ active, onEdit, editing, onOpenExperiment }) {
               {(dates || []).map((d) => (
                 <option key={d.date} value={d.date}>
                   {d.date} · {d.experiments.length} exp. · {d.experiments.filter((e) => e.local).length} here
+                  {d.experiments.some((e) => !e.remote) ? ` · ${d.experiments.filter((e) => !e.remote).length} only here` : ''}
                 </option>
               ))}
             </select>
@@ -477,8 +480,8 @@ function FetchCard({ active, onEdit, editing, onOpenExperiment }) {
               <thead>
                 <tr>
                   <th style={{ cursor: 'default' }}>
-                    <input type="checkbox" checked={experiments.length > 0 && experiments.every((e) => selected.has(e.experiment))}
-                           onChange={(e) => setSelected(new Set(e.target.checked ? experiments.map((x) => x.experiment) : []))} />
+                    <input type="checkbox" checked={fetchable.length > 0 && fetchable.every((e) => selected.has(e.experiment))}
+                           onChange={(e) => setSelected(new Set(e.target.checked ? fetchable.map((x) => x.experiment) : []))} />
                   </th>
                   <th>Experiment</th>
                   <th title="created_utc of metadata.yaml">Started (UTC)</th>
@@ -497,7 +500,10 @@ function FetchCard({ active, onEdit, editing, onOpenExperiment }) {
                   const [state, cls] = fetchState(e);
                   return (
                     <tr key={e.experiment} className={editing?.startsWith(e.experiment) ? 'sc-row-on' : ''}>
-                      <td><input type="checkbox" checked={selected.has(e.experiment)} onChange={() => toggle(e.experiment)} /></td>
+                      <td>
+                        <input type="checkbox" checked={selected.has(e.experiment)} onChange={() => toggle(e.experiment)}
+                               disabled={!e.remote} title={e.remote ? '' : `Not on ${remote?.host || 'cv2'}: nothing to fetch`} />
+                      </td>
                       <td className="mono">{e.experiment}</td>
                       <td>{e.created_utc?.replace('T', ' ') ?? '–'}</td>
                       <td title={`ZT0 at ${e.reference_hour}:00 (${e.reference_hour_source === 'sheet' ? 'metadata sheet' : 'no sheet row yet: default'})`}>
@@ -505,6 +511,7 @@ function FetchCard({ active, onEdit, editing, onOpenExperiment }) {
                         {e.reference_hour_source === 'default' && <span className="sc-muted"> *</span>}
                       </td>
                       <td>
+                        {!e.remote && <span className="sc-badge" title={`Not on ${remote?.host || 'cv2'} (any more): chunks counted here`}>only here</span>}
                         {e.remote_chunks} chunks · {e.remote_hours ?? '–'} h
                         {e.recording && <span className="sc-badge sc-rec" title="Files modified in the last 10 min: still recording">● rec</span>}
                       </td>

@@ -1070,7 +1070,9 @@ export default function HelpTab() {
               closed), decides then what to copy (so chunks recorded until then are included) and waits for a fetch that is still
               running. The table marks them ⏱ with the time; <i>Scheduled fetches</i> lists them with <i>Start now</i> and ✕
               (cancel), and the console follows them once they start. <a href="http://10.43.205.5:8000" target="_blank" rel="noreferrer">10.43.205.5:8000</a>{' '}
-              shows cv2's folders in the browser.</li>
+              shows cv2's folders in the browser. Experiments that are here but no longer on cv2 are listed too, marked{' '}
+              <i>only here</i> (chunks counted in the local folder, nothing to fetch), so their settings can still be made;
+              when cv2 cannot be reached only the experiments here are listed.</li>
             <li><b>Segmentation settings</b> (<i>Settings ▸</i> on a row, <i>arena K</i> for the arenas cropped out of an arena
               experiment): <b>Propose with roi-proposer</b> writes <code>&lt;date&gt;.toml</code> and <code>landmarks.toml</code>{' '}
               (<code>arenas.toml</code> for an arena experiment): ROIs found by its model, the other settings copied from the latest
