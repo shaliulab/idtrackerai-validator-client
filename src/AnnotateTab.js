@@ -1469,7 +1469,7 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
         {!full && <section className="card sl-list">
           <header className="card-header">
             <span>Scenes to check</span>
-            <span className="ov-count">{info?.source?.kind === 'scene_qc' ? 'scene_qc.csv' : info?.source?.kind === 'bundle' ? 'Drive bundle' : ''}</span>
+            <span className="ov-count">{info?.source?.kind === 'scene_qc' ? 'scene_qc.csv' : info?.source?.kind === 'bundle' ? 'Drive bundle' : info && scenes.length ? 'chunk boundaries only' : ''}</span>
             <span className="ov-count" title="Chunk boundaries the integration may link wrongly (⇄ in the list)">
               {boundariesPending ? '· checking chunk boundaries…' : info?.source?.boundaries ? `· ${info.source.boundaries} ⇄` : ''}
             </span>
@@ -1481,9 +1481,12 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
             ))}
             <button onClick={fetchInfo} title="Read the scenes and annotated frames again">↻</button>
           </div>
-          {info && !scenes.length && (
+          {info && !info.source?.kind && (
             <div className="qc-muted qc-pad">
-              No scenes to check: this experiment has no flyhostel/validation/scene_qc.csv yet. Prepare scenes makes it as the
+              {scenes.length
+                ? 'Only the unsure chunk boundaries (⇄) are listed: this experiment has no flyhostel/validation/scene_qc.csv yet, so the stretches inside the chunks where identities fail are not. '
+                : 'No scenes to check: this experiment has no flyhostel/validation/scene_qc.csv yet. '}
+              Prepare scenes makes it as the
               validation pipeline does (make-identogram + auto-annotate-qc, vsc-scripts manual/validation/main.sh). Any frame can
               still be opened with Frame.
               <div style={{ marginTop: 8 }}>
