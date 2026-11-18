@@ -200,10 +200,19 @@ export default function MessageConsole({ theme }) {
   const bodyRef = useRef(null);
   const dragStartHeight = useRef(0);
 
-  // Keep the newest message in view.
+  // Keep the newest message in view, unless the reader scrolled up: entries change on every poll of a running
+  // job, which pulled the view back down every second
+  const atBottom = useRef(true);
+  const onScroll = () => {
+    const el = bodyRef.current;
+    if (el) atBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 24;
+  };
   useEffect(() => {
-    if (state?.open && bodyRef.current) bodyRef.current.scrollTop = bodyRef.current.scrollHeight;
-  }, [state?.entries, state?.open]);
+    if (state?.open) atBottom.current = true;     // opening shows the newest
+  }, [state?.open]);
+  useEffect(() => {
+    if (state?.open && bodyRef.current && atBottom.current) bodyRef.current.scrollTop = bodyRef.current.scrollHeight;
+  }, [state?.entries, state?.open, state?.height]);
 
   if (!state) return null;
   const { entries, open, height, setHeight } = state;
@@ -257,7 +266,7 @@ export default function MessageConsole({ theme }) {
       </div>
 
       {open && (
-        <div ref={bodyRef} style={{ height, overflowY: 'auto', padding: '4px 12px' }}>
+        <div ref={bodyRef} onScroll={onScroll} style={{ height, overflowY: 'auto', padding: '4px 12px' }}>
           {entries.length === 0 && <div style={{ color: theme.subtext }}>No messages.</div>}
           {entries.map((entry) => (
             <div key={entry.id} style={{ padding: '1px 0' }}>
