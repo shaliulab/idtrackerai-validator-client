@@ -50,6 +50,7 @@ const LABELS = {
   fly_no: 'Fly no.',
   flyhostel_night: 'Night in the FlyHostel (auto)',
   previous_experiment: 'Previous experiment of the fly (auto)',
+  days_in_flyhostel_before: 'Days in the FlyHostel before this experiment (auto)',
 };
 const labelOf = (prop) => LABELS[prop] || prop.replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase());
 
@@ -518,6 +519,7 @@ const TABLE_COLUMNS = [
   ['light_cycle', 'Light cycle'],
   ['has_val', 'Validated'],
   ['first_night', 'First night'],
+  ['days_in_flyhostel_before', 'Days in FH before'],
   ['deg_videos', 'DEG'],
   ['sheet', 'Sheet'],
 ];
@@ -738,6 +740,7 @@ function ExperimentTable({ rows, onOpen, current, active, onUpdateMetadata, shee
                 </td>
                 <td>{e.has_val ? '✓' : ''}</td>
                 <FirstNightCell e={e} />
+                <DaysBeforeCell e={e} />
                 <td title={e.deg_videos ? `${e.deg_videos} DEG videos (chunk of a fly) with labelled frames` : undefined}>
                   {e.deg_videos || ''}
                 </td>
@@ -803,6 +806,25 @@ function FirstNightCell({ e }) {
         : <span className="ov-badge ov-badge-repeat">{e.first_night === 'no' ? `no (night ${nights})` : `${e.repeat_flies}/${e.known_flies} back`}</span>}
     </td>
   );
+}
+
+// Days the experiment's flies had already spent in the FlyHostel (overview.py, annotate_nights):
+// since the first FlyHostel experiment of the same ethoscope fly, the analysis pipelines' rule
+// for flies that are not fresh. The largest of the flies; hover lists each fly.
+function DaysBeforeCell({ e }) {
+  const days = e.days_in_flyhostel_before;
+  if (days == null) {
+    return <td style={{ color: 'var(--subtext)' }} title="Unknown: no fly has machine_name, date and region_id in its metadata">?</td>;
+  }
+  const lines = e.flies.filter((f) => f.days_in_flyhostel_before != null).map((f, i) => `${f.identity ? `Fly ${f.identity}` : `Row ${i + 1}`} `
+    + `(${f.genotype || '?'}, ${f.machine_name} ${f.date} ROI ${f.region_id}): ${f.days_in_flyhostel_before} day(s)`);
+  const title = [
+    days === 0 ? 'Every fly is fresh: first FlyHostel experiment' : 'Not fresh: a fly was already in a FlyHostel experiment before',
+    ...lines,
+    'Days since the first FlyHostel experiment (any FlyHostel) of the same ethoscope fly (machine_name, date, region_id),'
+      + ' as the analysis pipelines exclude non-fresh flies',
+  ].join('\n');
+  return <td title={title}>{days === 0 ? '0' : <span className="ov-badge ov-badge-repeat">{days}</span>}</td>;
 }
 
 const csvCell = (v) => {

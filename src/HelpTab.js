@@ -848,6 +848,11 @@ export default function HelpTab() {
               second night. The <i>First night</i> column of the table shows ✓, <i>no (night 2)</i> or{' '}
               <i>k/N back</i> (hover: each fly and where it was the day before), and the fly properties{' '}
               <i>Night in the FlyHostel (auto)</i> / <i>Previous experiment of the fly (auto)</i> can be
+              charted and exported. The <i>Days in FH before</i> column counts the days the flies had
+              already spent in the FlyHostel (the largest of the experiment's flies; hover: each fly):
+              days since the first FlyHostel experiment of the same ethoscope fly, in any FlyHostel, the
+              rule the analysis pipelines use to leave out flies that are not fresh. It is 0 for fresh
+              flies; the fly property <i>Days in the FlyHostel before this experiment (auto)</i> can be
               charted and exported.
             </li>
             <li>
