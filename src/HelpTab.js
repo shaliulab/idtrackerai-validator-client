@@ -47,7 +47,8 @@ const SHORTCUTS = [
     [<Key>Enter</Key>, 'Save the frame and open the next one'],
     [<><Key>←</Key> / <Key>→</Key> or <Key>D</Key> / <Key>F</Key></>, 'Previous / next frame of the scenes (Shift: scene), D / F as in CVAT'],
     [<><Key>U</Key> / <Key>Del</Key> / <Key>Tab</Key></>, 'No label / delete the box / next box'],
-    [<Key>P</Key>, 'Copy the boxes of the last frame saved'],
+    [<Key>P</Key>, 'Copy the boxes of the frame just before (as you left it)'],
+    [<><Key>Shift</Key>+<Key>P</Key></>, 'Copy the frame before only inside the dashed region under the pointer'],
     [<><Key>Z</Key> / <Key>Shift</Key>+<Key>Z</Key></>, 'Zoom to the next region to look at (dashed orange, listed under "Where to look") / the whole frame'],
     [<Key>M</Key>, 'Full screen: only the frame, its navigation and the labels (M or Esc leaves it)'],
     ['Carry labels (checkbox)', 'A label you change is carried to the next frames of the scene along the fly\'s idtrackerai fragment (until it ends or a frame you saved); those frames are saved when you leave them'],
@@ -673,7 +674,7 @@ export default function HelpTab() {
             <li><Key>1</Key>…<Key>9</Key> (or <Key>Shift</Key>+<Key>1</Key>…<Key>9</Key>) label the selected box; <Key>Shift</Key>+<Key>0</Key> is 10 and <Key>Ctrl</Key>+<Key>Shift</Key>+<Key>1</Key>…<Key>9</Key> are 11…19 (two digits typed quickly also work with 10+ flies); a local identity already on another box swaps with it. <Key>U</Key> removes the label, <Key>Del</Key> the box.</li>
             <li>Tags FMB, NEW-FRAGMENT and CROSSING (buttons) mean the same as in CVAT. A NEW-FRAGMENT tag on a fly also splits its idtrackerai fragment here: from that frame on it is a new fragment until the end of the chunk, so labels are no longer carried across the tag. When two flies trade places in a frame and fixing it swaps the frames before or after, tag both flies NEW-FRAGMENT in that frame (and in the next one, if the fly's fragment goes on wrong), then fix the labels.</li>
             <li>With <b>Carry labels</b> on, a local identity you give a box goes to every box of the same idtrackerai fragment in the frames of the chunk not saved yet (from the nearest frame where you gave it, before, else after; marked ↳), as soon as you open them, in any scene. Frames of the chunk you already saved are relabelled too (their boxes on those fragments; a local identity already used there swaps), so a swap fixed in one frame is fixed in the whole chunk.</li>
-            <li><Key>P</Key> copies the boxes of the last frame saved; “Machine proposal” starts again from the tracking.</li>
+            <li><Key>P</Key> copies the boxes of the frame just before (as you left it, saved or not); <Key>Shift</Key>+<Key>P</Key> with the pointer on a dashed region replaces only the boxes inside it (by their centre) with those of the frame before, and does nothing outside the regions (a local identity copied in is taken off a box outside the region); “Machine proposal” starts again from the tracking.</li>
           </ul>
           <p>
             <b>Integrate</b> runs <code>integrate-human-annotations --source validator</code> over a ZT range. Without one it covers

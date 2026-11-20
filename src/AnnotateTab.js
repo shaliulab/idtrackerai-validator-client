@@ -311,7 +311,7 @@ const sameBoxes = (a, b) => JSON.stringify(geometry(a)) === JSON.stringify(geome
 const unsure = (b) => b.confidence === 'low' || b.confidence === 'medium';
 const fmtTime = (t) => (t ? new Date(t * 1000).toLocaleString() : '');
 
-function BoxCanvas({ image, width, height, boxes, fragments, regions, focus, machine, selected, setSelected, onDraft, onCommit, newLabel, showMachine, drawMode, onDrawn }) {
+function BoxCanvas({ image, width, height, boxes, fragments, regions, focus, machine, selected, setSelected, onDraft, onCommit, newLabel, showMachine, drawMode, onDrawn, onPointer }) {
   const canvasRef = useRef(null);
   const [view, setView] = useState({ zoom: 1, cx: null, cy: null });
   const drag = useRef(null);
@@ -484,6 +484,7 @@ function BoxCanvas({ image, width, height, boxes, fragments, regions, focus, mac
   const clampY = (v) => Math.max(0, Math.min(h, v));
   const onPointerMove = (e) => {
     const [sx, sy] = local(e);
+    if (onPointer) { const [px, py] = toImage(sx, sy); onPointer({ x: px, y: py }); }
     const d = drag.current;
     if (!d) { setHover(drawMode ? null : hit(sx, sy)); return; }
     if (d.kind === 'pan') {
@@ -562,7 +563,7 @@ function BoxCanvas({ image, width, height, boxes, fragments, regions, focus, mac
     <div className="pose-canvas-wrap" style={{ width, height }}>
       <canvas ref={canvasRef} style={{ width, height, display: 'block', cursor }}
               onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp}
-              onPointerLeave={() => setHover(null)} onWheel={onWheel}
+              onPointerLeave={() => { setHover(null); onPointer?.(null); }} onWheel={onWheel}
               onContextMenu={(e) => e.preventDefault()}
               onDoubleClick={(e) => { if (!hit(...local(e))) setView({ zoom: 1, cx: null, cy: null }); }} />
       {!image && <div className="pose-canvas-msg">Loading the frame…</div>}
@@ -666,7 +667,9 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
   const serverSplits = useRef(new Map());           // chunk -> fragment -> [frames]: NEW-FRAGMENT tags of the saved frames
   const localTags = useRef(new Map());              // chunk -> frame -> Set(fragments): tags of the frames edited here
   const worked = useRef(new Set());                 // scenes (k) opened in this session: Save writes all their frames
-  const lastSaved = useRef(null);                   // boxes of the last frame saved (for "copy previous")
+  const leftBoxes = useRef(new Map());              // fn -> its boxes as they were when it was left (saved or not): "copy previous"
+  const pointer = useRef(null);                     // {x, y} of the pointer on the frame (image px), null when off it
+  const lastPointer = useRef(null);                 // where it was last on the frame (for the button)
   const digits = useRef({ text: '', t: 0 });
   const currentRef = useRef(null);
   currentRef.current = current;
@@ -685,7 +688,7 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
   useEffect(() => {
     if (!active || !currentExperiment || fetchedFor.current === currentExperiment) return;
     fetchedFor.current = currentExperiment;
-    setCurrent(null); setFrame(null); setBoxes([]); setLoaded([]); undo.current = []; lastSaved.current = null;
+    setCurrent(null); setFrame(null); setBoxes([]); setLoaded([]); undo.current = []; leftBoxes.current.clear();
     fetchInfo();
   }, [active, currentExperiment, fetchInfo]);
 
@@ -754,7 +757,7 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
   })), [cached]);
   const dataOf = useCallback((fn) => cached(datas.current, fn, (n) => queue.current.then(() => api.get(`/api/annotate/frame/${n}`)).then((r) => unwrap(r.data))), [cached]);  // after the saves sent
   const forget = useCallback((fn) => { if (fn == null) datas.current.clear(); else datas.current.delete(fn); }, []);
-  useEffect(() => { images.current.clear(); datas.current.clear(); edits.current.clear(); trackOut.current.clear(); hiddenAt.current.clear(); fragLabels.current.clear(); serverSplits.current.clear(); localTags.current.clear(); worked.current.clear(); }, [currentExperiment]);
+  useEffect(() => { images.current.clear(); datas.current.clear(); edits.current.clear(); trackOut.current.clear(); hiddenAt.current.clear(); fragLabels.current.clear(); serverSplits.current.clear(); localTags.current.clear(); worked.current.clear(); leftBoxes.current.clear(); }, [currentExperiment]);
   useEffect(() => { datas.current.clear(); }, [reloadKey, info?.proposal_run?.t]);
   useEffect(() => { edits.current.clear(); setEditsVersion((v) => v + 1); }, [info?.proposal_run?.t]);
 
@@ -906,7 +909,6 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
     const p = queue.current.then(() => api.post(`/api/annotate/frame/${fn}`, { boxes: list, experiment: currentExperiment })
       .then((r) => {
         const d = unwrap(r.data);
-        lastSaved.current = d.boxes;
         if (edits.current.delete(fn)) setEditsVersion((v) => v + 1);
         forget(fn);
         // other frames of the chunk inherit labels from the saved ones (server side): read them again
@@ -939,11 +941,16 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
 
   // leaving a frame: its edits are saved (an untouched proposal is not)
   // open frame fn (and make scene k the current one); false when the frame cannot be left
+  const justSaved = useRef(null);
   const go = useCallback((fn, k) => {
     if (fn == null) return false;
     if (fn === current) { if (k != null) setSceneK(k); return true; }
-    if (current != null && frame?.frame_number === current) trackOut.current.set(current, boxes.filter((b) => b.track));
-    if (dirty) {
+    if (current != null && frame?.frame_number === current) {
+      trackOut.current.set(current, boxes.filter((b) => b.track));
+      leftBoxes.current.set(current, boxes);
+    }
+    // Enter has just saved it (`dirty` of this render does not know yet): not sent twice
+    if (dirty && justSaved.current !== current) {
       if (duplicates.length) { log('warning', `Frame ${current}: local identity ${duplicates.join(', ')} is on two boxes. Fix it (or Ctrl+Z) before leaving the frame`); return false; }
       save(current, boxes);
     }
@@ -1006,7 +1013,9 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
     if (duplicates.length) { log('warning', `Local identity ${duplicates.join(', ')} is on two boxes`); return; }
     save(current, boxes);
     setLoaded(boxes);
+    justSaved.current = current;
     stepFrame(1);
+    justSaved.current = null;
   }, [current, frame, boxes, duplicates, save, stepFrame, log]);
 
   // Ctrl+S: save everything, staying here (as CVAT): this frame as shown, then every frame of each scene opened in
@@ -1038,7 +1047,6 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
       const list = [...frames].sort((a, b) => a - b);
       if (!here && !list.length) { log('info', 'Nothing to save'); return; }
       if (list.length > 20) log('info', `Saving ${list.length} frames of ${worked.current.size} scene(s)…`);
-      const keepLast = here ? boxes : lastSaved.current;   // "copy previous" stays the frame you saved
       let done = 0;
       for (const fn of list) {
         done += 1;
@@ -1051,6 +1059,7 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
         }
         const shown = composeRef.current(fn, v);
         trackOut.current.set(fn, shown.filter((b) => b.track));
+        leftBoxes.current.set(fn, shown);
         if (v.saved && !edits.current.has(fn) && sameBoxes(shown, v.boxes)) continue;
         const seen = new Set();
         const dup = shown.find((b) => /^\d+$/.test(b.label) && (seen.has(b.label) || !seen.add(b.label)));
@@ -1058,7 +1067,6 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
         sent.push(save(fn, shown));
       }
       const ok = await Promise.all(sent);
-      lastSaved.current = keepLast;
       const good = ok.filter(Boolean).length;
       failed += ok.length - good;
       log(failed ? 'warning' : 'info', `${good} frame${good === 1 ? '' : 's'} saved${failed ? `, ${failed} not saved (see above)` : ''}`);
@@ -1163,10 +1171,49 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
       .then((r) => commit(unwrap(r.data).boxes))
       .catch((err) => log('error', errorOf(err)));
   }, [current, commit, log]);
-  const copyPrevious = useCallback(() => {
-    if (!lastSaved.current) { log('info', 'No frame saved yet in this session'); return; }
-    commit(lastSaved.current.map((b) => ({ ...b })));
-  }, [commit, log]);
+  // the boxes of frame fn as it was left in this session, else as it would open (its carried labels and tracks
+  // included); never waits for a save to come back
+  const boxesOfFrame = useCallback(async (fn) => {
+    if (leftBoxes.current.has(fn)) return leftBoxes.current.get(fn);
+    const v = await dataOf(fn).promise;
+    return composeRef.current(fn, v);
+  }, [dataOf]);
+  const plain = ({ x0, y0, x1, y1, label, track }) => (track ? { x0, y0, x1, y1, label, track } : { x0, y0, x1, y1, label });
+  // P: the boxes of the frame just before this one
+  const copyPrevious = useCallback(async () => {
+    const fn = current;
+    if (fn == null || !ready) return;
+    let prev;
+    try { prev = await boxesOfFrame(fn - 1); } catch (err) { log('error', `Frame ${fn - 1}: ${errorOf(err)}`); return; }
+    if (currentRef.current !== fn) return;
+    commit(prev.map(plain));
+    log('info', `Frame ${fn}: boxes of frame ${fn - 1} copied`);
+  }, [current, ready, boxesOfFrame, commit, log]);
+  // Shift+P: only inside the region to look at (dashed box) under the pointer: this frame's boxes whose centre is in
+  // it are replaced by those of the frame before; nothing happens with the pointer outside every region
+  const copyPreviousRegion = useCallback(async (p) => {
+    const fn = current;
+    if (fn == null || !ready || !p) return;
+    const region = regions.find((r) => inside(r, p.x, p.y));
+    if (!region) return;
+    let prev;
+    try { prev = await boxesOfFrame(fn - 1); } catch (err) { log('error', `Frame ${fn - 1}: ${errorOf(err)}`); return; }
+    if (currentRef.current !== fn) return;
+    const within = (b) => inside(region, (b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2);
+    const kept = boxes.filter((b) => !within(b));
+    const added = prev.filter(within).map(plain);
+    // a local identity copied in that a box outside the region also has: taken off the box outside (to check)
+    const ids = new Set(added.filter((b) => /^\d+$/.test(b.label)).map((b) => b.label));
+    const tracks = new Set(kept.map((b) => b.track).filter(Boolean));
+    const cleared = kept.filter((b) => ids.has(b.label)).map((b) => b.label);
+    const next = [
+      ...kept.map((b) => (ids.has(b.label) ? { ...b, label: '', inherited: undefined } : b)),
+      ...added.map((b) => (b.track && tracks.has(b.track) ? (({ track, ...rest }) => rest)(b) : b)),
+    ];
+    commit(next);
+    setSelected(null);
+    log(cleared.length ? 'warning' : 'info', `Frame ${fn}: ${added.length} box${added.length === 1 ? '' : 'es'} of frame ${fn - 1} copied into region ${regions.indexOf(region) + 1} (${boxes.length - kept.length} replaced)${cleared.length ? `; ${cleared.join(', ')} taken off a box outside the region` : ''}`);
+  }, [current, ready, regions, boxes, boxesOfFrame, commit, log]);
 
   const stepFlag = useCallback((d) => {
     const list = todoFlags.filter((f) => f !== current);
@@ -1290,7 +1337,7 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
 
   // keys (while shown, not in a field)
   const keys = useRef({});
-  keys.current = { drawMode, hideSelected, saveNow, stepFrame, stepScene, stepFlag, accept, undoLast, setLabel, removeSelected, copyPrevious, toggleFull, full, focusRegion, focusIdx, focus, boxes, selected, nAnimals, log };
+  keys.current = { drawMode, hideSelected, saveNow, stepFrame, stepScene, stepFlag, accept, undoLast, setLabel, removeSelected, copyPrevious, copyPreviousRegion, toggleFull, full, focusRegion, focusIdx, focus, boxes, selected, nAnimals, log };
   useEffect(() => {
     if (!active) return undefined;
     const onKey = (e) => {
@@ -1328,7 +1375,7 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
       // Z: zoom to the next region to look at (the first one after a frame opens), Shift+Z: the whole frame
       else if (e.code === 'KeyZ') { if (e.shiftKey) k.focusRegion(null); else k.focusRegion(k.focus?.mode === 'force' ? k.focusIdx + 1 : k.focusIdx); }
       else if (e.key === 'u' || e.key === 'U') k.setLabel('');
-      else if (e.key === 'p' || e.key === 'P') k.copyPrevious();
+      else if (e.code === 'KeyP') { if (e.shiftKey) k.copyPreviousRegion(pointer.current); else k.copyPrevious(); }
       // D / F: previous / next frame (with Shift: scene), as CVAT; G / Shift+G: next / previous flagged frame
       else if (e.code === 'KeyD') { e.preventDefault(); if (e.shiftKey) k.stepScene(-1); else k.stepFrame(-1); }
       else if (e.code === 'KeyF') { e.preventDefault(); if (e.shiftKey) k.stepScene(1); else k.stepFrame(1); }
@@ -1572,7 +1619,7 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
               <BoxCanvas image={image} width={stageW} height={stageH} boxes={boxes} fragments={fragments}
                          regions={showRegions ? regions : null} focus={focus} machine={frame?.machine} selected={selected} setSelected={setSelected}
                          onDraft={onDraft} onCommit={onCommit} newLabel={newLabel} showMachine={showMachine}
-                         drawMode={drawMode} onDrawn={() => setDrawMode(null)} />
+                         drawMode={drawMode} onDrawn={() => setDrawMode(null)} onPointer={(q) => { pointer.current = q; if (q) lastPointer.current = q; }} />
             )}
             {frame?.error && <div className="qc-muted">{frame.error}</div>}
             {current == null && <div className="qc-muted">Pick a scene in the list (or → to start with the first one).</div>}
@@ -1583,7 +1630,9 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
                         title="Save this frame as shown and go to the next one (Enter)">Save &amp; next (Enter)</button>
                 <button onClick={saveNow} disabled={!frame || !!frame.error || duplicates.length > 0}
                         title="Save this frame and every frame of the scenes you opened in this session (as shown, with the labels and tracks carried into them), and stay here (Ctrl+S)">Save all (Ctrl+S)</button>
-                <button onClick={copyPrevious} title="Boxes of the last frame saved (P)">Copy previous (P)</button>
+                <button onClick={copyPrevious} title="All the boxes of the frame just before this one, as you left it (P)">Copy previous (P)</button>
+                <button onMouseDown={(e) => e.preventDefault()} onClick={() => copyPreviousRegion(lastPointer.current)} disabled={!regions.length}
+                        title="Only inside the dashed region the pointer was last on: the boxes there become those of the frame before (Shift+P with the pointer on a region; nothing happens outside the regions)">Copy previous in region (Shift+P)</button>
                 <button className={drawMode === 'shape' ? 'btn-primary' : undefined} onClick={() => setDrawMode((m) => (m === 'shape' ? null : 'shape'))}
                         title="The next drag on the image draws a box of this frame only (N; N / Esc cancels)">New shape (N)</button>
                 <button className={drawMode === 'track' ? 'btn-primary' : undefined} onClick={() => setDrawMode((m) => (m === 'track' ? null : 'track'))}
