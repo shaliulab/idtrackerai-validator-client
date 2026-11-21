@@ -47,8 +47,10 @@ const SHORTCUTS = [
     [<Key>Enter</Key>, 'Save the frame and open the next one'],
     [<><Key>←</Key> / <Key>→</Key> or <Key>D</Key> / <Key>F</Key></>, 'Previous / next frame of the scenes (Shift: scene), D / F as in CVAT'],
     [<><Key>U</Key> / <Key>Del</Key> / <Key>Tab</Key></>, 'No label / delete the box / next box'],
-    [<Key>P</Key>, 'Copy the boxes of the frame just before (as you left it)'],
-    [<><Key>Shift</Key>+<Key>P</Key></>, 'Copy the frame before only inside the dashed region under the pointer'],
+    [<Key>P</Key>, 'Copy the frame before only inside the dashed region under the pointer'],
+    [<><Key>Shift</Key>+<Key>P</Key></>, 'Copy all the boxes of the frame just before (as you left it)'],
+    [<Key>.</Key>, 'Repeat the last action (button or key), as in Vim'],
+    [<Key>C</Key>, 'Copy this frame’s boxes inside the dashed region (or the box) under the pointer into the next N frames'],
     [<><Key>Z</Key> / <Key>Shift</Key>+<Key>Z</Key></>, 'Zoom to the next region to look at (dashed orange, listed under "Where to look") / the whole frame'],
     [<Key>M</Key>, 'Full screen: only the frame, its navigation and the labels (M or Esc leaves it)'],
     ['Carry labels (checkbox)', 'A label you change is carried to the next frames of the scene along the fly\'s idtrackerai fragment (until it ends or a frame you saved); those frames are saved when you leave them'],
@@ -633,6 +635,13 @@ export default function HelpTab() {
             was in the last frame. A boundary is listed when a fly is missing on either side, the nearest one is more than
             30 px away, or another fly is less than 50 px further away. Check that each fly keeps its label across it;
             a boundary already in a scene adds its reason there.
+            Scenes marked <b>◆ easy</b> (filter <b>◆ Easy</b>: those not saved yet) are ones the continuity proposal should resolve
+            alone. Starting from the last frame before the scene where idtrackerai identified every fly, each fly is followed by
+            position. Wherever idtrackerai identified a fly, the two agree, and the only flies missing sit at a notch, where
+            their box is kept. Check the "!" boxes at the notches, then Enter through the frames. On the 12X experiment, 96 % of
+            the frames of such scenes came out entirely right. They are found in the background the first time the list is
+            opened, which takes minutes (the header shows the progress), and are found again when the tracking or scene_qc.csv
+            changes.
             The top of the list says, in ZT, what the scene proposer <b>looked at</b> (the tracking data it read), where its
             scenes start and end, and what is <b>tracked</b> and <b>recorded</b>; it warns in red when chunks were tracked after
             the scenes were made (Prepare scenes again) or when idtrackerai stopped before the end of the recording.
@@ -656,10 +665,22 @@ export default function HelpTab() {
             the chunk boundaries; your frames are the ones saved under your name (the login, else the Drive exchange name).
           </p>
           <p>
-            A frame not saved yet opens with the machine's proposal: one box around each tracked blob, with its local identity
-            (dashed <b>?</b> = no identity). Fix what is wrong, then <Key>Enter</Key> saves the frame and opens the next one (<Key>Ctrl</Key>+<Key>S</Key>, <b>Save all</b>, stays here and saves this frame and every frame of each scene you opened in this session, as each would open: its proposal with the labels and tracks carried into it. Frames of scenes you never opened are left alone). Closing or reloading the page while something is not saved yet makes the browser ask first. The experiment picker is grayed out while saves are on their way, and loading another experiment with annotations not saved yet asks first (they would be dropped).
+            A frame not saved yet opens with the <b>continuity proposal</b>: one box around each tracked blob, its identity
+            followed by position from the last frame saved before it in the chunk (else from the last frame before the
+            scene where idtrackerai identified every fly), not idtrackerai's identity, which flips between close flies.
+            A fly no longer detected at a notch (the image is distorted there) keeps a box where it was last seen. Boxes
+            whose identity differs from idtrackerai's, kept at a notch or with another fly almost as close carry a yellow
+            <b>!</b>; flies lost elsewhere are listed above the labels (⚑). The header shows the frame it started from.
+            Without such a frame in the chunk the frame opens with idtrackerai's proposal (its local identities, dashed
+            <b>?</b> = no identity); the <b>Continuity</b> and <b>idtrackerai boxes</b> buttons give either again. Since
+            each frame starts from the one you saved before it, fixing a frame and pressing Enter carries the fix on. Fix what is wrong, then <Key>Enter</Key> saves the frame and opens the next one (<Key>Ctrl</Key>+<Key>S</Key>, <b>Save all</b>, stays here and saves this frame and every frame of each scene you opened in this session, as each would open: its proposal with the labels and tracks carried into it. Frames of scenes you never opened are left alone). Closing or reloading the page while something is not saved yet makes the browser ask first. The experiment picker is grayed out while saves are on their way, and loading another experiment with annotations not saved yet asks first (they would be dropped).
             Edits are also saved when you leave the frame; a proposal you did not touch is not. Saved frames turn green in the
             strip above the image and count as validated.
+          </p>
+          <p>
+            The <b>ZT</b> boxes above the scene list (from – to, hours with the “ZT0 at” hour, beyond 24 for the next
+            days; either may stay empty) list only the scenes starting in that interval; ← / → and the scene steps then
+            move through those only. ✕ clears it.
           </p>
           <p>
             <b>Propose (YOLO + solver)</b> gives the frames a better start: the same detections and identity solver as the CVAT
@@ -674,7 +695,7 @@ export default function HelpTab() {
             <li><Key>1</Key>…<Key>9</Key> (or <Key>Shift</Key>+<Key>1</Key>…<Key>9</Key>) label the selected box; <Key>Shift</Key>+<Key>0</Key> is 10 and <Key>Ctrl</Key>+<Key>Shift</Key>+<Key>1</Key>…<Key>9</Key> are 11…19 (two digits typed quickly also work with 10+ flies); a local identity already on another box swaps with it. <Key>U</Key> removes the label, <Key>Del</Key> the box.</li>
             <li>Tags FMB, NEW-FRAGMENT and CROSSING (buttons) mean the same as in CVAT. A NEW-FRAGMENT tag on a fly also splits its idtrackerai fragment here: from that frame on it is a new fragment until the end of the chunk, so labels are no longer carried across the tag. When two flies trade places in a frame and fixing it swaps the frames before or after, tag both flies NEW-FRAGMENT in that frame (and in the next one, if the fly's fragment goes on wrong), then fix the labels.</li>
             <li>With <b>Carry labels</b> on, a local identity you give a box goes to every box of the same idtrackerai fragment in the frames of the chunk not saved yet (from the nearest frame where you gave it, before, else after; marked ↳), as soon as you open them, in any scene. Frames of the chunk you already saved are relabelled too (their boxes on those fragments; a local identity already used there swaps), so a swap fixed in one frame is fixed in the whole chunk.</li>
-            <li><Key>P</Key> copies the boxes of the frame just before (as you left it, saved or not); <Key>Shift</Key>+<Key>P</Key> with the pointer on a dashed region replaces only the boxes inside it (by their centre) with those of the frame before, and does nothing outside the regions (a local identity copied in is taken off a box outside the region); “Machine proposal” starts again from the tracking.</li>
+            <li><Key>P</Key> with the pointer on a dashed region replaces only the boxes inside it (by their centre) with those of the frame before, and does nothing outside the regions (a local identity copied in is taken off a box outside the region); <Key>Shift</Key>+<Key>P</Key> copies all the boxes of the frame just before (as you left it, saved or not); <Key>C</Key> (<b>Copy region forward</b>, N frames in the box next to it) puts this frame’s boxes inside the dashed region under the pointer into the same rectangle of the next N frames, replacing the boxes there (by their centre); those frames show “region from frame …” and are written when you leave each of them or with Save all; with the pointer on a box outside every region (a frame already corrected has no region left there), P and C use that box with a small margin instead; a dashed region whose problem is gone (e.g. the missing fly got its box) stays on that frame in teal, listed as “resolved”, so P and C still work on it; keys typed while a box (N frames, ZT, Frame…) has the cursor go to that box: moving the mouse onto the frame gives them back to the tab; <Key>.</Key> or <b>Repeat</b> does the last action again (a button of the frame, a label, a step, or their keys; a label goes to the box selected now, P to the region under the pointer now); “Machine proposal” starts again from the tracking.</li>
           </ul>
           <p>
             <b>Integrate</b> runs <code>integrate-human-annotations --source validator</code> over a ZT range. Without one it covers

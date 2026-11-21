@@ -211,11 +211,30 @@ const applyLabels = (boxes, frags, mapping, from) => {
   }
   return next;
 };
+// `target` with its boxes whose centre is inside `region` replaced by those of `source` there; a local identity brought in
+// that a box outside the region also has is taken off that box (`cleared`), a track id already outside is dropped
+const replaceInRegion = (target, source, region) => {
+  const within = (b) => inside(region, (b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2);
+  const kept = target.filter((b) => !within(b));
+  const added = source.filter(within).map(({ x0, y0, x1, y1, label, track }) => (track ? { x0, y0, x1, y1, label, track } : { x0, y0, x1, y1, label }));
+  const ids = new Set(added.filter((b) => /^\d+$/.test(b.label)).map((b) => b.label));
+  const tracks = new Set(kept.map((b) => b.track).filter(Boolean));
+  const cleared = kept.filter((b) => ids.has(b.label)).map((b) => b.label);
+  const boxes = [
+    ...kept.map((b) => (ids.has(b.label) ? { ...b, label: '', inherited: undefined } : b)),
+    ...added.map((b) => (b.track && tracks.has(b.track) ? (({ track, ...rest }) => rest)(b) : b)),
+  ];
+  return { boxes, added: added.length, replaced: target.length - kept.length, cleared };
+};
+const FORWARD_MAX = 500;
+const BOX_AREA_PAD = 20;      // px around a box P / C use when the pointer is on a box outside every region      // frames "Copy region forward" writes at most
 const PROPAGATE_MAX = 1000;   // frames a label change is carried forward at most (within its scene)
 // Where to look in a frame: boxes and spots that may hide an identity problem, grouped into regions
 // [{x0, y0, x1, y1, reasons}] (most reasons first)
 const REGION_PAD = 40;        // px of the frame around each spot; spots closer than twice this join one region
-const MIN_FOCUS = 250;        // px of the frame shown at least when zooming to a region
+const MIN_FOCUS = 250;
+const REGION_OPEN = '#ff7a00';      // a region to look at
+const REGION_RESOLVED = '#22c3a6';  // a region of this frame that no longer has a problem (kept for P / C)        // px of the frame shown at least when zooming to a region
 const inside = (b, x, y) => x >= b.x0 && x <= b.x1 && y >= b.y0 && y <= b.y1;
 const overlaps = (a, b) => a.x0 < b.x1 && b.x0 < a.x1 && a.y0 < b.y1 && b.y0 < a.y1;
 const findRegions = (boxes, fragments, frame, prevBoxes, duplicates) => {
@@ -267,7 +286,8 @@ const findRegions = (boxes, fragments, frame, prevBoxes, duplicates) => {
 const CACHE_FRAMES = 80;      // frames kept in the browser (images + boxes)
 const PREFETCH_AHEAD = 20;    // frames loaded ahead in ← / → order
 const PREFETCH_BEHIND = 6;
-const FILTERS = [['todo', 'To do'], ['flagged', '⚑ Flagged'], ['all', 'All'], ['done', 'Done']];
+const FILTERS = [['todo', 'To do'], ['easy', '◆ Easy'], ['flagged', '⚑ Flagged'], ['all', 'All'], ['done', 'Done']];
+const EASY_TIP = 'Easy: from the last frame before it with every fly identified, the continuity proposal follows each fly by position, agreeing with idtrackerai wherever it identified one, and the only flies missing are kept at a notch. Accepting each frame’s proposal (Enter) should do: check the ! boxes at the notches';
 const UNDO_DEPTH = 100;
 const HANDLE = 6;            // px (screen) around an edge / corner of a box that resizes it
 const MIN_DRAG = 4;          // px (screen) before a drag draws a box
@@ -311,7 +331,7 @@ const sameBoxes = (a, b) => JSON.stringify(geometry(a)) === JSON.stringify(geome
 const unsure = (b) => b.confidence === 'low' || b.confidence === 'medium';
 const fmtTime = (t) => (t ? new Date(t * 1000).toLocaleString() : '');
 
-function BoxCanvas({ image, width, height, boxes, fragments, regions, focus, machine, selected, setSelected, onDraft, onCommit, newLabel, showMachine, drawMode, onDrawn, onPointer }) {
+function BoxCanvas({ image, width, height, boxes, fragments, regions, focus, machine, selected, setSelected, onDraft, onCommit, newLabel, showMachine, drawMode, onDrawn, onPointer, flash }) {
   const canvasRef = useRef(null);
   const [view, setView] = useState({ zoom: 1, cx: null, cy: null });
   const drag = useRef(null);
@@ -373,14 +393,15 @@ function BoxCanvas({ image, width, height, boxes, fragments, regions, focus, mac
     (regions || []).forEach((r, k) => {
       const [x0, y0] = toScreen(r.x0, r.y0);
       const [x1, y1] = toScreen(r.x1, r.y1);
+      const color = r.resolved ? REGION_RESOLVED : REGION_OPEN;
       ctx.setLineDash([7, 5]);
       ctx.lineWidth = 2;
-      ctx.strokeStyle = '#ff7a00';
+      ctx.strokeStyle = color;
       ctx.strokeRect(x0, y0, x1 - x0, y1 - y0);
       ctx.setLineDash([]);
       ctx.font = 'bold 12px system-ui, sans-serif';
       ctx.textBaseline = 'top';
-      ctx.fillStyle = '#ff7a00';
+      ctx.fillStyle = color;
       ctx.fillRect(x1 - 18, y1 - 17, 18, 17);
       ctx.fillStyle = '#000';
       ctx.fillText(String(k + 1), x1 - 13, y1 - 15);
@@ -485,6 +506,9 @@ function BoxCanvas({ image, width, height, boxes, fragments, regions, focus, mac
   const onPointerMove = (e) => {
     const [sx, sy] = local(e);
     if (onPointer) { const [px, py] = toImage(sx, sy); onPointer({ x: px, y: py }); }
+    // a field keeping the keyboard (N frames, ZT, Frame…) would swallow the tab's keys: back on the frame, they are the tab's
+    const ae = document.activeElement;
+    if (ae && ['INPUT', 'SELECT', 'TEXTAREA'].includes(ae.tagName)) ae.blur();
     const d = drag.current;
     if (!d) { setHover(drawMode ? null : hit(sx, sy)); return; }
     if (d.kind === 'pan') {
@@ -567,6 +591,7 @@ function BoxCanvas({ image, width, height, boxes, fragments, regions, focus, mac
               onContextMenu={(e) => e.preventDefault()}
               onDoubleClick={(e) => { if (!hit(...local(e))) setView({ zoom: 1, cx: null, cy: null }); }} />
       {!image && <div className="pose-canvas-msg">Loading the frame…</div>}
+      {flash && <div className={`bx-flash bx-flash-${flash.level}`} key={flash.t}>{flash.text}</div>}
       {drawMode && image && <div className="bx-draw-badge">{drawMode === 'track' ? 'New track: drag on the image (kept in the next frames until hidden with H) · Shift+N / Esc cancels' : 'New shape: drag on the image · N / Esc cancels'}</div>}
     </div>
   );
@@ -604,6 +629,7 @@ const SceneList = React.memo(function SceneList({ scenes, currentK, onPick, zt0 
                 </td>
                 <td className="qc-muted">{s.done}/{s.length}{s.flags ? <span className="bx-flag" title={`${s.flags} flagged frame(s) not saved yet`}> ⚑{s.flags}</span> : null}</td>
                 <td className="qc-muted bx-reason">
+                  {s.easy != null && <span className="bx-easy" title={`${EASY_TIP} (${s.easy})`}>◆ </span>}
                   {s.boundary != null && (
                     <span className="bx-boundary" title={`Holds a chunk boundary (first frame of the next chunk: ${s.boundary.toLocaleString()}) that the integration may link wrongly: check that each fly keeps its label across it`}>⇄ </span>
                   )}
@@ -704,6 +730,8 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
 
   const annotated = useMemo(() => new Map((info?.annotated || []).map((a) => [a.frame_number, a])), [info]);
   const flagged = useMemo(() => new Set(info?.flagged || []), [info]);
+  // scenes the continuity proposal should resolve alone: start -> why (null while classified)
+  const easyScenes = info?.easy?.scenes || null;
   const nAnimals = info?.n_animals || 0;
 
   // every frame of the scenes, in order: what ← → walk through
@@ -714,11 +742,21 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
       if (annotated.has(f)) done += 1;
       else if (flagged.has(f)) flags += 1;
     }
-    return { ...s, k, done, flags };
-  }), [info, annotated, flagged]);
-  const shownScenes = useMemo(() => scenes.filter((s) => (
-    filter === 'all' || (filter === 'flagged' ? s.flags > 0 : filter === 'done' ? s.done === s.length : s.done < s.length)
-  )), [scenes, filter]);
+    return { ...s, k, done, flags, easy: easyScenes?.[s.start] ?? null };
+  }), [info, annotated, flagged, easyScenes]);
+  // ZT interval of the scene list (ZT of each scene's first frame, with the tab's "ZT0 at"; '' = open end): kept
+  const [sceneZt, setSceneZt] = useState(() => { try { return JSON.parse(localStorage.getItem('fh-annotate-scene-zt')) || ['', '']; } catch { return ['', '']; } });
+  useEffect(() => { try { localStorage.setItem('fh-annotate-scene-zt', JSON.stringify(sceneZt)); } catch { /* ignore */ } }, [sceneZt]);
+  const ztFrom = sceneZt[0] === '' || Number.isNaN(Number(sceneZt[0])) ? null : Number(sceneZt[0]);
+  const ztTo = sceneZt[1] === '' || Number.isNaN(Number(sceneZt[1])) ? null : Number(sceneZt[1]);
+  const ztFiltered = ztFrom != null || ztTo != null;
+  const shownScenes = useMemo(() => scenes.filter((s) => {
+    if (!(filter === 'all' || (filter === 'flagged' ? s.flags > 0 : filter === 'easy' ? s.easy != null && s.done < s.length : filter === 'done' ? s.done === s.length : s.done < s.length))) return false;
+    if (!ztFiltered) return true;
+    if (s.clock == null) return false;   // no time: cannot be placed in the interval
+    const zt = s.clock / 3600 - zt0;
+    return (ztFrom == null || zt >= ztFrom) && (ztTo == null || zt <= ztTo);
+  }), [scenes, filter, ztFiltered, ztFrom, ztTo, zt0]);
   // flagged frames not saved yet, in order
   const todoFlags = useMemo(() => [...flagged].filter((f) => !annotated.has(f)).sort((a, b) => a - b), [flagged, annotated]);
   // scenes of scene_qc.csv can overlap (each starts 2 frames before its first failure): the scene picked (sceneK) is the
@@ -776,8 +814,8 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
   const compose = useCallback((fn, v) => {
     let shown = v.boxes;
     if (v.fragment_splits) serverSplits.current.set(v.chunk, new Map(Object.entries(v.fragment_splits).map(([f, fs]) => [Number(f), fs])));
+    shown = edits.current.get(fn)?.boxes ?? shown;   // also saved frames (Copy region forward)
     if (!v.saved) {
-      shown = edits.current.get(fn)?.boxes ?? shown;
       if (carry) shown = inheritFragments(shown, v.machine, fragLabels.current.get(v.chunk), fn, splitsOf(v.chunk));
     }
     const prev = trackOut.current.get(fn - 1) ?? datas.current.get(fn - 1)?.value?.boxes?.filter((b) => b.track);
@@ -880,18 +918,27 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
   }, [boxes, nAnimals]);
   const unassigned = boxes.filter((b) => !b.label).length;
   const fragments = useMemo(() => fragmentsOf(boxes, frame?.machine), [boxes, frame]);
+  // regions found earlier on this frame and no longer (e.g. the missing fly got its box) stay, `resolved` (drawn in
+  // another colour, listed after the open ones): P / C still work on them
+  const pastRegions = useRef(new Map());            // fn -> regions seen on it in this session
+  useEffect(() => { pastRegions.current.clear(); }, [currentExperiment]);
   const regions = useMemo(() => {
     if (current == null || !frame || frame.error || frame.frame_number !== current) return [];
     const prev = edits.current.get(current - 1)?.boxes ?? datas.current.get(current - 1)?.value?.boxes;
-    return findRegions(boxes, fragments, frame, prev, duplicates);
+    const live = findRegions(boxes, fragments, frame, prev, duplicates);
+    const resolved = (pastRegions.current.get(current) || []).filter((r) => !live.some((l) => overlaps(l, r)))
+      .map((r) => ({ ...r, resolved: true }));
+    pastRegions.current.set(current, [...live.map(({ resolved: _r, ...r }) => r), ...resolved.map(({ resolved: _r, ...r }) => r)]);
+    return [...live, ...resolved];
   }, [boxes, fragments, frame, current, duplicates]);
+  const openRegions = regions.filter((r) => !r.resolved).length;
   // zoom to the first region when a frame opens (if on), then Z / the list for the others
   const autoFocused = useRef(null);
   useEffect(() => {
     if (current == null || frame?.frame_number !== current || autoFocused.current === current) return;
     autoFocused.current = current;
     setFocusIdx(0);
-    if (zoomProblems && regions.length) setFocus({ rect: regions[0], mode: 'ensure', key: `auto-${current}` });
+    if (zoomProblems && regions.length && !regions[0].resolved) setFocus({ rect: regions[0], mode: 'ensure', key: `auto-${current}` });
   }, [zoomProblems, current, frame, regions]);
   const focusRegion = useCallback((k) => {
     if (k == null) { setFocus({ rect: null, key: `all-${Date.now()}` }); return; }
@@ -913,6 +960,8 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
         forget(fn);
         // other frames of the chunk inherit labels from the saved ones (server side): read them again
         if (relabel && prev) for (const [k, e] of [...datas.current]) if (e.value?.chunk === prev.chunk) datas.current.delete(k);
+        // the continuity proposals after it start from this frame now (its boxes, a fly at a notch moved included)
+        for (const [k, e] of [...datas.current]) if (k > fn && k !== currentRef.current && e.value?.source === 'continuity' && e.value.chunk === d.chunk) datas.current.delete(k);
         setInfo((old) => {
           if (!old) return old;
           const rest = old.annotated.filter((a) => a.frame_number !== fn);
@@ -1173,47 +1222,91 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
   }, [current, commit, log]);
   // the boxes of frame fn as it was left in this session, else as it would open (its carried labels and tracks
   // included); never waits for a save to come back
+  // read without waiting for the saves queued (dataOf waits for all of them, seconds or more while a Save all or label
+  // carries are on their way): a frame left here is in leftBoxes, a frame with copied / carried boxes in edits
   const boxesOfFrame = useCallback(async (fn) => {
     if (leftBoxes.current.has(fn)) return leftBoxes.current.get(fn);
-    const v = await dataOf(fn).promise;
+    const known = datas.current.get(fn)?.value;
+    if (known) return composeRef.current(fn, known);
+    if (edits.current.has(fn)) return edits.current.get(fn).boxes;
+    const v = unwrap((await api.get(`/api/annotate/frame/${fn}`)).data);
     return composeRef.current(fn, v);
-  }, [dataOf]);
+  }, []);
   const plain = ({ x0, y0, x1, y1, label, track }) => (track ? { x0, y0, x1, y1, label, track } : { x0, y0, x1, y1, label });
+  // what the copy keys did, also shown on the frame for a few seconds (the console may be folded or scrolled up)
+  const [flash, setFlash] = useState(null);
+  useEffect(() => { if (!flash) return undefined; const id = setTimeout(() => setFlash(null), 4000); return () => clearTimeout(id); }, [flash]);
+  const say = useCallback((level, text) => { log(level, text); setFlash({ level, text, t: Date.now() }); }, [log]);
   // P: the boxes of the frame just before this one
   const copyPrevious = useCallback(async () => {
     const fn = current;
     if (fn == null || !ready) return;
     let prev;
-    try { prev = await boxesOfFrame(fn - 1); } catch (err) { log('error', `Frame ${fn - 1}: ${errorOf(err)}`); return; }
+    try { prev = await boxesOfFrame(fn - 1); } catch (err) { say('error', `Frame ${fn - 1}: ${errorOf(err)}`); return; }
     if (currentRef.current !== fn) return;
     commit(prev.map(plain));
-    log('info', `Frame ${fn}: boxes of frame ${fn - 1} copied`);
-  }, [current, ready, boxesOfFrame, commit, log]);
+    say('info', `Frame ${fn}: boxes of frame ${fn - 1} copied`);
+  }, [current, ready, boxesOfFrame, commit, say]);
   // Shift+P: only inside the region to look at (dashed box) under the pointer: this frame's boxes whose centre is in
   // it are replaced by those of the frame before; nothing happens with the pointer outside every region
+  // the area P / C act on: the dashed region under the pointer, else the box under it (the smallest, + BOX_AREA_PAD:
+  // a frame already corrected has no region left where the problem was) -> {rect, name} or null
+  const areaAt = useCallback((p) => {
+    if (!p) return null;
+    const k = regions.findIndex((r) => inside(r, p.x, p.y));
+    if (k >= 0) return { rect: regions[k], name: `region ${k + 1}` };
+    const hits = boxes.filter((b) => inside(b, p.x, p.y)).sort((a, b) => (a.x1 - a.x0) * (a.y1 - a.y0) - (b.x1 - b.x0) * (b.y1 - b.y0));
+    if (!hits.length) return null;
+    const b = hits[0];
+    return { rect: { x0: b.x0 - BOX_AREA_PAD, y0: b.y0 - BOX_AREA_PAD, x1: b.x1 + BOX_AREA_PAD, y1: b.y1 + BOX_AREA_PAD }, name: `box ${b.label || '?'}` };
+  }, [regions, boxes]);
   const copyPreviousRegion = useCallback(async (p) => {
     const fn = current;
-    if (fn == null || !ready || !p) return;
-    const region = regions.find((r) => inside(r, p.x, p.y));
-    if (!region) return;
+    if (fn == null) return;
+    if (!ready) { say('info', 'Copy previous in region: the frame is still loading, try again'); return; }
+    const area = areaAt(p);
+    if (!area) { say('info', 'Copy previous in region: the pointer is not on a dashed region or a box, nothing copied'); return; }
+    const region = area.rect;
     let prev;
-    try { prev = await boxesOfFrame(fn - 1); } catch (err) { log('error', `Frame ${fn - 1}: ${errorOf(err)}`); return; }
+    try { prev = await boxesOfFrame(fn - 1); } catch (err) { say('error', `Frame ${fn - 1}: ${errorOf(err)}`); return; }
     if (currentRef.current !== fn) return;
-    const within = (b) => inside(region, (b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2);
-    const kept = boxes.filter((b) => !within(b));
-    const added = prev.filter(within).map(plain);
-    // a local identity copied in that a box outside the region also has: taken off the box outside (to check)
-    const ids = new Set(added.filter((b) => /^\d+$/.test(b.label)).map((b) => b.label));
-    const tracks = new Set(kept.map((b) => b.track).filter(Boolean));
-    const cleared = kept.filter((b) => ids.has(b.label)).map((b) => b.label);
-    const next = [
-      ...kept.map((b) => (ids.has(b.label) ? { ...b, label: '', inherited: undefined } : b)),
-      ...added.map((b) => (b.track && tracks.has(b.track) ? (({ track, ...rest }) => rest)(b) : b)),
-    ];
-    commit(next);
+    const r = replaceInRegion(boxes, prev, region);
+    commit(r.boxes);
     setSelected(null);
-    log(cleared.length ? 'warning' : 'info', `Frame ${fn}: ${added.length} box${added.length === 1 ? '' : 'es'} of frame ${fn - 1} copied into region ${regions.indexOf(region) + 1} (${boxes.length - kept.length} replaced)${cleared.length ? `; ${cleared.join(', ')} taken off a box outside the region` : ''}`);
-  }, [current, ready, regions, boxes, boxesOfFrame, commit, log]);
+    say(r.cleared.length ? 'warning' : 'info', `Frame ${fn}: ${r.added} box${r.added === 1 ? '' : 'es'} of frame ${fn - 1} copied into ${area.name} (${r.replaced} replaced)${r.cleared.length ? `; ${r.cleared.join(', ')} taken off a box outside the region` : ''}`);
+  }, [current, ready, areaAt, boxes, boxesOfFrame, commit, say]);
+  // C: this frame's boxes inside the region under the pointer go into the same rectangle of the next `forwardN`
+  // frames (as edits not saved yet, shown when each frame opens and written when it is left or by Save all)
+  const [forwardN, setForwardN] = useState(() => { try { const v = Number(localStorage.getItem('fh-annotate-forward-n')); return v >= 1 ? v : 10; } catch { return 10; } });
+  useEffect(() => { try { localStorage.setItem('fh-annotate-forward-n', String(forwardN)); } catch { /* ignore */ } }, [forwardN]);
+  const copyRegionForward = useCallback(async (p) => {
+    const fn = current;
+    if (fn == null) return;
+    if (!ready) { say('info', 'Copy region forward: the frame is still loading, try again'); return; }
+    const area = areaAt(p);
+    if (!area) { say('info', 'Copy region forward: the pointer is not on a dashed region or a box, nothing copied'); return; }
+    const region = area.rect;
+    const n = Math.max(1, Math.min(FORWARD_MAX, Math.round(forwardN) || 1));
+    const source = boxes;
+    say('info', `Frame ${fn}: copying ${area.name} into frames ${fn + 1}–${fn + n}…`);
+    let done = 0;
+    let replaced = 0;
+    const cleared = [];
+    for (let k = fn + 1; k <= fn + n; k += 1) {
+      let target;
+      try { target = await boxesOfFrame(k); } catch (err) { say('error', `Frame ${k}: ${errorOf(err)}`); break; }
+      const r = replaceInRegion(target, source, region);
+      edits.current.set(k, { boxes: r.boxes, from: fn, kind: 'copy' });
+      if (leftBoxes.current.has(k)) leftBoxes.current.set(k, r.boxes);
+      replaced += r.replaced;
+      if (r.cleared.length) cleared.push(`${k} (${r.cleared.join(', ')})`);
+      done += 1;
+    }
+    setEditsVersion((v) => v + 1);
+    if (!done) return;
+    const added = source.filter((b) => inside(region, (b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2)).length;
+    say(cleared.length ? 'warning' : 'info', `Frame ${fn}: ${added} box${added === 1 ? '' : 'es'} of ${area.name} copied into frames ${fn + 1}–${fn + done} (${replaced} replaced; not saved until each frame is left or Save all)${cleared.length ? `; taken off a box outside the region in frame ${cleared.join(', ')}` : ''}`);
+  }, [current, ready, areaAt, boxes, forwardN, boxesOfFrame, say]);
 
   const stepFlag = useCallback((d) => {
     const list = todoFlags.filter((f) => f !== current);
@@ -1335,18 +1428,67 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
   }, []);
   useEffect(() => { if (!active && full) toggleFull(); }, [active, full, toggleFull]);
 
+  // the frame's actions (buttons and their keys), so "." / Repeat does the last one again (as Vim's "."): `src` =
+  // 'key' or 'button'; "Copy previous in region" takes the pointer now from a key, where it was last on the frame
+  // from a button
+  const actions = useRef({});
+  actions.current = {
+    accept: () => accept(),
+    saveNow: () => saveNow(),
+    copyAll: () => copyPrevious(),
+    copyRegion: (src) => copyPreviousRegion(src === 'key' ? pointer.current : lastPointer.current),
+    copyForward: (src) => copyRegionForward(src === 'key' ? pointer.current : lastPointer.current),
+    draw: (src, kind) => setDrawMode((m) => (m === kind ? null : kind)),
+    hide: () => hideSelected(),
+    remove: () => removeSelected(),
+    proposal: (src, which) => resetToProposal(which),
+    unsave: () => unsave(),
+    groupViewer: () => onOpenFrame?.(current),
+    label: (src, l) => setLabel(l),
+    frame: (src, d) => stepFrame(d),
+    scene: (src, d) => stepScene(d),
+    flag: (src, d) => stepFlag(d),
+  };
+  const lastAction = useRef(null);                  // [name, args] of the last action done
+  const [lastName, setLastName] = useState(null);
+  const act = useCallback((name, src, ...args) => {
+    lastAction.current = [name, args];
+    setLastName(name);
+    actions.current[name](src, ...args);
+  }, []);
+  const repeat = useCallback((src) => {
+    if (!lastAction.current) { log('info', 'Nothing to repeat yet'); return; }
+    const [name, args] = lastAction.current;
+    actions.current[name](src, ...args);
+  }, [log]);
+  const ACTION_NAMES = {
+    accept: 'Save & next', saveNow: 'Save all', copyAll: 'Copy previous', copyRegion: 'Copy previous in region', copyForward: 'Copy region forward',
+    draw: 'New shape / track', hide: 'Hide track', remove: 'Delete box', proposal: 'Proposal', unsave: 'Unsave',
+    groupViewer: 'Open in Group viewer', label: 'Label', frame: 'Step frame', scene: 'Step scene', flag: 'Flagged frame',
+  };
+  const lastTitle = lastName && lastAction.current
+    ? `${ACTION_NAMES[lastName]}${lastAction.current[1].length ? ` ${lastAction.current[1].map((a) => (a === '' ? '?' : a)).join(' ')}` : ''}`
+    : null;
+
   // keys (while shown, not in a field)
   const keys = useRef({});
-  keys.current = { drawMode, hideSelected, saveNow, stepFrame, stepScene, stepFlag, accept, undoLast, setLabel, removeSelected, copyPrevious, copyPreviousRegion, toggleFull, full, focusRegion, focusIdx, focus, boxes, selected, nAnimals, log };
+  keys.current = { act, repeat, drawMode, hideSelected, saveNow, stepFrame, stepScene, stepFlag, accept, undoLast, setLabel, removeSelected, copyPrevious, copyPreviousRegion, toggleFull, full, focusRegion, focusIdx, focus, boxes, selected, nAnimals, log };
   useEffect(() => {
     if (!active) return undefined;
     const onKey = (e) => {
-      if (['INPUT', 'SELECT', 'TEXTAREA'].includes(e.target.tagName)) return;
+      const t = e.target;
+      if (['INPUT', 'SELECT', 'TEXTAREA'].includes(t.tagName)) {
+        // a ticked checkbox or a number box (N frames, ZT…) keeps the keyboard: letters are still the tab's
+        const passes = t.tagName === 'INPUT' && (['checkbox', 'radio', 'button'].includes(t.type)
+          || (t.type === 'number' && /^[a-zA-Z]$/.test(e.key)));
+        if (!passes) return;
+        t.blur();
+      }
       const k = keys.current;
       if (e.ctrlKey && !e.shiftKey && (e.key === 'z' || e.key === 'Z')) { e.preventDefault(); k.undoLast(); return; }
-      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.code === 'KeyS') { e.preventDefault(); k.saveNow(); return; }
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.code === 'KeyS') { e.preventDefault(); k.act('saveNow', 'key'); return; }
       const label = (n) => {
-        if (n >= 1 && n <= k.nAnimals) k.setLabel(String(n));
+        if (n >= 1 && n <= k.nAnimals) k.act('label', 'key', String(n));
         else k.log('info', `There is no fly ${n} (${k.nAnimals} flies)`);
       };
       // Ctrl+Shift+0…9: local identity 10…19
@@ -1358,28 +1500,33 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
       if (e.ctrlKey || e.metaKey || e.altKey) return;
       // Shift+1…9: local identity 1…9, Shift+0: 10
       if (e.shiftKey && digitOf(e) != null) { e.preventDefault(); const d = digitOf(e); label(d === 0 ? 10 : d); return; }
-      if (e.key === 'ArrowLeft') { e.preventDefault(); if (e.shiftKey) k.stepScene(-1); else k.stepFrame(-1); }
-      else if (e.key === 'ArrowRight') { e.preventDefault(); if (e.shiftKey) k.stepScene(1); else k.stepFrame(1); }
-      else if (e.key === 'Enter') { e.preventDefault(); k.accept(); }
-      else if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); k.removeSelected(); }
+      if (e.key === 'ArrowLeft') { e.preventDefault(); k.act(e.shiftKey ? 'scene' : 'frame', 'key', -1); }
+      else if (e.key === 'ArrowRight') { e.preventDefault(); k.act(e.shiftKey ? 'scene' : 'frame', 'key', 1); }
+      else if (e.key === 'Enter') { e.preventDefault(); k.act('accept', 'key'); }
+      // ".": the last action again (as Vim)
+      else if (e.key === '.') { e.preventDefault(); k.repeat('key'); }
+      else if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); k.act('remove', 'key'); }
       else if (e.key === 'Tab' && k.boxes.length) {
         e.preventDefault();
         const n = k.boxes.length;
         setSelected((s) => (s == null ? (e.shiftKey ? n - 1 : 0) : (s + (e.shiftKey ? n - 1 : 1)) % n));
       }
       else if (e.key === 'Escape' && k.drawMode) setDrawMode(null);
-      else if (e.code === 'KeyN') { const kind = e.shiftKey ? 'track' : 'shape'; setDrawMode((m) => (m === kind ? null : kind)); }
-      else if (e.code === 'KeyH') k.hideSelected();
+      else if (e.code === 'KeyN') k.act('draw', 'key', e.shiftKey ? 'track' : 'shape');
+      else if (e.code === 'KeyH') k.act('hide', 'key');
       else if (e.key === 'Escape') { if (k.full && !document.fullscreenElement) k.toggleFull(); else setSelected(null); }
       else if (e.key === 'm' || e.key === 'M') k.toggleFull();
       // Z: zoom to the next region to look at (the first one after a frame opens), Shift+Z: the whole frame
       else if (e.code === 'KeyZ') { if (e.shiftKey) k.focusRegion(null); else k.focusRegion(k.focus?.mode === 'force' ? k.focusIdx + 1 : k.focusIdx); }
-      else if (e.key === 'u' || e.key === 'U') k.setLabel('');
-      else if (e.code === 'KeyP') { if (e.shiftKey) k.copyPreviousRegion(pointer.current); else k.copyPrevious(); }
+      else if (e.key === 'u' || e.key === 'U') k.act('label', 'key', '');
+      // P: the frame before inside the region under the pointer, Shift+P: all of it
+      else if (e.code === 'KeyP') k.act(e.shiftKey ? 'copyAll' : 'copyRegion', 'key');
+      // C: the region under the pointer into the next N frames
+      else if (e.code === 'KeyC' && !e.shiftKey) k.act('copyForward', 'key');
       // D / F: previous / next frame (with Shift: scene), as CVAT; G / Shift+G: next / previous flagged frame
-      else if (e.code === 'KeyD') { e.preventDefault(); if (e.shiftKey) k.stepScene(-1); else k.stepFrame(-1); }
-      else if (e.code === 'KeyF') { e.preventDefault(); if (e.shiftKey) k.stepScene(1); else k.stepFrame(1); }
-      else if (e.code === 'KeyG') k.stepFlag(e.shiftKey ? -1 : 1);
+      else if (e.code === 'KeyD') { e.preventDefault(); k.act(e.shiftKey ? 'scene' : 'frame', 'key', -1); }
+      else if (e.code === 'KeyF') { e.preventDefault(); k.act(e.shiftKey ? 'scene' : 'frame', 'key', 1); }
+      else if (e.code === 'KeyG') k.act('flag', 'key', e.shiftKey ? -1 : 1);
       else if (digitOf(e) != null) {
         // two digits typed quickly make one number (more than 9 flies)
         const key = String(digitOf(e));
@@ -1388,7 +1535,7 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
         const text = k.nAnimals > 9 && now - d.t < 700 && d.text.length === 1 ? d.text + key : key;
         digits.current = { text, t: now };
         const n = parseInt(text, 10);
-        if (n >= 1 && n <= k.nAnimals) k.setLabel(String(n));
+        if (n >= 1 && n <= k.nAnimals) k.act('label', 'key', String(n));
       }
     };
     window.addEventListener('keydown', onKey);
@@ -1413,11 +1560,13 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
 
   // the unsure chunk boundaries are checked in the background (slow on a cold disk): ask again until they are in
   const boundariesPending = !!info && info.source && info.source.boundaries === null;
+  // so are the easy scenes (minutes): ask again every 15 s
+  const easyPending = !!info?.easy?.pending;
   useEffect(() => {
-    if (!active || !boundariesPending) return undefined;
-    const timer = setTimeout(fetchInfo, 5000);
+    if (!active || !(boundariesPending || easyPending)) return undefined;
+    const timer = setTimeout(fetchInfo, boundariesPending ? 5000 : 15000);
     return () => clearTimeout(timer);
-  }, [active, boundariesPending, info, fetchInfo]);
+  }, [active, boundariesPending, easyPending, info, fetchInfo]);
 
   // an integration started before this page was loaded (the console follows it again)
   const runningIntegration = integrating || info?.integrating || null;
@@ -1520,6 +1669,13 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
             <span className="ov-count" title="Chunk boundaries the integration may link wrongly (⇄ in the list)">
               {boundariesPending ? '· checking chunk boundaries…' : info?.source?.boundaries ? `· ${info.source.boundaries} ⇄` : ''}
             </span>
+            {info?.easy && (
+              <span className="ov-count" title={info.easy.error ? `Could not find the easy scenes: ${info.easy.error}` : EASY_TIP}>
+                {info.easy.pending ? `· finding easy scenes… ${Math.round(100 * (info.easy.pending.items?.[0]?.progress || 0))}%`
+                  : info.easy.error ? '· easy scenes: failed'
+                  : `· ${scenes.filter((s) => s.easy != null && s.done < s.length).length} ◆ to do`}
+              </span>
+            )}
           </header>
           <SceneCoverage cov={info?.coverage} zt0={zt0} chunksize={info?.chunksize} />
           <div className="sl-filters">
@@ -1527,6 +1683,16 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
               <button key={k} className={filter === k ? 'btn-primary' : undefined} onClick={() => setFilter(k)}>{label}</button>
             ))}
             <button onClick={fetchInfo} title="Read the scenes and annotated frames again">↻</button>
+            <span className="sl-zt-filter" title="List only the scenes starting within this ZT interval (hours since ZT0 of the first day, with the “ZT0 at” hour; beyond 24 for the next days). Empty = no limit">
+              ZT
+              <input type="number" step={0.5} value={sceneZt[0]} placeholder="from" style={{ width: 62 }}
+                     onChange={(e) => setSceneZt([e.target.value, sceneZt[1]])} />
+              –
+              <input type="number" step={0.5} value={sceneZt[1]} placeholder="to" style={{ width: 62 }}
+                     onChange={(e) => setSceneZt([sceneZt[0], e.target.value])} />
+              {ztFiltered && <button className="icon-btn" onClick={() => setSceneZt(['', ''])} title="No ZT limit">✕</button>}
+              {ztFiltered && <span className="ov-count">{shownScenes.length} scene{shownScenes.length === 1 ? '' : 's'}</span>}
+            </span>
           </div>
           {info && !info.source?.kind && (
             <div className="qc-muted qc-pad">
@@ -1573,8 +1739,16 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
             {current != null ? (
               <span>
                 Frame {current.toLocaleString()}
-                {frame?.source && <span className={`bx-source bx-source-${frame.source}`}>{{ solver: 'solver proposal', tracking: 'idtrackerai proposal', saved: 'saved' }[frame.source]}</span>}
-                {!frame?.saved && edits.current.get(current) && <span className="bx-source bx-source-carried" title="Labels carried from an earlier frame: saved when you leave this frame">labels from frame {edits.current.get(current).from}</span>}
+                {frame?.source && <span className={`bx-source bx-source-${frame.source}`}>{{ solver: 'solver proposal', tracking: 'idtrackerai proposal', continuity: 'continuity proposal', saved: 'saved' }[frame.source]}</span>}
+                {frame?.source === 'continuity' && frame.anchor && (
+                  <span className="ov-count" title={frame.anchor.kind === 'saved'
+                    ? 'Identities followed by position from the last frame saved before this one'
+                    : 'Identities followed by position from the last frame before the scene where idtrackerai identified every fly (10 frames in a row, none jumping)'}>
+                    {' '}from {frame.anchor.kind === 'saved' ? 'saved' : 'idtrackerai'} frame {frame.anchor.frame_number.toLocaleString()}
+                  </span>)}
+                {edits.current.get(current) && (edits.current.get(current).kind === 'copy'
+                  ? <span className="bx-source bx-source-carried" title="Boxes of a region copied forward from an earlier frame (C): saved when you leave this frame">region from frame {edits.current.get(current).from}</span>
+                  : !frame?.saved && <span className="bx-source bx-source-carried" title="Labels carried from an earlier frame: saved when you leave this frame">labels from frame {edits.current.get(current).from}</span>)}
                 <span className="ov-count"> · chunk {frame?.chunk ?? '…'}{currentScene ? ` · scene ${currentScene.start.toLocaleString()} (${current - currentScene.start + 1} of ${currentScene.length})` : ''}</span>
                 <span className="ov-count" title="Zeitgeber time of this frame: hours since ZT0 of the first day (as the ZT range of Integrate)">
                   {' · '}{frame?.clock != null ? fmtZt(frame.clock / 3600 - zt0) : 'ZT …'}
@@ -1588,12 +1762,12 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
               </span>
             ) : <span>No frame open</span>}
             <span className="spacer" />
-            <button onClick={() => stepScene(-1)} title="Previous scene (Shift+← or Shift+D)">⏮</button>
-            <button onClick={() => stepFrame(-1)} title="Previous frame (← or D)">◀</button>
-            <button onClick={() => stepFrame(1)} title="Next frame (→ or F)">▶</button>
-            <button onClick={() => stepScene(1)} title="Next scene (Shift+→ or Shift+F)">⏭</button>
-            <button onClick={() => stepFlag(-1)} disabled={!todoFlags.length} title="Previous flagged frame not saved yet (Shift+G)">◀ ⚑</button>
-            <button onClick={() => stepFlag(1)} disabled={!todoFlags.length} title="Next flagged frame not saved yet (G)">⚑ ▶</button>
+            <button onClick={() => act('scene', 'button', -1)} title="Previous scene (Shift+← or Shift+D)">⏮</button>
+            <button onClick={() => act('frame', 'button', -1)} title="Previous frame (← or D)">◀</button>
+            <button onClick={() => act('frame', 'button', 1)} title="Next frame (→ or F)">▶</button>
+            <button onClick={() => act('scene', 'button', 1)} title="Next scene (Shift+→ or Shift+F)">⏭</button>
+            <button onClick={() => act('flag', 'button', -1)} disabled={!todoFlags.length} title="Previous flagged frame not saved yet (Shift+G)">◀ ⚑</button>
+            <button onClick={() => act('flag', 'button', 1)} disabled={!todoFlags.length} title="Next flagged frame not saved yet (G)">⚑ ▶</button>
             <label className="field" title="A label you change is carried to the next frames of the scene, following the fly's idtrackerai fragment (until it ends or a frame you saved); those frames open with it and are saved when you leave them">
               <input type="checkbox" checked={carry} onChange={(e) => setCarry(e.target.checked)} />Carry labels
             </label>
@@ -1619,31 +1793,41 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
               <BoxCanvas image={image} width={stageW} height={stageH} boxes={boxes} fragments={fragments}
                          regions={showRegions ? regions : null} focus={focus} machine={frame?.machine} selected={selected} setSelected={setSelected}
                          onDraft={onDraft} onCommit={onCommit} newLabel={newLabel} showMachine={showMachine}
-                         drawMode={drawMode} onDrawn={() => setDrawMode(null)} onPointer={(q) => { pointer.current = q; if (q) lastPointer.current = q; }} />
+                         drawMode={drawMode} onDrawn={() => setDrawMode(null)} onPointer={(q) => { pointer.current = q; if (q) lastPointer.current = q; }} flash={flash} />
             )}
             {frame?.error && <div className="qc-muted">{frame.error}</div>}
             {current == null && <div className="qc-muted">Pick a scene in the list (or → to start with the first one).</div>}
             </div>
             {current != null && (
               <div className="toolbar sl-actions">
-                <button className="btn-primary" onClick={accept} disabled={!frame || !!frame.error || duplicates.length > 0}
+                <button className="btn-primary" onClick={() => act('accept', 'button')} disabled={!frame || !!frame.error || duplicates.length > 0}
                         title="Save this frame as shown and go to the next one (Enter)">Save &amp; next (Enter)</button>
-                <button onClick={saveNow} disabled={!frame || !!frame.error || duplicates.length > 0}
+                <button onClick={() => act('saveNow', 'button')} disabled={!frame || !!frame.error || duplicates.length > 0}
                         title="Save this frame and every frame of the scenes you opened in this session (as shown, with the labels and tracks carried into them), and stay here (Ctrl+S)">Save all (Ctrl+S)</button>
-                <button onClick={copyPrevious} title="All the boxes of the frame just before this one, as you left it (P)">Copy previous (P)</button>
-                <button onMouseDown={(e) => e.preventDefault()} onClick={() => copyPreviousRegion(lastPointer.current)} disabled={!regions.length}
-                        title="Only inside the dashed region the pointer was last on: the boxes there become those of the frame before (Shift+P with the pointer on a region; nothing happens outside the regions)">Copy previous in region (Shift+P)</button>
-                <button className={drawMode === 'shape' ? 'btn-primary' : undefined} onClick={() => setDrawMode((m) => (m === 'shape' ? null : 'shape'))}
+                <button onClick={() => act('copyAll', 'button')} title="All the boxes of the frame just before this one, as you left it (Shift+P)">Copy previous (Shift+P)</button>
+                <button onMouseDown={(e) => e.preventDefault()} onClick={() => act('copyRegion', 'button')}
+                        title="Only inside the dashed region the pointer was last on (or, outside the regions, around the box under it): the boxes there become those of the frame before (P with the pointer there; nothing happens elsewhere)">Copy previous in region (P)</button>
+                <span className="bx-forward" title="This frame's boxes inside the dashed region under the pointer (or, outside the regions, the box under it with a small margin) replace those in the same rectangle of the next N frames (C with the pointer there; the button uses where the pointer was last on the frame). Written when each frame is left, or by Save all">
+                  <button onMouseDown={(e) => e.preventDefault()} onClick={() => act('copyForward', 'button')}>Copy region forward (C)</button>
+                  <input type="number" min={1} max={FORWARD_MAX} value={forwardN} style={{ width: 56 }}
+                         onChange={(e) => setForwardN(Math.max(1, Math.min(FORWARD_MAX, Number(e.target.value) || 1)))} />
+                  frames
+                </span>
+                <button onClick={() => repeat('button')} disabled={!lastName}
+                        title={lastTitle ? `Do the last action again: ${lastTitle} (.)` : 'Do the last action again (.)'}>Repeat (.){lastTitle ? `: ${lastTitle}` : ''}</button>
+                <button className={drawMode === 'shape' ? 'btn-primary' : undefined} onClick={() => act('draw', 'button', 'shape')}
                         title="The next drag on the image draws a box of this frame only (N; N / Esc cancels)">New shape (N)</button>
-                <button className={drawMode === 'track' ? 'btn-primary' : undefined} onClick={() => setDrawMode((m) => (m === 'track' ? null : 'track'))}
+                <button className={drawMode === 'track' ? 'btn-primary' : undefined} onClick={() => act('draw', 'button', 'track')}
                         title="The next drag on the image draws a box that stays in the next frames until it is hidden (Shift+N; Shift+N / Esc cancels)">New track (Shift+N)</button>
-                <button onClick={hideSelected} disabled={selected == null || !boxes[selected]?.track}
+                <button onClick={() => act('hide', 'button')} disabled={selected == null || !boxes[selected]?.track}
                         title="The selected track ends here: its box leaves this frame and the next ones (H)">Hide track (H)</button>
-                <button onClick={() => resetToProposal('1')} disabled={!frame?.has_solver}
+                <button onClick={() => act('proposal', 'button', '1')} disabled={!frame?.has_solver}
                         title="The boxes of the YOLO + solver proposal again">Solver proposal</button>
-                <button onClick={() => resetToProposal('tracking')} title="One box per blob of idtrackerai, with its local identity">idtrackerai boxes</button>
-                <button onClick={unsave} disabled={!frame?.saved} title="This frame no longer counts as annotated">Unsave</button>
-                {onOpenFrame && <button onClick={() => onOpenFrame(current)}>Open in Group viewer</button>}
+                <button onClick={() => act('proposal', 'button', 'continuity')}
+                        title="One box per blob, identities followed by position from the last saved frame (or the last frame before the scene with every fly identified); flies lost at a notch kept there">Continuity</button>
+                <button onClick={() => act('proposal', 'button', 'tracking')} title="One box per blob of idtrackerai, with its local identity">idtrackerai boxes</button>
+                <button onClick={() => act('unsave', 'button')} disabled={!frame?.saved} title="This frame no longer counts as annotated">Unsave</button>
+                {onOpenFrame && <button onClick={() => act('groupViewer', 'button')}>Open in Group viewer</button>}
               </div>
             )}
           </div>
@@ -1660,15 +1844,15 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
               const sel = selected != null ? boxes[selected]?.label === l : newLabel === l;
               return (
                 <button key={l} className={`bx-label${sel ? ' bx-label-on' : ''}${missing.includes(l) ? ' bx-label-missing' : ''}`}
-                        style={{ '--bx-color': labelColor(l) }} onClick={() => setLabel(l)}
+                        style={{ '--bx-color': labelColor(l) }} onClick={() => act('label', 'button', l)}
                         title={`Local identity ${l}${identityOf(l) != null ? ` (identity ${identityOf(l)} in this chunk)` : ''}${missing.includes(l) ? ': no box in this frame' : ''}`}>
                   {l}
                 </button>
               );
             })}
-            <button className="bx-label" style={{ '--bx-color': labelColor('') }} onClick={() => setLabel('')} title="Not assigned: ignored by the integration (U)">?</button>
+            <button className="bx-label" style={{ '--bx-color': labelColor('') }} onClick={() => act('label', 'button', '')} title="Not assigned: ignored by the integration (U)">?</button>
             {(info?.tags || []).map((t) => (
-              <button key={t} className="bx-label bx-tag" style={{ '--bx-color': TAG_COLOR }} onClick={() => setLabel(t)}
+              <button key={t} className="bx-label bx-tag" style={{ '--bx-color': TAG_COLOR }} onClick={() => act('label', 'button', t)}
                       title={{ FMB: 'Fragment must break here', 'NEW-FRAGMENT': 'This fly gets a new fragment from here to the end of the chunk', CROSSING: 'This box is a crossing' }[t]}>
                 {t}
               </button>
@@ -1681,10 +1865,11 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
               <label className="field" title="Draw the regions on the frame"><input type="checkbox" checked={showRegions} onChange={(e) => setShowRegions(e.target.checked)} />Show</label>
               <label className="field" title="Zoom to the first region when a frame opens (only when it is out of view)"><input type="checkbox" checked={zoomProblems} onChange={(e) => setZoomProblems(e.target.checked)} />Zoom</label>
             </div>
-            {regions.length === 0 ? <div className="qc-muted">Nothing suspicious in this frame</div> : regions.map((r, k) => (
-              <div key={k} className={`bx-region${focus?.mode === 'force' && focusIdx === k ? ' bx-region-on' : ''}`} onClick={() => focusRegion(k)}
-                   title="Zoom here (Z: next region, Shift+Z: whole frame)">
-                <span className="bx-region-n">{k + 1}</span>{r.reasons.join(' · ')}
+            {openRegions === 0 && <div className="qc-muted">Nothing suspicious in this frame</div>}
+            {regions.map((r, k) => (
+              <div key={k} className={`bx-region${r.resolved ? ' bx-region-resolved' : ''}${focus?.mode === 'force' && focusIdx === k ? ' bx-region-on' : ''}`} onClick={() => focusRegion(k)}
+                   title={r.resolved ? 'No longer a problem in this frame (kept so P / C can still use it). Zoom here' : 'Zoom here (Z: next region, Shift+Z: whole frame)'}>
+                <span className="bx-region-n">{k + 1}</span>{r.resolved ? 'resolved: ' : ''}{r.reasons.join(' · ')}
               </div>
             ))}
           </div>
@@ -1724,7 +1909,7 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
           <div className="qc-muted qc-pad bx-help">
             N / Shift+N then drag: new shape (this frame) / new track (kept in the next frames until H hides it) · drag inside a box: move · drag its edges or corners: resize · drag outside the boxes: pan · 1–9 or Shift+1–9: label (Shift+0: 10, Ctrl+Shift+1…9: 11…19
             {nAnimals > 9 ? '; or two digits quickly' : ''}) · U: no label · Del: delete · Tab: next box · Enter: save &amp; next · Ctrl+S: save all ·
-            ←/→ or D/F: frame · Shift+←/→ or Shift+D/F: scene · G / Shift+G: next / previous flagged frame · P: copy previous · Z / Shift+Z: zoom to the next region to look at / whole frame · M: full screen · Ctrl+Z undo · wheel zoom · right/middle drag or Shift+drag: pan · double click: reset zoom
+            ←/→ or D/F: frame · Shift+←/→ or Shift+D/F: scene · G / Shift+G: next / previous flagged frame · P: copy the frame before inside the dashed region under the pointer · Shift+P: copy the whole frame before · C: copy the region forward N frames · .: repeat · Z / Shift+Z: zoom to the next region to look at / whole frame · M: full screen · Ctrl+Z undo · wheel zoom · right/middle drag or Shift+drag: pan · double click: reset zoom
           </div>
         </section>
       </div>
