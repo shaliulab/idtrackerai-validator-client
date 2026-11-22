@@ -1751,6 +1751,26 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
         <span className="sl-save">
           {pending > 0 ? 'Saving…' : dirty ? 'Edited (saved when you leave the frame)' : frame?.saved ? `Saved by ${frame.author} · ${fmtTime(frame.updated)}` : frame ? 'Proposal, not saved' : ''}
         </span>
+        {(() => {
+          // frames holding changes not written yet (labels carried into them, regions copied into them): what makes
+          // the browser ask before closing / reloading, besides this frame and saves on their way
+          const waiting = [...edits.current.keys()].filter((fn) => fn !== current).sort((x, y) => x - y);
+          if (!waiting.length) return null;
+          const copies = waiting.filter((fn) => edits.current.get(fn)?.kind === 'copy').length;
+          const list = waiting.slice(0, 40).map((fn) => fn.toLocaleString()).join(', ') + (waiting.length > 40 ? ', …' : '');
+          return (
+            <span className="bx-unsaved" title={`Not saved yet: ${list}. ${copies ? `${copies} with a region copied forward (C), ` : ''}${waiting.length - copies} with labels carried from an earlier frame. Each is saved when you open it and leave it, or all at once with Save all (Ctrl+S)`}>
+              ● {waiting.length} other frame{waiting.length === 1 ? '' : 's'} not saved
+              <button onClick={() => go(waiting[0])} title={`Open frame ${waiting[0].toLocaleString()}, the first of them`}>Open first</button>
+              <button onClick={() => act('saveNow', 'button')} disabled={duplicates.length > 0} title="Save them, and the frames of the scenes opened (Ctrl+S)">Save all</button>
+              <button onClick={() => {
+                if (!window.confirm(`Drop the changes carried / copied into ${waiting.length} frame${waiting.length === 1 ? '' : 's'} (${list})? They open again as their proposal or as saved.`)) return;
+                for (const fn of waiting) edits.current.delete(fn);
+                setEditsVersion((v) => v + 1);
+              }} title="Forget these changes: the frames open again as they were">Drop</button>
+            </span>
+          );
+        })()}
         <span className="spacer" />
         {info?.bundle ? (
           <span className="ov-count" title="Downloaded from the Drive exchange as a minimal bundle: only the scene frames are here. Upload your annotations from the Drive exchange tab">

@@ -1171,3 +1171,4 @@ button.ov-sheet.ov-sheet-error { border-color: var(--danger); color: var(--dange
 .bx-coverage { padding: 4px 10px 6px; font-size: 11.5px; line-height: 1.45; color: var(--text); border-bottom: 1px solid var(--border); }
 .bx-coverage b { font-weight: 600; color: var(--subtext); }
 .bx-coverage-warn { color: var(--danger); margin-top: 2px; }
+.bx-unsaved { display: inline-flex; align-items: center; gap: 6px; color: #d97706; font-size: 12px; font-weight: 600; }
