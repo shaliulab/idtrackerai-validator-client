@@ -68,6 +68,7 @@ const LEG_STYLE = {
   rR: { color: '#CC79A7', dash: '8 3 2 3', width: 1, label: null },
 };
 const AMPLITUDE = 0.08;   // stroke threshold of the detector (body lengths)
+const LEAD_RATE = 2;       // playback rate of the seconds before the event with "before: fast"
 const STILL_BL_S = 0.3;   // thorax speed above which strokes do not count (body lengths / s)
 const LEG_NAME = { mL: 'left', mR: 'right', both: 'both' };
 
@@ -205,6 +206,8 @@ export default function LegValidator({ active }) {
   const [speed, setSpeed] = useState(() => stored('fh-legs-speed', 0.5));
   const [pad, setPad] = useState(() => stored('fh-legs-pad', 2));
   const [loop, setLoop] = useState(() => stored('fh-legs-loop', true));
+  // the seconds before the event (the shaded stretch of the trace): played at `speed`, fast (LEAD_RATE) or skipped
+  const [lead, setLead] = useState(() => stored('fh-legs-lead', 'play'));
   const [advance, setAdvance] = useState(() => stored('fh-legs-advance', true));
   const [blind, setBlind] = useState(() => stored('fh-legs-blind', false));
   const [showOthers, setShowOthers] = useState(() => stored('fh-legs-others', true));
@@ -215,6 +218,11 @@ export default function LegValidator({ active }) {
   useEffect(() => store('fh-legs-speed', speed), [speed]);
   useEffect(() => store('fh-legs-pad', pad), [pad]);
   useEffect(() => store('fh-legs-loop', loop), [loop]);
+  useEffect(() => store('fh-legs-lead', lead), [lead]);
+  const leadRef = useRef(lead);
+  leadRef.current = lead;
+  const speedRef = useRef(speed);
+  speedRef.current = speed;
   useEffect(() => store('fh-legs-advance', advance), [advance]);
   useEffect(() => store('fh-legs-blind', blind), [blind]);
   useEffect(() => store('fh-legs-others', showOthers), [showOthers]);
@@ -282,13 +290,16 @@ export default function LegValidator({ active }) {
   useEffect(() => { setNotesDraft(event?.notes || ''); }, [event?.fly, event?.start]);   // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── movie: the fly's HLS stream, seeked to the event ──
+  // where the loop starts (the event itself when the seconds before it are skipped) and the rate at movie time t
+  const loopStart = useCallback((w) => (leadRef.current === 'skip' ? w.m0 : w.from), []);
+  const rateAt = useCallback((w, t) => (leadRef.current === 'fast' && t < w.m0 ? Math.max(LEAD_RATE, speedRef.current) : speedRef.current), []);
   const startLoop = useCallback(() => {
     const video = videoRef.current, w = windowRef.current;
     if (!video || !w) return;
-    video.currentTime = Math.max(0, w.from);
-    video.playbackRate = speed;
+    video.currentTime = Math.max(0, loopStart(w));
+    video.playbackRate = rateAt(w, video.currentTime);
     video.play().catch(() => { /* autoplay refused: the user presses play */ });
-  }, [speed]);
+  }, [loopStart, rateAt]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -308,7 +319,7 @@ export default function LegValidator({ active }) {
         const src = apiUrl(`/api/ethogram/${event.fly}/movie/movie.m3u8`);
         hlsFlyRef.current = event.fly;
         if (Hls.isSupported()) {
-          const hls = new Hls({ startPosition: Math.max(0, m0 - pad) });
+          const hls = new Hls({ startPosition: Math.max(0, leadRef.current === 'skip' ? m0 : m0 - pad) });
           hlsRef.current = hls;
           hls.loadSource(src);
           hls.attachMedia(video);
@@ -326,7 +337,10 @@ export default function LegValidator({ active }) {
   }, [active, event?.fly, event?.start, pad]);   // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => () => { if (hlsRef.current) hlsRef.current.destroy(); }, []);
-  useEffect(() => { if (videoRef.current) videoRef.current.playbackRate = speed; }, [speed]);
+  useEffect(() => {
+    const video = videoRef.current, w = windowRef.current;
+    if (video) video.playbackRate = w ? rateAt(w, video.currentTime) : speed;
+  }, [speed, lead, rateAt]);
   useEffect(() => { if (!active) videoRef.current?.pause(); }, [active]);
 
   // playhead and loop, every animation frame while the tab is shown
@@ -338,15 +352,18 @@ export default function LegValidator({ active }) {
       if (video && w && w.fly === event?.fly) {
         const t = video.currentTime;
         if (!video.paused && t > w.to) {
-          if (loop) video.currentTime = Math.max(0, w.from); else video.pause();
+          if (loop) video.currentTime = Math.max(0, loopStart(w)); else video.pause();
         }
+        // fast through the seconds before the event, then the chosen speed
+        const rate = rateAt(w, video.currentTime);
+        if (video.playbackRate !== rate) video.playbackRate = rate;
         setPlayT(w.start + (t - w.m0));
       }
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [active, loop, event?.fly]);
+  }, [active, loop, event?.fly, loopStart, rateAt]);
 
   const seekTrace = useCallback((t) => {
     const video = videoRef.current, w = windowRef.current;
@@ -502,6 +519,14 @@ export default function LegValidator({ active }) {
               </select>
               ± <input type="number" min={0} max={3} step={0.5} value={pad} style={{ width: 50 }}
                        onChange={(e) => setPad(Math.max(0, Math.min(3, Number(e.target.value) || 0)))} /> s
+              <label title="the seconds before the event (left of the shaded stretch): played at the speed chosen, fast, or skipped (the loop starts at the event)">
+                before
+                <select value={lead} onChange={(e) => setLead(e.target.value)}>
+                  <option value="play">play</option>
+                  <option value="fast">fast ({LEAD_RATE}×)</option>
+                  <option value="skip">skip</option>
+                </select>
+              </label>
               <label><input type="checkbox" checked={loop} onChange={(e) => setLoop(e.target.checked)} /> loop</label>
               <button onClick={startLoop} title="play the event again (Enter)">↻ replay</button>
             </span>

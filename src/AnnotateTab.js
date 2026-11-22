@@ -291,7 +291,8 @@ const EASY_TIP = 'Easy: from the last frame before it with every fly identified,
 const UNDO_DEPTH = 100;
 const GREY_AFTER_MS = 300;   // a frame's image taking longer than this: the one shown before is greyed
 const NO_BOXES = [];
-const PRELOAD_MAX = 8000;    // frames kept by Preload scene (~1 GB); the oldest go first         // what the frame shows (and can be edited) while its image loads
+const PRELOAD_MAX = 8000;
+const DATA_CACHE = PRELOAD_MAX;  // boxes kept in the browser (a few kB each; images: CACHE_FRAMES decoded)    // frames kept by Preload scene (~1 GB); the oldest go first         // what the frame shows (and can be edited) while its image loads
 const SAVE_BATCH = 200;      // frames per request of Save all (POST /api/annotate/frames)
 const HANDLE = 6;            // px (screen) around an edge / corner of a box that resizes it
 const MIN_DRAG = 4;          // px (screen) before a drag draws a box
@@ -795,13 +796,13 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
   // opening one of their frames only decodes it, wherever it is in the scene
   const blobUrls = useRef(new Map());
   const datas = useRef(new Map());
-  const cached = useCallback((map, fn, load) => {
+  const cached = useCallback((map, fn, load, limit = CACHE_FRAMES) => {
     let e = map.get(fn);
     if (!e) {
       e = { value: undefined };
       e.promise = load(fn).then((v) => { e.value = v; return v; }, (err) => { map.delete(fn); throw err; });
       map.set(fn, e);
-      while (map.size > CACHE_FRAMES) map.delete(map.keys().next().value);
+      while (map.size > limit) map.delete(map.keys().next().value);
     } else { map.delete(fn); map.set(fn, e); }      // most recently used last
     return e;
   }, []);
@@ -812,7 +813,7 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
     img.onerror = () => reject(new Error(`Could not read frame ${n}`));
     img.src = blobUrls.current.get(n) || apiUrl(`/api/frame/${n}`);
   })), [cached]);
-  const dataOf = useCallback((fn) => cached(datas.current, fn, (n) => queue.current.then(() => api.get(`/api/annotate/frame/${n}`)).then((r) => unwrap(r.data))), [cached]);  // after the saves sent
+  const dataOf = useCallback((fn) => cached(datas.current, fn, (n) => queue.current.then(() => api.get(`/api/annotate/frame/${n}`)).then((r) => unwrap(r.data)), DATA_CACHE), [cached]);  // after the saves sent
   const forget = useCallback((fn) => { if (fn == null) datas.current.clear(); else datas.current.delete(fn); }, []);
   useEffect(() => { images.current.clear(); datas.current.clear(); edits.current.clear(); trackOut.current.clear(); hiddenAt.current.clear(); fragLabels.current.clear(); serverSplits.current.clear(); localTags.current.clear(); worked.current.clear(); leftBoxes.current.clear(); }, [currentExperiment]);
   useEffect(() => { datas.current.clear(); }, [reloadKey, info?.proposal_run?.t]);
@@ -894,15 +895,15 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
     const all = Array.from({ length: Math.min(sc.length, PRELOAD_MAX) }, (_, i) => sc.start + i);
     const here = Math.max(0, all.indexOf(current));
     const frames = [...all.slice(here), ...all.slice(0, here)];
-    let done = frames.filter((fn) => blobUrls.current.has(fn)).length;
+    let done = frames.filter((fn) => blobUrls.current.has(fn) && datas.current.get(fn)?.value).length;
     setPreload({ k: sc.k, start: sc.start, length: frames.length, done, running: true });
     preloadRange.current = [all[0], all[all.length - 1] + 1];
     const t0 = Date.now();
     let failed = 0;
     for (const fn of frames) {
       if (gen !== preloadGen.current) return;   // stopped, or another preload started (its range set)
-      if (blobUrls.current.has(fn)) continue;
-      try {
+      if (blobUrls.current.has(fn) && datas.current.get(fn)?.value) continue;
+      if (!blobUrls.current.has(fn)) try {
         const r = await api.get(`/api/frame/${fn}`, { responseType: 'blob' });
         if (gen !== preloadGen.current || experiment !== currentExperimentRef.current) return;
         blobUrls.current.set(fn, URL.createObjectURL(r.data));
@@ -914,6 +915,13 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
       } catch (err) {
         failed += 1;
         if (failed === 1) log('warning', `Preload: frame ${fn}: ${errorOf(err)}`);
+        done += 1;
+        continue;
+      }
+      // its boxes too, right after (the server reads the same frame for its blobs: no seek)
+      try { await dataOf(fn).promise; } catch (err) {
+        failed += 1;
+        if (failed === 1) log('warning', `Preload: boxes of frame ${fn}: ${errorOf(err)}`);
       }
       done += 1;
       if (done % 25 === 0 || done === frames.length) setPreload((p) => p && p.k === sc.k && { ...p, done });
@@ -921,7 +929,7 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
     setPreload((p) => p && p.k === sc.k && { ...p, done, running: false });
     preloadRange.current = null;
     log(failed ? 'warning' : 'info', `Scene ${sc.start.toLocaleString()}: ${frames.length - failed} frames preloaded in ${Math.round((Date.now() - t0) / 1000)} s${failed ? `, ${failed} failed` : ''}`);
-  }, [currentScene, current, preload, currentExperiment, log]);
+  }, [currentScene, current, preload, currentExperiment, log, dataOf]);
   const currentExperimentRef = useRef(currentExperiment);
   currentExperimentRef.current = currentExperiment;
   useEffect(() => {
@@ -932,7 +940,7 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
     blobUrls.current.clear();
   }, [currentExperiment]);
   const scenePreloaded = currentScene && Array.from({ length: Math.min(currentScene.length, PRELOAD_MAX) }, (_, i) => currentScene.start + i)
-    .every((fn) => blobUrls.current.has(fn));
+    .every((fn) => blobUrls.current.has(fn) && datas.current.get(fn)?.value);
 
   // open a frame (before the browser paints: a cached image replaces the one shown with no frame in between)
   useLayoutEffect(() => {
@@ -1038,7 +1046,15 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
     const before = new Map();
     for (const [fn, list] of items) {
       const prev = datas.current.get(fn)?.value;
-      before.set(fn, { prev, relabel: !prev || JSON.stringify(prev.boxes.map((b) => b.label)) !== JSON.stringify(list.map((b) => b.label)) });
+      before.set(fn, {
+        prev,
+        relabel: !prev || JSON.stringify(prev.boxes.map((b) => b.label)) !== JSON.stringify(list.map((b) => b.label)),
+        // saved as proposed, every fly placed (no ⚑, no box without label): the continuity proposals after it, now
+        // from this frame, come out the same (checked on 12X: 1911 of 1911 later frames; with a fly lost or a box
+        // unlabelled 8 % differ, the saved frame cannot carry that fly)
+        asProposed: !!prev && prev.source === 'continuity' && !(prev.flags || []).length
+          && prev.boxes.every((b) => /^\d+$/.test(b.label)) && sameBoxes(list, prev.boxes),
+      });
       forget(fn);
     }
     const p = queue.current.then(() => api.post('/api/annotate/frames', {
@@ -1049,13 +1065,14 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
         let editsChanged = false;
         for (const d of saved) {
           const fn = d.frame_number;
-          const { prev, relabel } = before.get(fn) || {};
+          const { prev, relabel, asProposed } = before.get(fn) || {};
           if (edits.current.delete(fn)) editsChanged = true;
           forget(fn);
           // other frames of the chunk inherit labels from the saved ones (server side): read them again
           if (relabel && prev) for (const [k, e] of [...datas.current]) if (e.value?.chunk === prev.chunk) datas.current.delete(k);
           // the continuity proposals after it start from this frame now (its boxes, a fly at a notch moved included)
-          for (const [k, e] of [...datas.current]) if (k > fn && k !== currentRef.current && e.value?.source === 'continuity' && e.value.chunk === d.chunk) datas.current.delete(k);
+          // (not when it was saved as proposed: they come out the same, and the boxes of a preloaded scene stay)
+          if (!asProposed) for (const [k, e] of [...datas.current]) if (k > fn && k !== currentRef.current && e.value?.source === 'continuity' && e.value.chunk === d.chunk) datas.current.delete(k);
           if (fn === currentRef.current) { setLoaded(d.boxes); setFrame((f) => f && { ...f, saved: true, author: d.author, updated: d.updated }); }
         }
         if (editsChanged) setEditsVersion((v) => v + 1);
@@ -1454,7 +1471,7 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
         // a scene being preloaded: its images come from the preload (one reader on the server: two positions
         // read in turn would seek each time)
         const pr = preloadRange.current;
-        if (kind === 'image' && pr && fn >= pr[0] && fn < pr[1] && !blobUrls.current.has(fn)) continue;
+        if (pr && fn >= pr[0] && fn < pr[1] && (kind === 'data' || !blobUrls.current.has(fn))) continue;
         try { await (kind === 'image' ? imageOf(fn) : dataOf(fn)).promise; } catch { /* shown when opened */ }
       }
       prefetching.current[kind] = false;
