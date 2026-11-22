@@ -11,7 +11,7 @@
 // predict --assign / complete, with the carry-over of swaps between clips): unsaved frames then open with its boxes,
 // the uncertain ones marked "!", and the frames it flagged (what a person must check) listed with ⚑ (G / Shift+G).
 
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react';
 import api, { apiUrl } from './api';
 import { useElementSize, useFillHeight } from './layout';
 import { useConsole } from './MessageConsole';
@@ -289,6 +289,7 @@ const PREFETCH_BEHIND = 6;
 const FILTERS = [['todo', 'To do'], ['easy', '◆ Easy'], ['flagged', '⚑ Flagged'], ['all', 'All'], ['done', 'Done']];
 const EASY_TIP = 'Easy: from the last frame before it with every fly identified, the continuity proposal follows each fly by position, agreeing with idtrackerai wherever it identified one, and the only flies missing are kept at a notch. Accepting each frame’s proposal (Enter) should do: check the ! boxes at the notches';
 const UNDO_DEPTH = 100;
+const GREY_AFTER_MS = 300;   // a frame's image taking longer than this: the one shown before is greyed
 const NO_BOXES = [];         // what the frame shows (and can be edited) while its image loads
 const SAVE_BATCH = 200;      // frames per request of Save all (POST /api/annotate/frames)
 const HANDLE = 6;            // px (screen) around an edge / corner of a box that resizes it
@@ -333,7 +334,7 @@ const sameBoxes = (a, b) => JSON.stringify(geometry(a)) === JSON.stringify(geome
 const unsure = (b) => b.confidence === 'low' || b.confidence === 'medium';
 const fmtTime = (t) => (t ? new Date(t * 1000).toLocaleString() : '');
 
-function BoxCanvas({ image, stale, width, height, boxes, fragments, regions, focus, machine, selected, setSelected, onDraft, onCommit, newLabel, showMachine, drawMode, onDrawn, onPointer, flash }) {
+function BoxCanvas({ image, stale, grey, width, height, boxes, fragments, regions, focus, machine, selected, setSelected, onDraft, onCommit, newLabel, showMachine, drawMode, onDrawn, onPointer, flash }) {
   const canvasRef = useRef(null);
   const [view, setView] = useState({ zoom: 1, cx: null, cy: null });
   const drag = useRef(null);
@@ -377,9 +378,9 @@ function BoxCanvas({ image, stale, width, height, boxes, fragments, regions, foc
     if (!image) return;
     const [ix, iy] = toScreen(0, 0);
     if (stale != null) {
-      // the frame before, grey and dim, while frame `stale` loads (its boxes are not drawn: they are not its own)
-      ctx.filter = 'grayscale(1)';
-      ctx.globalAlpha = 0.4;
+      // the frame before while frame `stale` loads (its boxes are not drawn: they are not its own); grey and dim
+      // once that takes a while
+      if (grey) { ctx.filter = 'grayscale(1)'; ctx.globalAlpha = 0.4; }
       ctx.drawImage(image, ix, iy, w * scale, h * scale);
       ctx.filter = 'none';
       ctx.globalAlpha = 1;
@@ -603,7 +604,7 @@ function BoxCanvas({ image, stale, width, height, boxes, fragments, regions, foc
               onContextMenu={(e) => e.preventDefault()}
               onDoubleClick={(e) => { if (!hit(...local(e))) setView({ zoom: 1, cx: null, cy: null }); }} />
       {!image && <div className="pose-canvas-msg">Loading the frame…</div>}
-      {image && stale != null && <div className="pose-canvas-msg bx-loading">Loading frame {stale.toLocaleString()}…</div>}
+      {image && grey && <div className="pose-canvas-msg">Loading frame {stale.toLocaleString()}…</div>}
       {flash && <div className={`bx-flash bx-flash-${flash.level}`} key={flash.t}>{flash.text}</div>}
       {drawMode && image && <div className="bx-draw-badge">{drawMode === 'track' ? 'New track: drag on the image (kept in the next frames until hidden with H) · Shift+N / Esc cancels' : 'New shape: drag on the image · N / Esc cancels'}</div>}
     </div>
@@ -874,9 +875,9 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
     queue.current = p;
   }, [current, frame, carry, currentExperiment, log, splitsOf]);
 
-  // open a frame
-  useEffect(() => {
-    if (current == null) return;
+  // open a frame (before the browser paints: a cached image replaces the one shown with no frame in between)
+  useLayoutEffect(() => {
+    if (current == null) return undefined;
     const id = ++latest.current;
     setSelected(null);
     undo.current = [];
@@ -893,15 +894,19 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
         .catch((err) => { if (id === latest.current) { setFrame({ error: errorOf(err) }); setBoxes([]); setLoaded([]); } });
     }
     const im = imageOf(current);
-    if (im.value) { setImage(im.value); setImageFn(current); }
-    else {
-      // the frame shown stays, greyed (stale), until this one is here
-      im.promise.then((img) => { if (id === latest.current) { setImage(img); setImageFn(current); } })
-        .catch((err) => { if (id === latest.current) { setImage(null); setImageFn(null); log('error', err.message); } });
-    }
+    if (im.value) { setImage(im.value); setImageFn(current); return undefined; }
+    // the frame shown stays until this one is here, without its boxes; greyed only when that takes a while
+    im.promise.then((img) => { if (id === latest.current) { setImage(img); setImageFn(current); } })
+      .catch((err) => { if (id === latest.current) { setImage(null); setImageFn(null); log('error', err.message); } });
+    const timer = setTimeout(() => { if (id === latest.current) setSlowFn(current); }, GREY_AFTER_MS);
+    return () => clearTimeout(timer);
   }, [current, reloadKey, dataOf, imageOf, log]);
 
+  // the image shown is another frame's while this one loads (`stale`: its boxes are not drawn, drags only pan);
+  // greyed with "Loading frame N…" once that has taken GREY_AFTER_MS (`grey`)
+  const [slowFn, setSlowFn] = useState(null);
   const stale = image && current != null && imageFn !== current ? current : null;
+  const grey = stale != null && slowFn === current;
   useEffect(() => { setImage(null); setImageFn(null); }, [currentExperiment]);
 
   // only the boxes of the frame open (frame loaded and its number the current one) are ever saved as that frame
@@ -967,6 +972,7 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
 
   // frames written by the server in one transaction per request (POST /api/annotate/frames: each frame its own
   // request cost ~0.1-0.2 s, the disk syncs of its transaction), in the order queued; resolves to one bool per frame
+  const refetchRef = useRef(null);   // set by the prefetch below
   const saveMany = useCallback((items) => {
     if (!items.length) return Promise.resolve([]);
     setPending((n) => n + 1);
@@ -994,6 +1000,7 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
           if (fn === currentRef.current) { setLoaded(d.boxes); setFrame((f) => f && { ...f, saved: true, author: d.author, updated: d.updated }); }
         }
         if (editsChanged) setEditsVersion((v) => v + 1);
+        if (saved.length) refetchRef.current?.();
         if (saved.length) {
           const byFrame = new Map(saved.map((d) => [d.frame_number, d]));
           setInfo((old) => {
@@ -1375,6 +1382,23 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
   // load ahead: the next PREFETCH_AHEAD frames, the PREFETCH_BEHIND before, the next / previous flagged frames
   const prefetchPlan = useRef({ image: [], data: [] });
   const prefetching = useRef({ image: false, data: false });
+  const lastPlan = useRef([]);
+  const runPrefetch = useCallback((kind, plan) => {
+    prefetchPlan.current[kind] = [...plan];
+    if (prefetching.current[kind]) return;
+    prefetching.current[kind] = true;
+    (async () => {
+      while (prefetchPlan.current[kind].length) {
+        const fn = prefetchPlan.current[kind].shift();
+        const map = kind === 'image' ? images.current : datas.current;
+        if (map.get(fn)?.value) continue;
+        try { await (kind === 'image' ? imageOf(fn) : dataOf(fn)).promise; } catch { /* shown when opened */ }
+      }
+      prefetching.current[kind] = false;
+    })();
+  }, [imageOf, dataOf]);
+  // a save drops the boxes of the frames after it in the chunk (they change): read them again now, not when opened
+  refetchRef.current = () => { if (lastPlan.current.length) runPrefetch('data', lastPlan.current); };
   useEffect(() => {
     if (current == null || !active) return;
     const walk = (d, n) => {
@@ -1397,21 +1421,9 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
     for (const g of groups) for (const fn of g) if (!seen.has(fn)) { seen.add(fn); plan.push(fn); }
     // images and boxes in two loops: images (read forward from the video) are not held up by boxes waiting for the
     // saves queued, or read again after a save of the chunk
-    prefetchPlan.current = { image: [...plan], data: [...plan] };
-    for (const kind of ['image', 'data']) {
-      if (prefetching.current[kind]) continue;
-      prefetching.current[kind] = true;
-      (async () => {
-        while (prefetchPlan.current[kind].length) {
-          const fn = prefetchPlan.current[kind].shift();
-          const map = kind === 'image' ? images.current : datas.current;
-          if (map.get(fn)?.value) continue;
-          try { await (kind === 'image' ? imageOf(fn) : dataOf(fn)).promise; } catch { /* shown when opened */ }
-        }
-        prefetching.current[kind] = false;
-      })();
-    }
-  }, [current, active, neighbour, todoFlags, imageOf, dataOf, sceneOf, shownScenes]);
+    lastPlan.current = plan;
+    for (const kind of ['image', 'data']) runPrefetch(kind, plan);
+  }, [current, active, neighbour, todoFlags, sceneOf, shownScenes, runPrefetch]);
 
   const propose = useCallback(() => {
     const again = info?.proposal_run;
@@ -1838,7 +1850,7 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
             )}
             <div className="bx-stage" ref={setStageEl}>
             {current != null && !frame?.error && (
-              <BoxCanvas image={image} stale={stale} width={stageW} height={stageH} boxes={stale != null ? NO_BOXES : boxes} fragments={fragments}
+              <BoxCanvas image={image} stale={stale} grey={grey} width={stageW} height={stageH} boxes={stale != null ? NO_BOXES : boxes} fragments={fragments}
                          regions={showRegions && stale == null ? regions : null} focus={focus} machine={stale != null ? null : frame?.machine} selected={selected} setSelected={setSelected}
                          onDraft={onDraft} onCommit={onCommit} newLabel={newLabel} showMachine={showMachine}
                          drawMode={drawMode} onDrawn={() => setDrawMode(null)} onPointer={(q) => { pointer.current = q; if (q) lastPointer.current = q; }} flash={flash} />
