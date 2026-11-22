@@ -289,6 +289,8 @@ const PREFETCH_BEHIND = 6;
 const FILTERS = [['todo', 'To do'], ['easy', '◆ Easy'], ['flagged', '⚑ Flagged'], ['all', 'All'], ['done', 'Done']];
 const EASY_TIP = 'Easy: from the last frame before it with every fly identified, the continuity proposal follows each fly by position, agreeing with idtrackerai wherever it identified one, and the only flies missing are kept at a notch. Accepting each frame’s proposal (Enter) should do: check the ! boxes at the notches';
 const UNDO_DEPTH = 100;
+const NO_BOXES = [];         // what the frame shows (and can be edited) while its image loads
+const SAVE_BATCH = 200;      // frames per request of Save all (POST /api/annotate/frames)
 const HANDLE = 6;            // px (screen) around an edge / corner of a box that resizes it
 const MIN_DRAG = 4;          // px (screen) before a drag draws a box
 // Okabe-Ito first, then more distinct colours
@@ -331,7 +333,7 @@ const sameBoxes = (a, b) => JSON.stringify(geometry(a)) === JSON.stringify(geome
 const unsure = (b) => b.confidence === 'low' || b.confidence === 'medium';
 const fmtTime = (t) => (t ? new Date(t * 1000).toLocaleString() : '');
 
-function BoxCanvas({ image, width, height, boxes, fragments, regions, focus, machine, selected, setSelected, onDraft, onCommit, newLabel, showMachine, drawMode, onDrawn, onPointer, flash }) {
+function BoxCanvas({ image, stale, width, height, boxes, fragments, regions, focus, machine, selected, setSelected, onDraft, onCommit, newLabel, showMachine, drawMode, onDrawn, onPointer, flash }) {
   const canvasRef = useRef(null);
   const [view, setView] = useState({ zoom: 1, cx: null, cy: null });
   const drag = useRef(null);
@@ -374,6 +376,15 @@ function BoxCanvas({ image, width, height, boxes, fragments, regions, focus, mac
     ctx.fillRect(0, 0, width, height);
     if (!image) return;
     const [ix, iy] = toScreen(0, 0);
+    if (stale != null) {
+      // the frame before, grey and dim, while frame `stale` loads (its boxes are not drawn: they are not its own)
+      ctx.filter = 'grayscale(1)';
+      ctx.globalAlpha = 0.4;
+      ctx.drawImage(image, ix, iy, w * scale, h * scale);
+      ctx.filter = 'none';
+      ctx.globalAlpha = 1;
+      return;
+    }
     ctx.drawImage(image, ix, iy, w * scale, h * scale);
 
     if (showMachine) {
@@ -480,7 +491,8 @@ function BoxCanvas({ image, width, height, boxes, fragments, regions, focus, mac
   const onPointerDown = (e) => {
     const [sx, sy] = local(e);
     e.currentTarget.setPointerCapture(e.pointerId);
-    if (e.button === 1 || e.button === 2 || (e.button === 0 && e.shiftKey)) {
+    // while the frame loads (stale) the image is the frame before: a drag only pans
+    if (e.button === 1 || e.button === 2 || (e.button === 0 && (e.shiftKey || stale != null))) {
       e.preventDefault();
       drag.current = { kind: 'pan', sx, sy, cx, cy };
       return;
@@ -591,6 +603,7 @@ function BoxCanvas({ image, width, height, boxes, fragments, regions, focus, mac
               onContextMenu={(e) => e.preventDefault()}
               onDoubleClick={(e) => { if (!hit(...local(e))) setView({ zoom: 1, cx: null, cy: null }); }} />
       {!image && <div className="pose-canvas-msg">Loading the frame…</div>}
+      {image && stale != null && <div className="pose-canvas-msg bx-loading">Loading frame {stale.toLocaleString()}…</div>}
       {flash && <div className={`bx-flash bx-flash-${flash.level}`} key={flash.t}>{flash.text}</div>}
       {drawMode && image && <div className="bx-draw-badge">{drawMode === 'track' ? 'New track: drag on the image (kept in the next frames until hidden with H) · Shift+N / Esc cancels' : 'New shape: drag on the image · N / Esc cancels'}</div>}
     </div>
@@ -652,6 +665,7 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
   const [current, setCurrent] = useState(null);     // frame number
   const [frame, setFrame] = useState(null);         // /api/annotate/frame/<n>
   const [image, setImage] = useState(null);
+  const [imageFn, setImageFn] = useState(null);     // frame of `image`: another than the current one while it loads
   const [boxes, setBoxes] = useState([]);
   const [loaded, setLoaded] = useState([]);         // boxes as opened / last saved
   const [selected, setSelected] = useState(null);
@@ -879,13 +893,16 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
         .catch((err) => { if (id === latest.current) { setFrame({ error: errorOf(err) }); setBoxes([]); setLoaded([]); } });
     }
     const im = imageOf(current);
-    if (im.value) setImage(im.value);
+    if (im.value) { setImage(im.value); setImageFn(current); }
     else {
-      setImage(null);
-      im.promise.then((img) => { if (id === latest.current) setImage(img); })
-        .catch((err) => { if (id === latest.current) log('error', err.message); });
+      // the frame shown stays, greyed (stale), until this one is here
+      im.promise.then((img) => { if (id === latest.current) { setImage(img); setImageFn(current); } })
+        .catch((err) => { if (id === latest.current) { setImage(null); setImageFn(null); log('error', err.message); } });
     }
   }, [current, reloadKey, dataOf, imageOf, log]);
+
+  const stale = image && current != null && imageFn !== current ? current : null;
+  useEffect(() => { setImage(null); setImageFn(null); }, [currentExperiment]);
 
   // only the boxes of the frame open (frame loaded and its number the current one) are ever saved as that frame
   const ready = Boolean(frame && !frame.error && frame.frame_number === current);
@@ -948,33 +965,56 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
     setFocus({ rect: regions[i], mode: 'force', key: `r${i}-${Date.now()}` });
   }, [regions, log]);
 
-  const save = useCallback((fn, list) => {
+  // frames written by the server in one transaction per request (POST /api/annotate/frames: each frame its own
+  // request cost ~0.1-0.2 s, the disk syncs of its transaction), in the order queued; resolves to one bool per frame
+  const saveMany = useCallback((items) => {
+    if (!items.length) return Promise.resolve([]);
     setPending((n) => n + 1);
-    const prev = datas.current.get(fn)?.value;
-    const relabel = !prev || JSON.stringify(prev.boxes.map((b) => b.label)) !== JSON.stringify(list.map((b) => b.label));
-    forget(fn);
-    const p = queue.current.then(() => api.post(`/api/annotate/frame/${fn}`, { boxes: list, experiment: currentExperiment })
+    const before = new Map();
+    for (const [fn, list] of items) {
+      const prev = datas.current.get(fn)?.value;
+      before.set(fn, { prev, relabel: !prev || JSON.stringify(prev.boxes.map((b) => b.label)) !== JSON.stringify(list.map((b) => b.label)) });
+      forget(fn);
+    }
+    const p = queue.current.then(() => api.post('/api/annotate/frames', {
+      experiment: currentExperiment, frames: items.map(([fn, list]) => ({ frame_number: fn, boxes: list })),
+    })
       .then((r) => {
-        const d = unwrap(r.data);
-        if (edits.current.delete(fn)) setEditsVersion((v) => v + 1);
-        forget(fn);
-        // other frames of the chunk inherit labels from the saved ones (server side): read them again
-        if (relabel && prev) for (const [k, e] of [...datas.current]) if (e.value?.chunk === prev.chunk) datas.current.delete(k);
-        // the continuity proposals after it start from this frame now (its boxes, a fly at a notch moved included)
-        for (const [k, e] of [...datas.current]) if (k > fn && k !== currentRef.current && e.value?.source === 'continuity' && e.value.chunk === d.chunk) datas.current.delete(k);
-        setInfo((old) => {
-          if (!old) return old;
-          const rest = old.annotated.filter((a) => a.frame_number !== fn);
-          return { ...old, annotated: [...rest, { frame_number: fn, author: d.author, updated: d.updated, n_boxes: d.boxes.length }] };
-        });
-        if (fn === currentRef.current) { setLoaded(d.boxes); setFrame((f) => f && { ...f, saved: true, author: d.author, updated: d.updated }); }
-        return true;
+        const { saved = [], errors = {} } = unwrap(r.data);
+        let editsChanged = false;
+        for (const d of saved) {
+          const fn = d.frame_number;
+          const { prev, relabel } = before.get(fn) || {};
+          if (edits.current.delete(fn)) editsChanged = true;
+          forget(fn);
+          // other frames of the chunk inherit labels from the saved ones (server side): read them again
+          if (relabel && prev) for (const [k, e] of [...datas.current]) if (e.value?.chunk === prev.chunk) datas.current.delete(k);
+          // the continuity proposals after it start from this frame now (its boxes, a fly at a notch moved included)
+          for (const [k, e] of [...datas.current]) if (k > fn && k !== currentRef.current && e.value?.source === 'continuity' && e.value.chunk === d.chunk) datas.current.delete(k);
+          if (fn === currentRef.current) { setLoaded(d.boxes); setFrame((f) => f && { ...f, saved: true, author: d.author, updated: d.updated }); }
+        }
+        if (editsChanged) setEditsVersion((v) => v + 1);
+        if (saved.length) {
+          const byFrame = new Map(saved.map((d) => [d.frame_number, d]));
+          setInfo((old) => {
+            if (!old) return old;
+            const rest = old.annotated.filter((a) => !byFrame.has(a.frame_number));
+            return { ...old, annotated: [...rest, ...saved.map((d) => ({ frame_number: d.frame_number, author: d.author, updated: d.updated, n_boxes: d.boxes.length }))] };
+          });
+        }
+        for (const [fn, text] of Object.entries(errors)) log('error', `Frame ${fn} not saved: ${text}`);
+        const ok = new Set(saved.map((d) => d.frame_number));
+        return items.map(([fn]) => ok.has(fn));
       })
-      .catch((err) => { log('error', `Frame ${fn} not saved: ${errorOf(err)}`); return false; })
+      .catch((err) => {
+        log('error', items.length === 1 ? `Frame ${items[0][0]} not saved: ${errorOf(err)}` : `${items.length} frames (${items[0][0]}–${items[items.length - 1][0]}) not saved: ${errorOf(err)}`);
+        return items.map(() => false);
+      })
       .finally(() => setPending((n) => n - 1)));
     queue.current = p;
     return p;
   }, [currentExperiment, log, forget]);
+  const save = useCallback((fn, list) => saveMany([[fn, list]]).then((ok) => ok[0]), [saveMany]);
 
   const unsave = useCallback(() => {
     if (current == null || !frame?.saved) return;
@@ -1079,6 +1119,7 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
     savingAll.current = true;
     setPending((n) => n + 1);    // the page asks before closing meanwhile
     const sent = [];
+    let batch = [];
     let failed = 0;
     try {
       if (here) {
@@ -1113,9 +1154,11 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
         const seen = new Set();
         const dup = shown.find((b) => /^\d+$/.test(b.label) && (seen.has(b.label) || !seen.add(b.label)));
         if (dup) { failed += 1; log('warning', `Frame ${fn} not saved: local identity ${dup.label} is on two boxes`); continue; }
-        sent.push(save(fn, shown));
+        batch.push([fn, shown]);
+        if (batch.length >= SAVE_BATCH) { sent.push(saveMany(batch)); batch = []; }
       }
-      const ok = await Promise.all(sent);
+      if (batch.length) sent.push(saveMany(batch));
+      const ok = (await Promise.all(sent)).flat();
       const good = ok.filter(Boolean).length;
       failed += ok.length - good;
       log(failed ? 'warning' : 'info', `${good} frame${good === 1 ? '' : 's'} saved${failed ? `, ${failed} not saved (see above)` : ''}`);
@@ -1123,7 +1166,7 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
       savingAll.current = false;
       setPending((n) => n - 1);
     }
-  }, [current, frame, boxes, duplicates, scenes, save, log]);
+  }, [current, frame, boxes, duplicates, scenes, save, saveMany, log]);
 
   // edits
   // carry the label changes of frame `from` to the next frames of its scene: each changed fly is followed by its
@@ -1330,8 +1373,8 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
   }, [sceneOf, shownScenes, scenes]);
 
   // load ahead: the next PREFETCH_AHEAD frames, the PREFETCH_BEHIND before, the next / previous flagged frames
-  const prefetchPlan = useRef([]);
-  const prefetching = useRef(false);
+  const prefetchPlan = useRef({ image: [], data: [] });
+  const prefetching = useRef({ image: false, data: false });
   useEffect(() => {
     if (current == null || !active) return;
     const walk = (d, n) => {
@@ -1352,17 +1395,22 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
     const seen = new Set([current]);
     const plan = [];
     for (const g of groups) for (const fn of g) if (!seen.has(fn)) { seen.add(fn); plan.push(fn); }
-    prefetchPlan.current = plan;
-    if (prefetching.current) return;
-    prefetching.current = true;
-    (async () => {
-      while (prefetchPlan.current.length) {
-        const fn = prefetchPlan.current.shift();
-        if (images.current.get(fn)?.value && datas.current.get(fn)?.value) continue;
-        try { await Promise.all([imageOf(fn).promise, dataOf(fn).promise]); } catch { /* shown when opened */ }
-      }
-      prefetching.current = false;
-    })();
+    // images and boxes in two loops: images (read forward from the video) are not held up by boxes waiting for the
+    // saves queued, or read again after a save of the chunk
+    prefetchPlan.current = { image: [...plan], data: [...plan] };
+    for (const kind of ['image', 'data']) {
+      if (prefetching.current[kind]) continue;
+      prefetching.current[kind] = true;
+      (async () => {
+        while (prefetchPlan.current[kind].length) {
+          const fn = prefetchPlan.current[kind].shift();
+          const map = kind === 'image' ? images.current : datas.current;
+          if (map.get(fn)?.value) continue;
+          try { await (kind === 'image' ? imageOf(fn) : dataOf(fn)).promise; } catch { /* shown when opened */ }
+        }
+        prefetching.current[kind] = false;
+      })();
+    }
   }, [current, active, neighbour, todoFlags, imageOf, dataOf, sceneOf, shownScenes]);
 
   const propose = useCallback(() => {
@@ -1790,8 +1838,8 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
             )}
             <div className="bx-stage" ref={setStageEl}>
             {current != null && !frame?.error && (
-              <BoxCanvas image={image} width={stageW} height={stageH} boxes={boxes} fragments={fragments}
-                         regions={showRegions ? regions : null} focus={focus} machine={frame?.machine} selected={selected} setSelected={setSelected}
+              <BoxCanvas image={image} stale={stale} width={stageW} height={stageH} boxes={stale != null ? NO_BOXES : boxes} fragments={fragments}
+                         regions={showRegions && stale == null ? regions : null} focus={focus} machine={stale != null ? null : frame?.machine} selected={selected} setSelected={setSelected}
                          onDraft={onDraft} onCommit={onCommit} newLabel={newLabel} showMachine={showMachine}
                          drawMode={drawMode} onDrawn={() => setDrawMode(null)} onPointer={(q) => { pointer.current = q; if (q) lastPointer.current = q; }} flash={flash} />
             )}
