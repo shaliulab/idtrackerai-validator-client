@@ -290,7 +290,8 @@ const FILTERS = [['todo', 'To do'], ['easy', '◆ Easy'], ['flagged', '⚑ Flagg
 const EASY_TIP = 'Easy: from the last frame before it with every fly identified, the continuity proposal follows each fly by position, agreeing with idtrackerai wherever it identified one, and the only flies missing are kept at a notch. Accepting each frame’s proposal (Enter) should do: check the ! boxes at the notches';
 const UNDO_DEPTH = 100;
 const GREY_AFTER_MS = 300;   // a frame's image taking longer than this: the one shown before is greyed
-const NO_BOXES = [];         // what the frame shows (and can be edited) while its image loads
+const NO_BOXES = [];
+const PRELOAD_MAX = 8000;    // frames kept by Preload scene (~1 GB); the oldest go first         // what the frame shows (and can be edited) while its image loads
 const SAVE_BATCH = 200;      // frames per request of Save all (POST /api/annotate/frames)
 const HANDLE = 6;            // px (screen) around an edge / corner of a box that resizes it
 const MIN_DRAG = 4;          // px (screen) before a drag draws a box
@@ -790,6 +791,9 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
   // proposals made again), so its entry is dropped then. Reading the video forward is cheap and a jump costs a
   // seek (1-3 s), so the frames around the current one are loaded ahead, one at a time, in increasing order.
   const images = useRef(new Map());
+  // Preload scene: the JPEGs of whole scenes kept in the browser (fn -> object URL, ~120 kB each, ≤ PRELOAD_MAX):
+  // opening one of their frames only decodes it, wherever it is in the scene
+  const blobUrls = useRef(new Map());
   const datas = useRef(new Map());
   const cached = useCallback((map, fn, load) => {
     let e = map.get(fn);
@@ -806,7 +810,7 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
     // decoded ahead too: a 2100 px JPEG takes a while to decode when it is first drawn
     img.onload = () => (img.decode ? img.decode().catch(() => {}) : Promise.resolve()).then(() => resolve(img));
     img.onerror = () => reject(new Error(`Could not read frame ${n}`));
-    img.src = apiUrl(`/api/frame/${n}`);
+    img.src = blobUrls.current.get(n) || apiUrl(`/api/frame/${n}`);
   })), [cached]);
   const dataOf = useCallback((fn) => cached(datas.current, fn, (n) => queue.current.then(() => api.get(`/api/annotate/frame/${n}`)).then((r) => unwrap(r.data))), [cached]);  // after the saves sent
   const forget = useCallback((fn) => { if (fn == null) datas.current.clear(); else datas.current.delete(fn); }, []);
@@ -874,6 +878,61 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
       .finally(() => setPending((n) => n - 1));
     queue.current = p;
   }, [current, frame, carry, currentExperiment, log, splitsOf]);
+
+  // Preload scene: every frame of the current scene read in order (forward reads are fast, a seek costs 1-3 s) and
+  // kept as JPEG blobs; a second click stops it
+  const [preload, setPreload] = useState(null);     // {k, start, length, done, running}
+  const preloadGen = useRef(0);
+  const preloadRange = useRef(null);                // [first, end) of the scene being preloaded
+  const preloadScene = useCallback(async () => {
+    const sc = currentScene;
+    if (!sc) return;
+    if (preload?.running) { preloadGen.current += 1; preloadRange.current = null; setPreload((p) => p && { ...p, running: false }); return; }
+    const gen = ++preloadGen.current;
+    const experiment = currentExperiment;
+    // from the frame open to the end, then the start: what is looked at first comes first
+    const all = Array.from({ length: Math.min(sc.length, PRELOAD_MAX) }, (_, i) => sc.start + i);
+    const here = Math.max(0, all.indexOf(current));
+    const frames = [...all.slice(here), ...all.slice(0, here)];
+    let done = frames.filter((fn) => blobUrls.current.has(fn)).length;
+    setPreload({ k: sc.k, start: sc.start, length: frames.length, done, running: true });
+    preloadRange.current = [all[0], all[all.length - 1] + 1];
+    const t0 = Date.now();
+    let failed = 0;
+    for (const fn of frames) {
+      if (gen !== preloadGen.current) return;   // stopped, or another preload started (its range set)
+      if (blobUrls.current.has(fn)) continue;
+      try {
+        const r = await api.get(`/api/frame/${fn}`, { responseType: 'blob' });
+        if (gen !== preloadGen.current || experiment !== currentExperimentRef.current) return;
+        blobUrls.current.set(fn, URL.createObjectURL(r.data));
+        while (blobUrls.current.size > PRELOAD_MAX) {
+          const [old, url] = blobUrls.current.entries().next().value;
+          URL.revokeObjectURL(url);
+          blobUrls.current.delete(old);
+        }
+      } catch (err) {
+        failed += 1;
+        if (failed === 1) log('warning', `Preload: frame ${fn}: ${errorOf(err)}`);
+      }
+      done += 1;
+      if (done % 25 === 0 || done === frames.length) setPreload((p) => p && p.k === sc.k && { ...p, done });
+    }
+    setPreload((p) => p && p.k === sc.k && { ...p, done, running: false });
+    preloadRange.current = null;
+    log(failed ? 'warning' : 'info', `Scene ${sc.start.toLocaleString()}: ${frames.length - failed} frames preloaded in ${Math.round((Date.now() - t0) / 1000)} s${failed ? `, ${failed} failed` : ''}`);
+  }, [currentScene, current, preload, currentExperiment, log]);
+  const currentExperimentRef = useRef(currentExperiment);
+  currentExperimentRef.current = currentExperiment;
+  useEffect(() => {
+    preloadGen.current += 1;
+    preloadRange.current = null;
+    setPreload(null);
+    for (const url of blobUrls.current.values()) URL.revokeObjectURL(url);
+    blobUrls.current.clear();
+  }, [currentExperiment]);
+  const scenePreloaded = currentScene && Array.from({ length: Math.min(currentScene.length, PRELOAD_MAX) }, (_, i) => currentScene.start + i)
+    .every((fn) => blobUrls.current.has(fn));
 
   // open a frame (before the browser paints: a cached image replaces the one shown with no frame in between)
   useLayoutEffect(() => {
@@ -1392,6 +1451,10 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
         const fn = prefetchPlan.current[kind].shift();
         const map = kind === 'image' ? images.current : datas.current;
         if (map.get(fn)?.value) continue;
+        // a scene being preloaded: its images come from the preload (one reader on the server: two positions
+        // read in turn would seek each time)
+        const pr = preloadRange.current;
+        if (kind === 'image' && pr && fn >= pr[0] && fn < pr[1] && !blobUrls.current.has(fn)) continue;
         try { await (kind === 'image' ? imageOf(fn) : dataOf(fn)).promise; } catch { /* shown when opened */ }
       }
       prefetching.current[kind] = false;
@@ -1826,6 +1889,11 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
             <button onClick={() => act('frame', 'button', -1)} title="Previous frame (← or D)">◀</button>
             <button onClick={() => act('frame', 'button', 1)} title="Next frame (→ or F)">▶</button>
             <button onClick={() => act('scene', 'button', 1)} title="Next scene (Shift+→ or Shift+F)">⏭</button>
+            <button onClick={preloadScene} disabled={!currentScene}
+                    className={preload?.running && preload.k === currentScene?.k ? 'btn-primary' : undefined}
+                    title={preload?.running ? 'Stop preloading (the frames read so far stay)' : `Read every frame of this scene now and keep it in the browser (~120 kB a frame${currentScene ? `, ~${Math.round(currentScene.length * 0.12)} MB` : ''}), so moving anywhere in it only decodes the image`}>
+              {preload?.running ? `⇩ ${preload.done}/${preload.length} ■` : scenePreloaded ? '⇩ Preloaded' : '⇩ Preload scene'}
+            </button>
             <button onClick={() => act('flag', 'button', -1)} disabled={!todoFlags.length} title="Previous flagged frame not saved yet (Shift+G)">◀ ⚑</button>
             <button onClick={() => act('flag', 'button', 1)} disabled={!todoFlags.length} title="Next flagged frame not saved yet (G)">⚑ ▶</button>
             <label className="field" title="A label you change is carried to the next frames of the scene, following the fly's idtrackerai fragment (until it ends or a frame you saved); those frames open with it and are saved when you leave them">
