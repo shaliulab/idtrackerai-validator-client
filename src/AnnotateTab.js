@@ -284,7 +284,7 @@ const findRegions = (boxes, fragments, frame, prevBoxes, duplicates) => {
   return regions.sort((a, b) => b.reasons.length - a.reasons.length || a.y0 - b.y0);
 };
 const CACHE_FRAMES = 80;      // frames kept in the browser (images + boxes)
-const PREFETCH_AHEAD = 20;    // frames loaded ahead in ← / → order
+const PREFETCH_AHEAD = 30;    // frames loaded ahead in ← / → order
 const PREFETCH_BEHIND = 6;
 const FILTERS = [['todo', 'To do'], ['easy', '◆ Easy'], ['flagged', '⚑ Flagged'], ['all', 'All'], ['done', 'Done']];
 const EASY_TIP = 'Easy: from the last frame before it with every fly identified, the continuity proposal follows each fly by position, agreeing with idtrackerai wherever it identified one, and the only flies missing are kept at a notch. Accepting each frame’s proposal (Enter) should do: check the ! boxes at the notches';
@@ -1494,7 +1494,8 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
     const i = sc ? shownScenes.findIndex((x) => x.k === sc.k) : -1;
     const sceneStarts = i < 0 ? [] : [shownScenes[i + 1], shownScenes[i - 1]].filter(Boolean).map((x) => [x.start, x.start + 1, x.start + 2]);
     const ahead = walk(1, PREFETCH_AHEAD);
-    const groups = [ahead.slice(0, 5), ...sceneStarts, walk(-1, PREFETCH_BEHIND).reverse(), ahead.slice(5),
+    // forward first: the server reads on from its last frame without seeking (a jump elsewhere is a seek)
+    const groups = [ahead.slice(0, 10), ...sceneStarts, ahead.slice(10), walk(-1, PREFETCH_BEHIND).reverse(),
       ...[nextFlag, prevFlag].filter((f) => f != null).map((f) => [f, f + 1, f + 2])];
     const seen = new Set([current]);
     const plan = [];
