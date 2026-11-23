@@ -755,6 +755,15 @@ button.ov-sheet.ov-sheet-error { border-color: var(--danger); color: var(--dange
 .qc-flag-bad { color: var(--danger); border-color: var(--danger); background: var(--danger-soft); font-weight: 600; }
 .qc-section-title { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--subtext); margin-top: 8px; padding-top: 10px; border-top: 1px solid var(--border-strong); }
 
+/* Identity swaps (SwapCheck.js, QC tab) */
+.qc-swap-params { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; padding: 8px; margin-bottom: 8px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface-2); }
+.qc-swap-summary { margin-bottom: 6px; }
+.qc-swap-filters { flex-wrap: wrap; gap: 6px 14px; margin-bottom: 6px; }
+.qc-swap-type { padding: 0 6px; border-radius: 8px; font-size: 11px; border: 1px solid var(--border); white-space: nowrap; }
+.qc-swap-exchange { color: var(--danger); border-color: var(--danger); background: var(--danger-soft); font-weight: 600; }
+.qc-swap-takeover { color: #b35c00; border-color: #e07b00; }
+.qc-swap-onto { color: var(--subtext); }
+
 /* ── Pose quality (PoseQc.js, QC tab) and Pose tab (PoseTab.js) ── */
 :root { --pose-bar: #2a78d6; }
 :root[data-theme="dark"] { --pose-bar: #3987e5; }

@@ -1129,6 +1129,10 @@ function App() {
             setActiveTab('group_viewer');
           }}
           onOpenPose={openPose}
+          onOpenAnnotate={(fn) => {
+            setAnnotateRequest({ experiment: (currentExperiment || '').replace(/\//g, '_').replace(/_arenas_(\d+)$/, '_arena$1'), frameNumber: fn, nonce: Date.now() });
+            setActiveTab('annotate');
+          }}
         />
       </div>
 

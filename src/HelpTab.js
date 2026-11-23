@@ -604,6 +604,33 @@ export default function HelpTab() {
             the CONCATENATION rows flagged as broken. Click a bar, a strip bin, a chunk or a frame
             number to open it in the Group viewer.
           </p>
+          <h3>Identity swaps</h3>
+          <p>
+            Places where a fly's identity may have jumped onto another fly's track, to look at (nothing
+            is corrected: a fly can really run or jump there). Press <i>Check swaps</i>: a background job
+            follows every fly frame by frame (minutes; up to ~8 min for 12 flies over two days on a cold
+            disk) and the result is kept until the database changes. <i>Tracking</i> picks the table:
+            <i>machine</i> (<code>ROI_0</code> + <code>IDENTITY</code>, flies are the local identities of each
+            chunk, linked across chunks by <code>CONCATENATION</code>) or <i>validated</i>
+            (<code>ROI_0_VAL</code> + <code>IDENTITY_VAL</code>, when the experiment has them). Each fly's
+            position is compared with its own last position and with where the other flies were then
+            (also across a few frames where it was not detected, e.g. a crossing). Types:
+          </p>
+          <ul>
+            <li><b>Exchange</b>: two flies swapped places, each identity continues where the other one was.</li>
+            <li><b>Takeover</b>: an identity jumped to where another fly was, and that fly is gone (missing, or
+              moved away); <i>?</i> = a detection without identity.</li>
+            <li><b>Onto</b>: an identity jumped onto another fly that is still detected there.</li>
+          </ul>
+          <p>
+            Jumps of the same two flies less than 1 s apart make one event; ↺ marks identities that went back
+            and forth and ended where they started (ranked lower), ⨯ a close encounter. The <i>score</i> (0–1)
+            grows with how close the identity lands to the other fly's place and how big the jump is, and drops
+            with the time the fly was not seen: on frames people saved in the Annotate tab, events of score ≥ 0.3
+            were real identity jumps 99 % of the time. <i>Thresholds</i> changes the rules (in fly body lengths),{' '}
+            <i>CSV</i> downloads every event. Click <i>viewer</i> to open the frame before the jump in the Group
+            viewer, or <i>annotate</i> to open it in the Annotate tab.
+          </p>
           <h3>Pose</h3>
           <p>
             Below, the quality of each fly's pose (SLEAP), read from its pose file
