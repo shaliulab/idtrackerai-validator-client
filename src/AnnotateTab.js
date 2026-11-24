@@ -732,6 +732,12 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
   const digits = useRef({ text: '', t: 0 });
   const currentRef = useRef(null);
   currentRef.current = current;
+  // the open frame's boxes as they were shown (refreshOpen: replaced only while untouched)
+  const shownRef = useRef(null);
+  const boxesRef = useRef(boxes);
+  boxesRef.current = boxes;
+  const frameRef = useRef(null);
+  frameRef.current = frame;
   const [reloadKey, setReloadKey] = useState(0);
 
   const fetchInfo = useCallback(() => {
@@ -865,6 +871,25 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
     return p && !p.loaded ? p.ready.then(fromPack) : fromPack();
   }, DATA_CACHE), [cached, serverData]);
   const forget = useCallback((fn) => { if (fn == null) datas.current.clear(); else datas.current.delete(fn); }, []);
+  // A save of an earlier frame landed while this one was open (Enter saves and opens the next frame at once): its
+  // continuity proposal / inherited labels may have changed. Read it again and show it, unless it was touched
+  // (edits, labels carried into it): the person's changes win
+  const refreshOpen = useCallback(() => {
+    const fn = currentRef.current;
+    const shown = shownRef.current;
+    if (fn == null || !shown || shown.fn !== fn) return;
+    const untouched = () => currentRef.current === fn && shownRef.current === shown && boxesRef.current === shown.boxes
+      && !edits.current.has(fn);
+    if (!untouched()) return;
+    datas.current.delete(fn);
+    dataOf(fn).promise.then((v) => {
+      if (!untouched()) return;
+      const composed = composeRef.current(fn, v);
+      shownRef.current = { fn, boxes: composed };
+      undo.current = [];
+      setFrame(v); setBoxes(composed); setLoaded(v.boxes);
+    }, () => { /* kept as shown */ });
+  }, [dataOf]);
   useEffect(() => { images.current.clear(); datas.current.clear(); edits.current.clear(); trackOut.current.clear(); hiddenAt.current.clear(); fragLabels.current.clear(); serverSplits.current.clear(); localTags.current.clear(); worked.current.clear(); leftBoxes.current.clear(); }, [currentExperiment]);
   useEffect(() => { datas.current.clear(); }, [reloadKey, info?.proposal_run?.t]);
   useEffect(() => { edits.current.clear(); setEditsVersion((v) => v + 1); }, [info?.proposal_run?.t]);
@@ -923,13 +948,14 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
         if (!d.changed.length) return;
         packRef.current?.staleChunk(chunk);
         for (const [k, e] of [...datas.current]) if (k !== currentRef.current && e.value?.chunk === chunk) datas.current.delete(k);
+        if (currentRef.current !== fn && frameRef.current?.chunk === chunk) refreshOpen();
         const pairs = Object.entries(d.mapping).map(([f, l]) => `fragment ${f} → ${l}`).join(', ');
         log('info', `Frame ${fn}: ${pairs} written in ${d.changed.length} saved frame${d.changed.length === 1 ? '' : 's'} of chunk ${chunk}`);
       })
       .catch((err) => log('error', `Frame ${fn}: the saved frames of chunk ${chunk} were not relabelled: ${errorOf(err)}`))
       .finally(() => setPending((n) => n - 1));
     queue.current = p;
-  }, [current, frame, carry, currentExperiment, log, splitsOf]);
+  }, [current, frame, carry, currentExperiment, log, splitsOf, refreshOpen]);
 
   // Preload scene: every frame of the current scene read in order (forward reads are fast, a seek costs 1-3 s) and
   // kept as JPEG blobs; a second click stops it
@@ -1001,7 +1027,9 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
     undo.current = [];
     const d = dataOf(current);
     const show = (v) => {
-      setFrame(v); setBoxes(composeRef.current(current, v)); setLoaded(v.boxes);
+      const composed = composeRef.current(current, v);
+      shownRef.current = { fn: current, boxes: composed };
+      setFrame(v); setBoxes(composed); setLoaded(v.boxes);
     };
     if (d.value) show(d.value);
     else {
@@ -1120,16 +1148,22 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
           if (edits.current.delete(fn)) editsChanged = true;
           forget(fn);
           // other frames of the chunk inherit labels from the saved ones (server side): read them again
+          const open = currentRef.current;
+          const openFrame = frameRef.current?.frame_number === open ? frameRef.current : null;
+          let refresh = false;
           if (relabel && prev) {
             packRef.current?.staleChunk(prev.chunk);
             for (const [k, e] of [...datas.current]) if (e.value?.chunk === prev.chunk) datas.current.delete(k);
+            refresh = open !== fn && openFrame?.chunk === prev.chunk;
           }
           // the continuity proposals after it start from this frame now (its boxes, a fly at a notch moved included)
           // (not when it was saved as proposed: they come out the same, and the boxes of a preloaded scene stay)
           if (!asProposed) {
             packRef.current?.staleAfter(d.chunk, fn);
-            for (const [k, e] of [...datas.current]) if (k > fn && k !== currentRef.current && e.value?.source === 'continuity' && e.value.chunk === d.chunk) datas.current.delete(k);
+            for (const [k, e] of [...datas.current]) if (k > fn && k !== open && e.value?.source === 'continuity' && e.value.chunk === d.chunk) datas.current.delete(k);
+            if (open > fn && openFrame?.chunk === d.chunk && openFrame.source === 'continuity') refresh = true;
           }
+          if (refresh) refreshOpen();
           if (fn === currentRef.current) { setLoaded(d.boxes); setFrame((f) => f && { ...f, saved: true, author: d.author, updated: d.updated }); }
         }
         if (editsChanged) setEditsVersion((v) => v + 1);
@@ -1153,7 +1187,7 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
       .finally(() => setPending((n) => n - 1)));
     queue.current = p;
     return p;
-  }, [currentExperiment, log, forget]);
+  }, [currentExperiment, log, forget, refreshOpen]);
   const save = useCallback((fn, list) => saveMany([[fn, list]]).then((ok) => ok[0]), [saveMany]);
 
   const unsave = useCallback(() => {
