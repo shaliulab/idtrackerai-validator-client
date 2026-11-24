@@ -1181,3 +1181,13 @@ button.ov-sheet.ov-sheet-error { border-color: var(--danger); color: var(--dange
 .bx-coverage b { font-weight: 600; color: var(--subtext); }
 .bx-coverage-warn { color: var(--danger); margin-top: 2px; }
 .bx-unsaved { display: inline-flex; align-items: center; gap: 6px; color: #d97706; font-size: 12px; font-weight: 600; }
+
+/* Annotate tab: Pre-download card (PreDownload.js) */
+.bx-pre { margin-top: 8px; }
+.bx-pre .card-header { gap: 10px; }
+.bx-pre-body { display: flex; flex-direction: column; gap: 6px; }
+.bx-pre-progress { display: flex; align-items: center; gap: 10px; }
+.bx-pre-bar { flex: 0 0 220px; height: 8px; border-radius: 4px; background: var(--border); overflow: hidden; }
+.bx-pre-bar > div { height: 100%; background: var(--accent); transition: width 0.3s; }
+.bx-pre-warn { color: var(--danger); font-size: 12px; }
+@media (max-width: 760px) { .bx-pre-bar { flex-basis: 100px; } }

@@ -705,6 +705,21 @@ export default function HelpTab() {
             strip above the image and count as validated.
           </p>
           <p>
+            <b>Pre-download</b> (the card under the validation queue, ▸ / ▾ folds it) fetches every frame of the scenes into
+            this browser, with its boxes, proposals (continuity, solver, idtrackerai) and the annotations saved so far, so
+            ← / → and the scene steps then ask the server nothing: a frame opens in a few ms, also far from the server.
+            <i>Scenes</i>: the ones listed (the To do / ◆ / ⚑ filter and the ZT range of the list) or all; whole chunks are
+            fetched, the open frame's first. The server makes what it has not made yet (the frames of each chunk as a short
+            H.264 video, ~20 kB a frame, sharper than the JPEGs the tab otherwise shows, and every frame's boxes); the bar
+            shows frames, MB, time left and what the server has built. <b>■ Stop</b> stops; <b>Resume pre-download</b>
+            fetches only what is missing; <b>Clear</b> deletes it from this browser. It stays after reloading the page.
+            Saves still go to the server at once. A save that changes other frames (the continuity proposals after it,
+            labels carried by fragment) makes those frames come from the server again; another person's saves make their
+            chunks be fetched again when the tab is opened. The images need a browser with WebCodecs (Chrome, Edge,
+            recent Firefox / Safari); without it only the boxes are kept. <b>⇩ Preload scene</b> keeps the JPEGs of one
+            scene for this session only.
+          </p>
+          <p>
             The <b>ZT</b> boxes above the scene list (from – to, hours with the “ZT0 at” hour, beyond 24 for the next
             days; either may stay empty) list only the scenes starting in that interval; ← / → and the scene steps then
             move through those only. ✕ clears it.

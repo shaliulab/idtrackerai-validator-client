@@ -17,6 +17,8 @@ import { useElementSize, useFillHeight } from './layout';
 import { useConsole } from './MessageConsole';
 import { setAnnotateState } from './loadGuard';
 import ValidationQueue from './ValidationQueue';
+import PreDownload from './PreDownload';
+import { Pack } from './annotatePack';
 
 const unwrap = (data) => (typeof data === 'string' ? JSON.parse(data) : data);
 const errorOf = (err) => err.response?.data?.error || err.message;
@@ -292,6 +294,7 @@ const UNDO_DEPTH = 100;
 const GREY_AFTER_MS = 300;   // a frame's image taking longer than this: the one shown before is greyed
 const NO_BOXES = [];
 const PRELOAD_MAX = 8000;
+const PACK_IMAGES = 40;      // pre-downloaded frames kept decoded (ImageBitmaps)
 const DATA_CACHE = PRELOAD_MAX;  // boxes kept in the browser (a few kB each; images: CACHE_FRAMES decoded)    // frames kept by Preload scene (~1 GB); the oldest go first         // what the frame shows (and can be edited) while its image loads
 const SAVE_BATCH = 200;      // frames per request of Save all (POST /api/annotate/frames)
 const HANDLE = 6;            // px (screen) around an edge / corner of a box that resizes it
@@ -341,8 +344,8 @@ function BoxCanvas({ image, stale, grey, width, height, boxes, fragments, region
   const [view, setView] = useState({ zoom: 1, cx: null, cy: null });
   const drag = useRef(null);
   const [hover, setHover] = useState(null);       // {i, part}
-  const w = image?.naturalWidth || 1000;
-  const h = image?.naturalHeight || 1000;
+  const w = image?.naturalWidth || image?.width || 1000;     // an <img>, or an ImageBitmap of the pre-download
+  const h = image?.naturalHeight || image?.height || 1000;
   const cx = view.cx ?? w / 2;
   const cy = view.cy ?? h / 2;
   const fit = Math.min(width / w, height / h);
@@ -616,6 +619,19 @@ function BoxCanvas({ image, stale, grey, width, height, boxes, fragments, region
 // The scenes (thousands): only the rows in view are rendered, and only when the list, the current scene or the
 // scroll change, not on every frame.
 const ROW_H = 21;
+
+// the boxes cache: a frame dropped from it (its boxes changed: saved here, carried labels, new proposals) is no
+// longer read from the pre-download either; evict = dropped only to keep the cache small
+class DataMap extends Map {
+  constructor(packRef) { super(); this.packRef = packRef; }
+  delete(k) { this.packRef?.current?.markStale(k); return super.delete(k); }
+  evict(k) { return super.delete(k); }
+  clear() {
+    const p = this.packRef?.current;
+    if (p && this.size) { p.markAllStale(); p.refresh().catch(() => {}); }
+    super.clear();
+  }
+}
 const SceneList = React.memo(function SceneList({ scenes, currentK, onPick, zt0 }) {
   const [el, setEl] = useState(null);
   const [top, setTop] = useState(0);
@@ -792,28 +808,62 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
   // proposals made again), so its entry is dropped then. Reading the video forward is cheap and a jump costs a
   // seek (1-3 s), so the frames around the current one are loaded ahead, one at a time, in increasing order.
   const images = useRef(new Map());
+  // Pre-download (annotatePack.js): frames and their boxes kept in this browser; a frame's kept boxes are not used
+  // once they are dropped here (delete: a save changed them), until fetched again
+  const [pack, setPack] = useState(null);
+  const [packVersion, setPackVersion] = useState(0);
+  const packRef = useRef(null);
+  packRef.current = pack;
+  useEffect(() => {
+    if (!currentExperiment) return undefined;
+    const p = new Pack(currentExperiment, () => setPackVersion((v) => v + 1));
+    setPack(p);
+    p.ready.then(() => { if (p.video.size || p.data.size) p.refresh().catch(() => {}); });
+    return () => p.close();
+  }, [currentExperiment]);
   // Preload scene: the JPEGs of whole scenes kept in the browser (fn -> object URL, ~120 kB each, ≤ PRELOAD_MAX):
   // opening one of their frames only decodes it, wherever it is in the scene
   const blobUrls = useRef(new Map());
-  const datas = useRef(new Map());
+  const datas = useRef(new DataMap(packRef));
   const cached = useCallback((map, fn, load, limit = CACHE_FRAMES) => {
     let e = map.get(fn);
     if (!e) {
       e = { value: undefined };
-      e.promise = load(fn).then((v) => { e.value = v; return v; }, (err) => { map.delete(fn); throw err; });
+      e.promise = load(fn).then((v) => { e.value = v; return v; }, (err) => { if (map.get(fn) === e) (map.evict || map.delete).call(map, fn); throw err; });
       map.set(fn, e);
-      while (map.size > limit) map.delete(map.keys().next().value);
-    } else { map.delete(fn); map.set(fn, e); }      // most recently used last
+      while (map.size > limit) (map.evict || map.delete).call(map, map.keys().next().value);
+    } else { (map.evict || map.delete).call(map, fn); map.set(fn, e); }      // most recently used last
     return e;
   }, []);
-  const imageOf = useCallback((fn) => cached(images.current, fn, (n) => new Promise((resolve, reject) => {
+  const serverImage = useCallback((n) => new Promise((resolve, reject) => {
     const img = new Image();
     // decoded ahead too: a 2100 px JPEG takes a while to decode when it is first drawn
     img.onload = () => (img.decode ? img.decode().catch(() => {}) : Promise.resolve()).then(() => resolve(img));
     img.onerror = () => reject(new Error(`Could not read frame ${n}`));
     img.src = blobUrls.current.get(n) || apiUrl(`/api/frame/${n}`);
-  })), [cached]);
-  const dataOf = useCallback((fn) => cached(datas.current, fn, (n) => queue.current.then(() => api.get(`/api/annotate/frame/${n}`)).then((r) => unwrap(r.data)), DATA_CACHE), [cached]);  // after the saves sent
+  }), []);
+  // pre-downloaded frames: decoded here (ImageBitmaps, 17 MB each at 2100 px: fewer kept)
+  const imageOf = useCallback((fn) => {
+    const p = packRef.current;
+    if (p && !p.loaded) {   // what this browser keeps is being listed (IndexedDB, < 1 s): wait for it
+      return cached(images.current, fn, (n) => p.ready.then(() => (p.hasImage(n)
+        ? p.image(n).catch(() => serverImage(n)) : serverImage(n))));
+    }
+    if (p?.hasImage(fn)) {
+      return cached(images.current, fn, (n) => p.image(n).catch((err) => {
+        console.warn(`Pre-download: frame ${n} not decoded (${err?.message || err}), read from the server`);
+        return serverImage(n);
+      }), PACK_IMAGES);
+    }
+    return cached(images.current, fn, serverImage);
+  }, [cached, serverImage]);
+  const serverData = useCallback((n) => queue.current.then(() => api.get(`/api/annotate/frame/${n}`)).then((r) => unwrap(r.data)), []);  // after the saves sent
+  const dataOf = useCallback((fn) => cached(datas.current, fn, (n) => {
+    const p = packRef.current;
+    const kept = () => p?.frameData(n);
+    const fromPack = () => { const k = kept(); return k ? k.then((v) => v || serverData(n)) : serverData(n); };
+    return p && !p.loaded ? p.ready.then(fromPack) : fromPack();
+  }, DATA_CACHE), [cached, serverData]);
   const forget = useCallback((fn) => { if (fn == null) datas.current.clear(); else datas.current.delete(fn); }, []);
   useEffect(() => { images.current.clear(); datas.current.clear(); edits.current.clear(); trackOut.current.clear(); hiddenAt.current.clear(); fragLabels.current.clear(); serverSplits.current.clear(); localTags.current.clear(); worked.current.clear(); leftBoxes.current.clear(); }, [currentExperiment]);
   useEffect(() => { datas.current.clear(); }, [reloadKey, info?.proposal_run?.t]);
@@ -871,6 +921,7 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
       .then((r) => {
         const d = unwrap(r.data);
         if (!d.changed.length) return;
+        packRef.current?.staleChunk(chunk);
         for (const [k, e] of [...datas.current]) if (k !== currentRef.current && e.value?.chunk === chunk) datas.current.delete(k);
         const pairs = Object.entries(d.mapping).map(([f, l]) => `fragment ${f} → ${l}`).join(', ');
         log('info', `Frame ${fn}: ${pairs} written in ${d.changed.length} saved frame${d.changed.length === 1 ? '' : 's'} of chunk ${chunk}`);
@@ -1069,10 +1120,16 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
           if (edits.current.delete(fn)) editsChanged = true;
           forget(fn);
           // other frames of the chunk inherit labels from the saved ones (server side): read them again
-          if (relabel && prev) for (const [k, e] of [...datas.current]) if (e.value?.chunk === prev.chunk) datas.current.delete(k);
+          if (relabel && prev) {
+            packRef.current?.staleChunk(prev.chunk);
+            for (const [k, e] of [...datas.current]) if (e.value?.chunk === prev.chunk) datas.current.delete(k);
+          }
           // the continuity proposals after it start from this frame now (its boxes, a fly at a notch moved included)
           // (not when it was saved as proposed: they come out the same, and the boxes of a preloaded scene stay)
-          if (!asProposed) for (const [k, e] of [...datas.current]) if (k > fn && k !== currentRef.current && e.value?.source === 'continuity' && e.value.chunk === d.chunk) datas.current.delete(k);
+          if (!asProposed) {
+            packRef.current?.staleAfter(d.chunk, fn);
+            for (const [k, e] of [...datas.current]) if (k > fn && k !== currentRef.current && e.value?.source === 'continuity' && e.value.chunk === d.chunk) datas.current.delete(k);
+          }
           if (fn === currentRef.current) { setLoaded(d.boxes); setFrame((f) => f && { ...f, saved: true, author: d.author, updated: d.updated }); }
         }
         if (editsChanged) setEditsVersion((v) => v + 1);
@@ -1494,9 +1551,14 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
     const i = sc ? shownScenes.findIndex((x) => x.k === sc.k) : -1;
     const sceneStarts = i < 0 ? [] : [shownScenes[i + 1], shownScenes[i - 1]].filter(Boolean).map((x) => [x.start, x.start + 1, x.start + 2]);
     const ahead = walk(1, PREFETCH_AHEAD);
-    // forward first: the server reads on from its last frame without seeking (a jump elsewhere is a seek)
-    const groups = [ahead.slice(0, 10), ...sceneStarts, ahead.slice(10), walk(-1, PREFETCH_BEHIND).reverse(),
-      ...[nextFlag, prevFlag].filter((f) => f != null).map((f) => [f, f + 1, f + 2])];
+    // forward first: the server reads on from its last frame without seeking (a jump elsewhere is a seek). Frames
+    // of the pre-download are decoded here, in any order: the first frames of the scenes next / before soon
+    const packed = packRef.current?.hasImage(current);
+    const groups = packed
+      ? [ahead.slice(0, 2), ...sceneStarts.map((g) => g.slice(0, 1)), ahead.slice(2, 10), ...sceneStarts, ahead.slice(10),
+        walk(-1, PREFETCH_BEHIND).reverse(), ...[nextFlag, prevFlag].filter((f) => f != null).map((f) => [f, f + 1, f + 2])]
+      : [ahead.slice(0, 10), ...sceneStarts, ahead.slice(10), walk(-1, PREFETCH_BEHIND).reverse(),
+        ...[nextFlag, prevFlag].filter((f) => f != null).map((f) => [f, f + 1, f + 2])];
     const seen = new Set([current]);
     const plan = [];
     for (const g of groups) for (const fn of g) if (!seen.has(fn)) { seen.add(fn); plan.push(fn); }
@@ -1729,6 +1791,10 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
   const queueCard = (
     <div ref={setQueueEl}>
       <ValidationQueue active={active} currentExperiment={currentExperiment} onOpenExperiment={onOpenExperiment} />
+      {currentExperiment && info && !info.bundle && info.source?.kind === 'scene_qc' && (
+        <PreDownload pack={pack} version={packVersion} shownScenes={shownScenes} chunksize={info.chunksize}
+                     currentChunk={current != null && info.chunksize ? Math.floor(current / info.chunksize) : null} log={log} />
+      )}
     </div>
   );
   if (!currentExperiment) return <div className="ov">{queueCard}<div className="card ov-controls toolbar">Load an experiment first, or open one of the queue.</div></div>;
@@ -1895,7 +1961,9 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
           </div>
         </section>}
 
-        <section className="card sl-view bx-view">
+        <section className="card sl-view bx-view" data-frame={current ?? undefined} data-ready={ready && imageFn === current ? 1 : 0}
+                 data-image={imageFn === current && image ? (image instanceof HTMLImageElement ? "server" : "pack") : undefined}
+                 data-boxes={ready ? (frame.fromPack ? 'pack' : 'server') : undefined}>
           <header className="card-header">
             {current != null ? (
               <span>
