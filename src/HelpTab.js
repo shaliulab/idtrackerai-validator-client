@@ -805,6 +805,13 @@ export default function HelpTab() {
             <b> Your name</b>, then Save. Your name goes on the frames you save when the app has no login.
           </p>
           <p>
+            When Drive cannot be reached the card says why and how to fix it, with the command to run on the computer running
+            this app (copy button) and rclone's own message under <i>Show rclone's message</i>. The usual one is an expired
+            sign-in: run <code>rclone config reconnect &lt;remote&gt;:</code> there (e.g. <code>rclone config reconnect gdrive:</code>).
+            Sign-ins made with your own Google Cloud OAuth app expire every 7 days while the app is in <i>Testing</i>: publish it to
+            production in the Google Cloud console, or leave client_id / client_secret empty in <code>rclone config</code>.
+          </p>
+          <p>
             <b>Publisher</b> (the lab): load the experiment, prepare its scenes in the Annotate tab, then <b>Publish to Drive</b>.
             <b> Whole experiment</b> sends the experiment folder as it is (tens of GB). Unticked (the default), a
             <b> minimal bundle</b> is made and sent: clips of the scene frames only, the database cut down to them, the blobs

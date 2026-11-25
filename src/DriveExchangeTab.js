@@ -17,10 +17,42 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import api from './api';
 import { useConsole } from './MessageConsole';
 import { formatBytes } from './DataManagementTab';
+import { copyText } from './utils';
 
 const unwrap = (data) => (typeof data === 'string' ? JSON.parse(data) : data);
 const errorOf = (err) => err.response?.data?.error ?? err.message;
 const flat = (name) => (name || '').replace(/\//g, '_').replace(/_arenas_(\d+)$/, '_arena$1');
+
+// An rclone failure as the server explains it (rclone_errors.py): the message, the command fixing it (copy
+// button), a hint, and rclone's own line (tokens redacted) folded away.
+function RcloneError({ info, log }) {
+  const [open, setOpen] = useState(false);
+  if (!info?.error) return null;
+  const copy = () => copyText(info.error_command)
+    .then(() => log('success', `Copied: ${info.error_command}`))
+    .catch(() => log('error', 'Could not copy to the clipboard'));
+  return (
+    <div className="banner-danger dm-banner xc-error" data-error-kind={info.error_kind || ''}>
+      <i className="fa fa-exclamation-triangle" />
+      <div className="xc-error-body">
+        <div className="xc-error-message">{info.error}</div>
+        {info.error_command && (
+          <div className="xc-error-command">
+            <code>{info.error_command}</code>
+            <button className="icon-btn" title="Copy the command" onClick={copy}><i className="fa fa-copy" /></button>
+          </div>
+        )}
+        {info.error_hint && <div className="xc-error-hint">{info.error_hint}</div>}
+        {info.error_detail && info.error_detail !== info.error && (
+          <div>
+            <button className="xc-link" onClick={() => setOpen(!open)}>{open ? 'Hide' : 'Show'} rclone's message</button>
+            {open && <pre className="xc-error-detail">{info.error_detail}</pre>}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 const ago = (seconds) => {
   if (!seconds) return '';
@@ -93,7 +125,7 @@ function DriveSettings({ status, onSaved }) {
           <i className={`fa ${saving ? 'fa-spinner fa-spin' : 'fa-check'}`} style={{ marginRight: 6 }} />Save
         </button>
       </div>
-      {status?.error && <div className="banner-danger dm-banner"><div>{status.error}</div></div>}
+      <RcloneError info={status} log={log} />
       {help && (
         <div className="card-body xc-help">
           <p>Experiments and annotations go through one Google Drive folder that the publisher shares with
@@ -432,7 +464,8 @@ export default function DriveExchangeTab({ active, currentExperiment, onOpenExpe
             <i className={`fa ${listingBusy ? 'fa-spinner fa-spin' : 'fa-refresh'}`} style={{ marginRight: 6 }} />List again
           </button>
         </header>
-        {listing && entries.length === 0 && !listingBusy && <div className="card-body">Nothing published in {listing.remote || status?.remote} yet.</div>}
+        <RcloneError info={listing} log={log} />
+        {listing && !listing.error && entries.length === 0 && !listingBusy && <div className="card-body">Nothing published in {listing.remote || status?.remote} yet.</div>}
         {entries.length > 0 && (
           <div className="ov-scroll">
             <table className="pe-table ov-table">
