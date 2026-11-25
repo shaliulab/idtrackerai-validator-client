@@ -82,20 +82,22 @@ const LOGOS = [
 ];
 
 // Commit of the root repository the server runs from (/api/version).
-function VersionTag() {
+function VersionTag({ onOpen }) {
   const [version, setVersion] = useState(null);
   useEffect(() => {
     api.get('/api/version').then((r) => setVersion(r.data)).catch(() => {});
   }, []);
-  if (!version?.commit) return null;
+  if (!version?.commit && !version?.version) return null;
   return (
-    <span
+    <button
+      type="button"
       className="app-version"
-      title={`idtrackerai-validator-server commit ${version.commit} (${version.date})`
-        + (version.dirty ? ', with uncommitted changes' : '')}
+      onClick={onOpen}
+      title={`idtrackerai-validator-server ${version.version || ''}, commit ${version.commit} (${version.date})`
+        + (version.dirty ? ', with uncommitted changes' : '') + '. Click to check for updates'}
     >
-      {version.commit}{version.dirty ? '*' : ''}
-    </span>
+      {version.version ? `${version.version} · ` : ''}{version.commit}{version.dirty ? '*' : ''}
+    </button>
   );
 }
 
@@ -860,7 +862,7 @@ function App() {
     }}>
       {/* ── App bar: title, experiment (shared across tabs), global toggles ── */}
       <header className="app-bar">
-        <VersionTag />
+        <VersionTag onOpen={() => { setActiveTab('help'); setTimeout(() => document.getElementById('help-updates')?.scrollIntoView({ block: 'start' }), 50); }} />
         <img className="app-logo" src={`${import.meta.env.BASE_URL}logo.svg`} alt="" />
         <div className="app-title">
           <h1>FlyHostel Viewer</h1>

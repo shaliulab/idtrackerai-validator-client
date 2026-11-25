@@ -3,12 +3,14 @@
 // Static text. When a feature, button or shortcut changes, update it here too.
 
 import React from 'react';
+import UpdateCheck from './UpdateCheck';
 
 const Key = ({ children }) => <kbd className="help-kbd">{children}</kbd>;
 
 const SECTIONS = [
   { id: 'help-overview', title: 'What this app is for' },
   { id: 'help-start', title: 'Getting started' },
+  { id: 'help-updates', title: 'Updates' },
   { id: 'help-viewer', title: 'Group viewer' },
   { id: 'help-pe', title: 'Proboscis extension (PE)' },
   { id: 'help-legs', title: 'Leg movements' },
@@ -209,9 +211,45 @@ export default function HelpTab() {
           </ol>
           <p className="help-note">
             The top bar also switches between light and dark theme. The small code in the
-            top right corner is the version (git commit) of the running server; a{' '}
+            top right corner is the version and git commit of the running server; a{' '}
             <code>*</code> means it ran with uncommitted changes. Include it when you report a problem.
+            Click it to check for updates.
           </p>
+        </Section>
+
+        <Section id="help-updates" title="Updates">
+          <p>
+            <b>Check for updates</b> asks GitHub for the latest release of the validator and compares it with the
+            version this server runs. The app never checks by itself: only when you press the button.
+          </p>
+          <ul>
+            <li>
+              <b>Who can update.</b> Updating restarts the server for everyone using it, so only an admin can:
+              someone using a browser on the server computer itself, or who typed the admin password
+              (<code>VALIDATOR_ADMIN_PASSWORD</code> on the server) after pressing the button. Everyone else sees
+              that an update is available and is asked to tell their admin.
+            </li>
+            <li>
+              <b>Before updating</b>, ask the people using the server to save their work. Jobs still running (a
+              pre-download being built, Prepare scenes, a swap check, an integration…) would be stopped: the app
+              lists them and asks again before stopping them. Jobs in the GPU queue keep running.
+            </li>
+            <li>
+              <b>The lab server</b> (a git checkout) is updated in place: it must be on <code>master</code> with no
+              uncommitted changes, otherwise the app says why and shows the commands to run by hand. The steps and
+              their output are shown below the button. When the new version answers, the page reloads; if it does
+              not start, the previous version is put back and restarted. Everything is logged to{' '}
+              <code>~/.cache/idtrackerai-validator/update/update.log</code>.
+            </li>
+            <li>
+              <b>Windows installs</b> download the release's Windows bundle, close the server window, install it
+              and start the server again in a new window.
+            </li>
+            <li>
+              <b>Docker and plain pip installs</b> are not updated from the app: it shows the commands instead.
+            </li>
+          </ul>
+          <UpdateCheck />
         </Section>
 
         <Section id="help-viewer" title="Group viewer">

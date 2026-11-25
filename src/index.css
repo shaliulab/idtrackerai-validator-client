@@ -116,7 +116,13 @@ input[type="checkbox"] { accent-color: var(--accent); }
   color: var(--subtext);
   opacity: 0.8;
   pointer-events: auto;
+  background: none;
+  border: none;
+  padding: 0;
+  min-height: 0;
+  cursor: pointer;
 }
+.app-version:hover { color: var(--accent); opacity: 1; background: none; }
 .app-actions { display: flex; align-items: center; gap: 8px; }
 
 .tabs {
@@ -338,6 +344,30 @@ input[type="checkbox"] { accent-color: var(--accent); }
   background: var(--surface-2); color: var(--text);
 }
 .help-pending { font-style: italic; font-weight: 600; background: #ffd54f; color: #333; padding: 0 4px; border-radius: 3px; }
+/* Updates section of the How to use tab (UpdateCheck.js) */
+.upd { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
+.upd-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.upd-current { color: var(--subtext); }
+.upd-banner { padding: 8px 12px; border-radius: var(--radius); border: 1px solid var(--border); background: var(--surface-2); }
+.upd-update_available, .upd-running { border-color: var(--accent); background: var(--accent-soft); }
+.upd-failed, .upd-rollback_failed { border-color: var(--danger); background: var(--danger-soft); color: var(--danger); }
+.upd-rolled_back { border-color: #d97706; }
+.upd-done, .upd-up_to_date { border-color: #16a34a; }
+.upd-detail { color: var(--subtext); }
+.upd-warn { color: #b45309; }
+.upd-notes, .upd-log, .upd-commands pre {
+  white-space: pre-wrap; word-break: break-word; font-size: 12px; max-height: 320px; overflow: auto;
+  background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius); padding: 8px 10px; margin: 6px 0;
+}
+.upd-commands { display: flex; align-items: flex-start; gap: 8px; }
+.upd-commands pre { flex: 1; min-width: 0; }
+.upd-blockers { color: var(--danger); }
+.upd-steps { list-style: none; padding-left: 0 !important; margin: 0; }
+.upd-step-icon { display: inline-block; width: 18px; }
+.upd-step-done .upd-step-icon { color: #16a34a; }
+.upd-step-failed { color: var(--danger); }
+.upd-notadmin input { min-width: 200px; }
+
 .help-keys-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(340px, 100%), 1fr)); gap: 16px 24px; }
 .help-keys { border-collapse: collapse; font-size: 13px; width: 100%; }
 .help-keys caption { text-align: left; font-weight: 600; padding-bottom: 4px; }
