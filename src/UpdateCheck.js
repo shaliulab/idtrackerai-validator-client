@@ -1,9 +1,8 @@
 // UpdateCheck.js  —  "Updates" section of the How to use tab: Check for updates / Update.
 //
 // GitHub is asked only when the button is pressed (GET /api/update/check): no check on load, no polling.
-// Applying (POST /api/update/apply) restarts the server for everyone, so the server allows it only to an
-// admin (a browser on the server itself, or one unlocked with the admin password); others are told to ask
-// their admin. While an update runs, /api/update/status is polled (the server goes away during the
+// Applying (POST /api/update/apply) restarts the server for everyone, so the server allows it only from a
+// browser on the server itself (loopback address); others are told to ask their admin. While an update runs, /api/update/status is polled (the server goes away during the
 // restart); when the new version answers, the page reloads.
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
@@ -80,7 +79,6 @@ export default function UpdateCheck() {
   const [status, setStatus] = useState(null);     // status.json of the update running / last one
   const [polling, setPolling] = useState(false);
   const [restarting, setRestarting] = useState(false);
-  const [password, setPassword] = useState('');
   const [reloadIn, setReloadIn] = useState(null);
 
   // the last update (local file, GitHub is not asked): shows one that is running when the page opens
@@ -137,16 +135,6 @@ export default function UpdateCheck() {
       setChecking(false);
     }
   }, []);
-
-  const unlock = async () => {
-    try {
-      await api.post('/api/update/admin', { password });
-      setPassword('');
-      await doCheck();
-    } catch (e) {
-      setError(errorText(e));
-    }
-  };
 
   const apply = async (force = false) => {
     const jobs = check?.busy?.jobs || [];
@@ -242,16 +230,9 @@ export default function UpdateCheck() {
             ) : (
               <div className="upd-notadmin">
                 <p>
-                  <b>Ask your admin to update the server.</b> Updating restarts it for everyone, so only an admin
-                  can do it: from a browser on the server itself{check.admin_password ? ', or with the admin password' : ''}.
+                  <b>Ask your admin to update the server.</b> Updating restarts it for everyone, so it can only be
+                  done from a browser on the server computer itself.
                 </p>
-                {check.admin_password && (
-                  <form className="upd-row" onSubmit={(e) => { e.preventDefault(); unlock(); }}>
-                    <input type="password" autoComplete="current-password" placeholder="Admin password"
-                      value={password} onChange={(e) => setPassword(e.target.value)} />
-                    <button type="submit" disabled={!password}>I am the admin</button>
-                  </form>
-                )}
               </div>
             )
           )}

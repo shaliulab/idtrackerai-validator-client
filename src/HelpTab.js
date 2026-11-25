@@ -224,15 +224,17 @@ export default function HelpTab() {
           </p>
           <ul>
             <li>
-              <b>Who can update.</b> Updating restarts the server for everyone using it, so only an admin can:
-              someone using a browser on the server computer itself, or who typed the admin password
-              (<code>VALIDATOR_ADMIN_PASSWORD</code> on the server) after pressing the button. Everyone else sees
-              that an update is available and is asked to tell their admin.
+              <b>Who can update.</b> Updating restarts the server for everyone using it, so it can only be done
+              from a browser on the server computer itself (e.g. <code>http://localhost:5000</code> there, or
+              through an ssh tunnel). Everyone else sees that an update is available and is asked to tell their
+              admin.
             </li>
             <li>
               <b>Before updating</b>, ask the people using the server to save their work. Jobs still running (a
               pre-download being built, Prepare scenes, a swap check, an integration…) would be stopped: the app
-              lists them and asks again before stopping them. Jobs in the GPU queue keep running.
+              lists them and asks again before stopping them. On the lab server (a systemd service) this includes every
+              program the server started that is still running: preprocess-sample, crops of arenas, the GPU queue's
+              jobs, integrations…, since restarting the service stops them all. Better wait until they end.
             </li>
             <li>
               <b>The lab server</b> (a git checkout) is updated in place: it must be on <code>master</code> with no
