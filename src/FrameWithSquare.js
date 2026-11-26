@@ -1,6 +1,8 @@
 // FrameWithSquare.js
 
 import React, { useRef, useEffect, useState, useMemo, useImperativeHandle } from 'react';
+import { useTouchGestures, COARSE_QUERY } from './gestures';
+import { useMediaQuery } from './layout';
 
 import {
   SQUARE_HEIGHT,
@@ -61,6 +63,9 @@ function formatLabel(value) {
 
 // Scroll distance (px) that moves the viewer by one step: one mouse-wheel notch.
 const WHEEL_NOTCH_PX = 100;
+// touch: a horizontal swipe of this many px steps one wheel notch (playback framerate frames)
+const SWIPE_STEP_PX = 24;
+const MAX_ZOOM = 8;
 
 const FrameWithSquare = React.forwardRef(
   (
@@ -93,6 +98,10 @@ const FrameWithSquare = React.forwardRef(
     isPlayingRef.current = isPlaying;
     const wheelAccumRef = useRef(0);
     const [hoverPos, setHoverPos] = useState(null);
+    // touch zoom of the frame: CSS transform of the canvas (scale s, then translate tx / ty in display px)
+    const [zoom, setZoom] = useState({ s: 1, tx: 0, ty: 0 });
+    const coarse = useMediaQuery(COARSE_QUERY);
+    const swipeRef = useRef(0);
 
     // Click log. Nothing renders from it, so a ref is the right container:
     // as state it was being mutated in place and returned by identity, which
@@ -114,8 +123,9 @@ const FrameWithSquare = React.forwardRef(
       // currentTarget, not target: the click lands on the <canvas>, and using
       // target would break if another element is ever layered over it.
       const rect = event.currentTarget.getBoundingClientRect();
-      const xDisp = event.clientX - rect.left;
-      const yDisp = event.clientY - rect.top;
+      // rect is the zoomed canvas on a touch screen: back to display px
+      const xDisp = (event.clientX - rect.left) * (displayWidth / rect.width);
+      const yDisp = (event.clientY - rect.top) * (displayHeight / rect.height);
       // Native frame coordinates of the click (used by the Validation CSV card).
       onFrameClick?.({ x: Math.round(xDisp / sx), y: Math.round(yDisp / sy), nonce: Date.now() });
 
@@ -158,6 +168,51 @@ const FrameWithSquare = React.forwardRef(
       });
     };
     const handleMouseLeave = () => setHoverPos(null);
+
+    // ── touch: pinch / drag zoom, swipe scrubs frames, long press shows the magnifier, double tap zooms ──
+    const clampZoom = (z) => {
+      const s = Math.min(Math.max(z.s, 1), MAX_ZOOM);
+      if (s === 1) return { s: 1, tx: 0, ty: 0 };
+      return {
+        s,
+        tx: Math.min(0, Math.max(displayWidth * (1 - s), z.tx)),
+        ty: Math.min(0, Math.max(displayHeight * (1 - s), z.ty)),
+      };
+    };
+    const toDisplay = (p) => {
+      const rect = canvasRef.current.getBoundingClientRect();
+      return { x: (p.x - rect.left) * (displayWidth / rect.width), y: (p.y - rect.top) * (displayHeight / rect.height) };
+    };
+    const zoomAt = (factor, p, dx = 0, dy = 0) => setZoom((z) => {
+      const box = canvasRef.current?.parentElement?.getBoundingClientRect();
+      if (!box) return z;
+      const px = p.x - box.left, py = p.y - box.top;       // point in the (unzoomed) wrapper
+      const s = Math.min(Math.max(z.s * factor, 1), MAX_ZOOM);
+      return clampZoom({ s, tx: px - (px - z.tx) * (s / z.s) + dx, ty: py - (py - z.ty) * (s / z.s) + dy });
+    });
+    const gestures = useTouchGestures({
+      onPanStart: () => { swipeRef.current = 0; if (isPlayingRef.current) setIsPlaying?.(false); },
+      onPan: ({ dx, dy }) => {
+        if (zoom.s > 1) { setZoom((z) => clampZoom({ ...z, tx: z.tx + dx, ty: z.ty + dy })); return; }
+        // swipe left = forward in time, as dragging a film strip
+        swipeRef.current -= dx;
+        const steps = Math.trunc(swipeRef.current / SWIPE_STEP_PX);
+        if (!steps) return;
+        swipeRef.current -= steps * SWIPE_STEP_PX;
+        const step = videoFrameRate || 1;
+        setFrameNumber((prev) => Math.max(0, prev + steps * step));
+      },
+      onPinch: ({ scale, x, y, dx, dy }) => zoomAt(scale, { x, y }, dx, dy),
+      onDoubleTap: (p) => (zoom.s > 1 ? setZoom({ s: 1, tx: 0, ty: 0 }) : zoomAt(2.5, p)),
+      onLongPress: (p) => setHoverPos(toDisplay(p)),
+      onLongMove: (p) => setHoverPos(toDisplay(p)),
+      onLongEnd: () => setHoverPos(null),
+    });
+    useEffect(() => { setZoom((z) => clampZoom(z)); }, [displayWidth, displayHeight]);   // eslint-disable-line react-hooks/exhaustive-deps
+    // backing store: sharp on high-density / zoomed touch screens, 1:1 with a mouse (as before)
+    const backing = coarse || zoom.s > 1
+      ? Math.max(1, Math.min((window.devicePixelRatio || 1) * 2 ** Math.ceil(Math.log2(zoom.s)), 4096 / Math.max(displayWidth, 1)))
+      : 1;
 
     useEffect(() => {
       const canvas = canvasRef.current;
@@ -272,8 +327,9 @@ const FrameWithSquare = React.forwardRef(
           onNativeSize?.(native);
         }
 
-        canvas.width = displayWidth;
-        canvas.height = displayHeight;
+        canvas.width = Math.round(displayWidth * backing);
+        canvas.height = Math.round(displayHeight * backing);
+        context.setTransform(backing, 0, 0, backing, 0, 0);
 
         context.clearRect(0, 0, displayWidth, displayHeight);
         context.drawImage(img, 0, 0, displayWidth, displayHeight);
@@ -472,6 +528,7 @@ const FrameWithSquare = React.forwardRef(
       displayHeight,
       frameNumber,
       hoverPos,
+      backing,
       nativeSize,
       onNativeSize,
       showPose,
@@ -480,15 +537,26 @@ const FrameWithSquare = React.forwardRef(
     ]);
 
     return (
-      <div style={{ width: displayWidth }}>
+      <div style={{ width: displayWidth, position: 'relative', overflow: coarse ? 'hidden' : undefined }}>
         <canvas
           ref={canvasRef}
           onClick={handleClick}
           onMouseDown={handleMouseDown}
           onMouseMove={handleMouseMove}
           onMouseLeave={handleMouseLeave}
-          style={{ width: displayWidth, height: displayHeight, display: 'block' }}
+          {...gestures}
+          style={{
+            width: displayWidth, height: displayHeight, display: 'block',
+            // not zoomed: the page still scrolls up / down over the frame, sideways swipes step frames
+            ...(coarse ? { touchAction: zoom.s > 1 ? 'none' : 'pan-y', WebkitTouchCallout: 'none', userSelect: 'none' } : {}),
+            ...(zoom.s > 1 ? { transform: `translate(${zoom.tx}px, ${zoom.ty}px) scale(${zoom.s})`, transformOrigin: '0 0' } : {}),
+          }}
         />
+        {zoom.s > 1 && (
+          <button className="frame-zoom-reset" onClick={() => setZoom({ s: 1, tx: 0, ty: 0 })} title="Back to the whole frame (double tap)">
+            {zoom.s.toFixed(1)}× ✕
+          </button>
+        )}
         <img ref={imgRef} style={{ display: 'none' }} alt="" />
       </div>
     );

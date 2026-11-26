@@ -101,7 +101,8 @@ export function ConsoleProvider({ children }) {
 
   const trackJob = useCallback(async (job) => {
     const entryId = append({ job });
-    setOpen(true);
+    // phones: the header already says "N jobs running"; opening would cover a third of the screen
+    if (!window.matchMedia?.('(max-width: 760px)').matches) setOpen(true);
     const setJob = (j) => setEntries((list) => list.map((e) => (e.id === entryId ? { ...e, job: j } : e)));
 
     while (job.status === 'running') {

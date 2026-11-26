@@ -4,6 +4,7 @@ import './index.css';
 import App from './App';
 import { ConsoleProvider } from './MessageConsole';
 import reportWebVitals from './reportWebVitals';
+import { installResponsiveTables } from './responsiveTables';
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(
@@ -18,3 +19,4 @@ root.render(
 // to log results (for example: reportWebVitals(console.log))
 // or send to an analytics endpoint. Learn more: https://bit.ly/CRA-vitals
 reportWebVitals();
+installResponsiveTables();

@@ -26,6 +26,7 @@ const SECTIONS = [
   { id: 'help-data', title: 'Data management' },
   { id: 'help-monitor', title: 'Monitor' },
   { id: 'help-collector', title: 'Data collector' },
+  { id: 'help-touch', title: 'Phones & tablets' },
   { id: 'help-keys', title: 'Keyboard & mouse' },
   { id: 'help-glossary', title: 'Glossary' },
 ];
@@ -1247,6 +1248,37 @@ export default function HelpTab() {
               more blobs, mean the thresholds or ROIs need changing. It also runs in an arena (<code>…/arenas/K</code>): there
               it reads <code>K.conf</code>, a copy of the arena's <code>&lt;date&gt;.conf</code> made when its toml is saved and before
               each run.</li>
+          </ul>
+        </Section>
+
+        <Section id="help-touch" title="Phones & tablets">
+          <p>
+            The app adapts to the screen: on a phone the settings of the top bar (Tracking, Validated tracking,
+            theme, sign out) are behind the <i className="fa fa-bars" /> button, the tabs are one row you swipe
+            sideways (it stays at the top while you scroll), side panels move below the frame and some tables
+            show one card per row. Keyboard shortcuts have buttons on the screen.
+          </p>
+          <ul>
+            <li>
+              <b>Group viewer.</b> Swipe left / right on the frame to step forward / back (one swipe step = the
+              playback framerate in frames, as a mouse wheel notch); pinch with two fingers to zoom, then drag
+              with one to move; double tap zooms in / back to the whole frame (also the <b>×</b> button); press
+              and hold to show the magnifier where your finger is. Up / down still scrolls the page.
+            </li>
+            <li>
+              <b>Annotate.</b> Tap a box to select it, drag it to move it, drag its edges or corners to resize it,
+              drag outside the boxes to pan, two fingers to zoom. <b>New shape</b> then drag draws a box. The bar
+              under the frame steps frames, labels the selected box, selects the next box, deletes, undoes and
+              saves (<b>Save ▶</b> = Enter).
+            </li>
+            <li>
+              <b>Data collector → Segmentation settings.</b> While drawing a region, tap to add a point, press and
+              hold to remove the nearest one; two fingers zoom, one pans, double tap fits the frame.
+            </li>
+            <li>
+              <b>Console.</b> On a phone it stays folded when a job starts (its bar says how many run): tap it to
+              see the progress.
+            </li>
           </ul>
         </Section>
 

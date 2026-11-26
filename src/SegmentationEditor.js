@@ -4,6 +4,7 @@
 // and the blobs the segmentation finds in the shown frame (/api/collector/segment, refreshed
 // as settings change). Save writes the toml (and <date>.conf), see data_collector.py.
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useTouchGestures } from './gestures';
 import api, { apiUrl } from './api';
 import { useConsole, useConsoleState, consoleHeight } from './MessageConsole';
 import { useElementSize } from './layout';
@@ -100,6 +101,7 @@ function SegmentationCanvas({ imageUrl, width, height, rois, blobs, drawing, sel
   const [image, setImage] = useState(null);
   const [view, setView] = useState(null);           // {scale, x, y}: canvas px = (image px - x) * scale
   const drag = useRef(null);
+  const dpr = Math.min(window.devicePixelRatio || 1, 3);
 
   useEffect(() => {
     if (!imageUrl) return undefined;
@@ -130,7 +132,8 @@ function SegmentationCanvas({ imageUrl, width, height, rois, blobs, drawing, sel
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.fillStyle = '#000';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
-    const toScreen = () => ctx.setTransform(view.scale, 0, 0, view.scale, -view.x * view.scale, -view.y * view.scale);
+    const k = view.scale * dpr;      // image px -> canvas px (device pixels: sharp on phones)
+    const toScreen = () => ctx.setTransform(k, 0, 0, k, -view.x * k, -view.y * k);
     toScreen();
     if (image) ctx.drawImage(image, 0, 0, width, height);
     const px = 1 / view.scale;
@@ -140,7 +143,7 @@ function SegmentationCanvas({ imageUrl, width, height, rois, blobs, drawing, sel
       const mask = document.createElement('canvas');
       mask.width = canvas.width; mask.height = canvas.height;
       const m = mask.getContext('2d');
-      m.setTransform(view.scale, 0, 0, view.scale, -view.x * view.scale, -view.y * view.scale);
+      m.setTransform(k, 0, 0, k, -view.x * k, -view.y * k);
       rois.forEach((roi) => {
         if (!roi) return;
         m.globalCompositeOperation = roi.sign === '+' ? 'source-over' : 'destination-out';
@@ -239,7 +242,7 @@ function SegmentationCanvas({ imageUrl, width, height, rois, blobs, drawing, sel
       ctx.fillStyle = '#349650';
       pts.forEach(([x, y]) => { ctx.beginPath(); ctx.arc(x, y, 5 * px, 0, 2 * Math.PI); ctx.fill(); });
     }
-  }, [image, view, width, height, rois, blobs, drawing, selected, markers, splitter, side]);
+  }, [image, view, width, height, rois, blobs, drawing, selected, markers, splitter, side, dpr]);
 
   const toImage = (e) => {
     const rect = canvasRef.current.getBoundingClientRect();
@@ -263,8 +266,32 @@ function SegmentationCanvas({ imageUrl, width, height, rois, blobs, drawing, sel
     return () => canvas.removeEventListener('wheel', stop);
   }, []);
 
+  // touch / pen: tap adds a point while drawing, long press removes the nearest one, one finger pans,
+  // two fingers zoom, double tap fits (the mouse keeps its handlers below)
+  const clientToImage = (p) => toImage({ clientX: p.x, clientY: p.y });
+  const zoomBy = (factor, p, dx = 0, dy = 0) => setView((v) => {
+    if (!v) return v;
+    const rect = canvasRef.current.getBoundingClientRect();
+    const [ix, iy] = [v.x + (p.x - dx - rect.left) / v.scale, v.y + (p.y - dy - rect.top) / v.scale];
+    const scale = Math.min(Math.max(v.scale * factor, fit().scale), 8);
+    return { scale, x: ix - (p.x - rect.left) / scale, y: iy - (p.y - rect.top) / scale };
+  });
+  const lastTouch = useRef(0);      // a browser may still send mouse events after a touch: ignore them
+  const touchGestures = useTouchGestures({
+    onTap: (p) => { if (view && drawing) onPoint(clientToImage(p)); },
+    onLongPress: (p) => { if (view && drawing) onRemovePoint(clientToImage(p), 40 / view.scale); },
+    onDoubleTap: () => { if (!drawing) setView(fit()); },
+    onPan: ({ dx, dy }) => setView((v) => (v ? { ...v, x: v.x - dx / v.scale, y: v.y - dy / v.scale } : v)),
+    onPinch: ({ scale, x, y, dx, dy }) => zoomBy(scale, { x, y }, dx, dy),
+  });
+  const gestures = {
+    ...touchGestures,
+    onPointerDown: (e) => { if (e.pointerType !== 'mouse') lastTouch.current = Date.now(); touchGestures.onPointerDown(e); },
+  };
+  const fromTouch = () => Date.now() - lastTouch.current < 1000;
+
   const onMouseDown = (e) => {
-    if (!view) return;
+    if (!view || fromTouch()) return;
     if (e.button === 2 && drawing) { onRemovePoint(toImage(e), 20 / view.scale); return; }
     if (e.button !== 0) return;
     drag.current = { x: e.clientX, y: e.clientY, view, moved: false };
@@ -279,6 +306,7 @@ function SegmentationCanvas({ imageUrl, width, height, rois, blobs, drawing, sel
   const onMouseUp = (e) => {
     const d = drag.current;
     drag.current = null;
+    if (fromTouch()) return;
     if (d && !d.moved && drawing) onPoint(toImage(e));
   };
 
@@ -286,9 +314,10 @@ function SegmentationCanvas({ imageUrl, width, height, rois, blobs, drawing, sel
     <div ref={setBox} style={{ width: '100%' }}>
       <canvas
         ref={canvasRef}
-        width={side}
-        height={side}
-        style={{ width: side, height: side, display: 'block', borderRadius: 6, cursor: drawing ? 'crosshair' : 'grab' }}
+        width={Math.round(side * dpr)}
+        height={Math.round(side * dpr)}
+        style={{ width: side, height: side, display: 'block', borderRadius: 6, cursor: drawing ? 'crosshair' : 'grab', touchAction: 'none' }}
+        {...gestures}
         onWheel={onWheel}
         onMouseDown={onMouseDown}
         onMouseMove={onMouseMove}
@@ -701,7 +730,7 @@ export default function SegmentationEditor({ experiment, active, highlight, fram
             )}
             {drawing && drawing.type !== 'Splitter' && (
               <div className="sc-hint">
-                Click on the frame to add points (right click removes the nearest one); {drawing.type.endsWith('Ellipse') ? '5 or more' : '3 or more'} points, then Enter.
+                Click on the frame to add points (right click removes the nearest one; on a touch screen tap adds, long press removes, two fingers zoom); {drawing.type.endsWith('Ellipse') ? '5 or more' : '3 or more'} points, then Enter.
               </div>
             )}
             {draft.roi_enabled && (
@@ -905,7 +934,7 @@ export default function SegmentationEditor({ experiment, active, highlight, fram
             setFrameNumber(c * chunksize + Math.floor(Math.random() * chunksize));
           }} title="A random frame of the chunks here">Random</button>
         </div>
-        <div className="sc-hint">Wheel: zoom · drag: pan · double click: fit · ←/→ frame (Shift: 10 s)</div>
+        <div className="sc-hint">Wheel: zoom · drag: pan · double click: fit · ←/→ frame (Shift: 10 s) · touch: two fingers zoom, one pans, double tap fits</div>
       </div>
     </div>
   );

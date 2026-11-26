@@ -13,7 +13,7 @@
 
 import React, { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react';
 import api, { apiUrl } from './api';
-import { useElementSize, useFillHeight } from './layout';
+import { useElementSize, useFillHeight, useMediaQuery } from './layout';
 import { useConsole } from './MessageConsole';
 import { setAnnotateState } from './loadGuard';
 import ValidationQueue from './ValidationQueue';
@@ -298,7 +298,8 @@ const PRELOAD_MAX = 8000;
 const PACK_IMAGES = 40;      // pre-downloaded frames kept decoded (ImageBitmaps)
 const DATA_CACHE = PRELOAD_MAX;  // boxes kept in the browser (a few kB each; images: CACHE_FRAMES decoded)    // frames kept by Preload scene (~1 GB); the oldest go first         // what the frame shows (and can be edited) while its image loads
 const SAVE_BATCH = 200;      // frames per request of Save all (POST /api/annotate/frames)
-const HANDLE = 6;            // px (screen) around an edge / corner of a box that resizes it
+const HANDLE_MOUSE = 6;      // px (screen) around an edge / corner of a box that resizes it
+const HANDLE_TOUCH = 18;     // the same for a finger / pen
 const MIN_DRAG = 4;          // px (screen) before a drag draws a box
 // Okabe-Ito first, then more distinct colours
 const PALETTE = ['#e69f00', '#56b4e9', '#009e73', '#f0e442', '#0072b2', '#d55e00', '#cc79a7',
@@ -345,6 +346,10 @@ function BoxCanvas({ image, stale, grey, width, height, boxes, fragments, region
   const [view, setView] = useState({ zoom: 1, cx: null, cy: null });
   const drag = useRef(null);
   const [hover, setHover] = useState(null);       // {i, part}
+  // touch: fingers on the canvas; two of them pinch-zoom and pan (whatever the first one was doing is undone)
+  const touches = useRef(new Map());
+  const pinch = useRef(null);
+  const coarse = useMediaQuery('(pointer: coarse)');
   const w = image?.naturalWidth || image?.width || 1000;     // an <img>, or an ImageBitmap of the pre-download
   const h = image?.naturalHeight || image?.height || 1000;
   const cx = view.cx ?? w / 2;
@@ -456,7 +461,8 @@ function BoxCanvas({ image, stale, grey, width, height, boxes, fragments, region
       }
       if (isSel) {
         ctx.fillStyle = color;
-        for (const [px, py] of [[x0, y0], [x1, y0], [x0, y1], [x1, y1]]) ctx.fillRect(px - 4, py - 4, 8, 8);
+        const r = coarse ? 7 : 4;     // corner handles a finger can see
+        for (const [px, py] of [[x0, y0], [x1, y0], [x0, y1], [x1, y1]]) ctx.fillRect(px - r, py - r, 2 * r, 2 * r);
       }
     });
     const d = drag.current;
@@ -477,7 +483,7 @@ function BoxCanvas({ image, stale, grey, width, height, boxes, fragments, region
   };
   // the box part under the pointer: near an edge or corner (within HANDLE px) resizes, inside moves;
   // the selected box first, then the smallest one
-  const hit = (sx, sy) => {
+  const hit = (sx, sy, HANDLE = coarse ? HANDLE_TOUCH : HANDLE_MOUSE) => {
     const order = boxes.map((b, i) => [i, i === selected ? -1 : (b.x1 - b.x0) * (b.y1 - b.y0)])
       .sort((a, b) => a[1] - b[1]).map(([i]) => i);
     for (const i of order) {
@@ -498,6 +504,21 @@ function BoxCanvas({ image, stale, grey, width, height, boxes, fragments, region
   const onPointerDown = (e) => {
     const [sx, sy] = local(e);
     e.currentTarget.setPointerCapture(e.pointerId);
+    if (e.pointerType !== 'mouse') {
+      touches.current.set(e.pointerId, [sx, sy]);
+      if (touches.current.size === 2) {
+        // second finger: undo the first one's drag, pinch from here
+        const d = drag.current;
+        if (d && d.orig && d.moved) onDraft(boxes.map((q, i) => (i === d.i ? d.orig : q)));
+        drag.current = null;
+        const [[ax, ay], [bx, by]] = [...touches.current.values()];
+        const mx = (ax + bx) / 2, my = (ay + by) / 2;
+        const [ix, iy] = toImage(mx, my);
+        pinch.current = { d: Math.hypot(ax - bx, ay - by) || 1, zoom: view.zoom, ix, iy };
+        return;
+      }
+      if (touches.current.size > 2 || pinch.current) return;
+    }
     // while the frame loads (stale) the image is the frame before: a drag only pans
     if (e.button === 1 || e.button === 2 || (e.button === 0 && (e.shiftKey || stale != null))) {
       e.preventDefault();
@@ -524,6 +545,20 @@ function BoxCanvas({ image, stale, grey, width, height, boxes, fragments, region
   const clampY = (v) => Math.max(0, Math.min(h, v));
   const onPointerMove = (e) => {
     const [sx, sy] = local(e);
+    if (e.pointerType !== 'mouse' && touches.current.has(e.pointerId)) {
+      touches.current.set(e.pointerId, [sx, sy]);
+      const p = pinch.current;
+      if (p) {
+        if (touches.current.size !== 2) return;
+        const [[ax, ay], [bx, by]] = [...touches.current.values()];
+        const mx = (ax + bx) / 2, my = (ay + by) / 2;
+        const zoom = Math.max(1, Math.min(16, p.zoom * Math.hypot(ax - bx, ay - by) / p.d));
+        const s = fit * zoom;
+        // the image point first under the fingers' midpoint stays under it
+        setView({ zoom, cx: p.ix - (mx - width / 2) / s, cy: p.iy - (my - height / 2) / s });
+        return;
+      }
+    }
     if (onPointer) { const [px, py] = toImage(sx, sy); onPointer({ x: px, y: py }); }
     // a field keeping the keyboard (N frames, ZT, Frame…) would swallow the tab's keys: back on the frame, they are the tab's
     const ae = document.activeElement;
@@ -561,7 +596,14 @@ function BoxCanvas({ image, stale, grey, width, height, boxes, fragments, region
     }
     onDraft(boxes.map((q, i) => (i === d.i ? b : q)));
   };
-  const onPointerUp = () => {
+  const onPointerUp = (e) => {
+    if (e && e.pointerType !== 'mouse' && touches.current.has(e.pointerId)) {
+      touches.current.delete(e.pointerId);
+      if (pinch.current) {
+        if (!touches.current.size) pinch.current = null;   // the last finger up ends the pinch
+        return;
+      }
+    }
     const d = drag.current;
     drag.current = null;
     if (!d) return;
@@ -604,8 +646,9 @@ function BoxCanvas({ image, stale, grey, width, height, boxes, fragments, region
     : part === 'e' || part === 'w' ? 'ew-resize' : 'grab';
   return (
     <div className="pose-canvas-wrap" style={{ width, height }}>
-      <canvas ref={canvasRef} style={{ width, height, display: 'block', cursor }}
+      <canvas ref={canvasRef} style={{ width, height, display: 'block', cursor, touchAction: 'none' }}
               onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp}
+              onPointerCancel={onPointerUp}
               onPointerLeave={() => { setHover(null); onPointer?.(null); }} onWheel={onWheel}
               onContextMenu={(e) => e.preventDefault()}
               onDoubleClick={(e) => { if (!hit(...local(e))) setView({ zoom: 1, cx: null, cy: null }); }} />
@@ -2128,6 +2171,28 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
             {current == null && <div className="qc-muted">Pick a scene in the list (or → to start with the first one).</div>}
             </div>
             {current != null && (
+              // touch screens (CSS: pointer coarse only): the keyboard's actions next to the frame
+              <div className="bx-touchbar" role="toolbar" aria-label="Frame actions">
+                <button onClick={() => act('frame', 'button', -1)} title="Previous frame">◀</button>
+                <button onClick={() => act('frame', 'button', 1)} title="Next frame">▶</button>
+                <span className="bx-touchbar-labels">
+                  {(info?.labels || []).map((l) => (
+                    <button key={l} className={`bx-label${(selected != null ? boxes[selected]?.label === l : newLabel === l) ? ' bx-label-on' : ''}`}
+                            style={{ '--bx-color': labelColor(l) }} onClick={() => act('label', 'button', l)}
+                            title={`Label ${l}${selected != null ? ' on the selected box' : ' of the next box drawn'}`}>{l}</button>
+                  ))}
+                  <button className="bx-label" style={{ '--bx-color': labelColor('') }} onClick={() => act('label', 'button', '')} title="No label">?</button>
+                </span>
+                <button onClick={() => { const n = boxes.length; if (n) setSelected((x) => (x == null ? 0 : (x + 1) % n)); }}
+                        disabled={!boxes.length} title="Select the next box (Tab)">Next box</button>
+                <button onClick={() => act('remove', 'button')} disabled={selected == null} title="Delete the selected box (Del)">
+                  <i className="fa fa-trash" /></button>
+                <button onClick={() => undoLast()} title="Undo in this frame (Ctrl+Z)"><i className="fa fa-undo" /></button>
+                <button className="btn-primary" onClick={() => act('accept', 'button')} disabled={!frame || !!frame.error || duplicates.length > 0}
+                        title="Save this frame and go to the next one (Enter)">Save ▶</button>
+              </div>
+            )}
+            {current != null && (
               <div className="toolbar sl-actions">
                 <button className="btn-primary" onClick={() => act('accept', 'button')} disabled={!frame || !!frame.error || duplicates.length > 0}
                         title="Save this frame as shown and go to the next one (Enter)">Save &amp; next (Enter)</button>
@@ -2238,6 +2303,7 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
             </table>
           </div>
           <div className="qc-muted qc-pad bx-help">
+            <span className="bx-help-touch">Touch: tap a box to select it, drag it to move, drag its edges / corners to resize, drag outside the boxes to pan, two fingers to zoom; New shape then drag draws a box; the bar under the frame labels, deletes, undoes and saves. </span>
             N / Shift+N then drag: new shape (this frame) / new track (kept in the next frames until H hides it) · drag inside a box: move · drag its edges or corners: resize · drag outside the boxes: pan · 1–9 or Shift+1–9: label (Shift+0: 10, Ctrl+Shift+1…9: 11…19
             {nAnimals > 9 ? '; or two digits quickly' : ''}) · U: no label · Del: delete · Tab: next box · Enter: save &amp; next · Ctrl+S: save all ·
             ←/→ or D/F: frame · Shift+←/→ or Shift+D/F: scene · G / Shift+G: next / previous flagged frame · P: copy the frame before inside the dashed region under the pointer · Shift+P: copy the whole frame before · C: copy the region forward N frames · .: repeat · Z / Shift+Z: zoom to the next region to look at / whole frame · M: full screen · Ctrl+Z undo · wheel zoom · right/middle drag or Shift+drag: pan · double click: reset zoom

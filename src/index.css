@@ -261,9 +261,9 @@ input[type="checkbox"] { accent-color: var(--accent); }
 .ov-seg button.on { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
 
 .ov-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(150px, 100%), 1fr)); gap: 12px; }
-.ov-stat { padding: 10px 14px; }
+.ov-stat { padding: 10px 14px; min-width: 0; }
 .ov-stat-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--subtext); }
-.ov-stat-value { font-size: 24px; font-weight: 600; font-variant-numeric: tabular-nums; margin-top: 2px; white-space: nowrap; }
+.ov-stat-value { font-size: 24px; font-weight: 600; font-variant-numeric: tabular-nums; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ov-stat-sub { font-size: 12px; color: var(--subtext); }
 
 .ov-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(340px, 100%), 1fr)); gap: 12px; align-items: start; }
@@ -1105,7 +1105,9 @@ button.ov-sheet.ov-sheet-error { border-color: var(--danger); color: var(--dange
 .xc-choice { display: flex; gap: 6px; align-items: flex-start; cursor: pointer; }
 
 @media (max-width: 760px) {
-  html, body { overflow-x: hidden; }
+  /* clip, not hidden, on body: hidden would make body a scroll container and break the sticky tab bar */
+  html { overflow-x: hidden; }
+  body { overflow-x: clip; }
   /* 16px: iOS zooms into any focused field with smaller text */
   :where(select, input[type="text"], input[type="number"], input[type="search"], textarea) { font-size: 16px; }
   :where(button) { min-height: 32px; }
@@ -1253,4 +1255,120 @@ button.ov-sheet.ov-sheet-error { border-color: var(--danger); color: var(--dange
 @media (max-width: 760px) {
   .ae-body { flex-direction: column; overflow: auto; }
   .ae-dialog { height: 96vh; }
+}
+
+/* ── Phones and tablets (one responsive layout; desktop rules above are unchanged) ── */
+.app-menu-btn { display: none; }
+.frame-zoom-reset {
+  position: absolute; top: 6px; right: 6px; z-index: 2; min-height: 32px; padding: 4px 10px;
+  border: none; border-radius: 16px; background: rgba(0, 0, 0, 0.6); color: #fff; font-size: 13px; line-height: 1;
+}
+.frame-zoom-reset:hover:not(:disabled) { background: rgba(0, 0, 0, 0.75); }
+.bx-touchbar, .bx-help-touch { display: none; }
+
+/* the 15 tabs with their Ctrl+N hints were wider than a 1440 px window (the whole page scrolled sideways):
+   the hints only on very wide windows (they stay in each tab's tooltip), and the row wraps rather than overflows */
+@media (max-width: 1700px) { .tab kbd { display: none; } }
+@media (min-width: 761px) { .tabs { flex-wrap: wrap; } }
+
+/* touch screens (phones, tablets): targets a finger hits */
+@media (pointer: coarse) {
+  button, select { min-height: 40px; }
+  .tab { min-height: 44px; }
+  input[type="checkbox"], input[type="radio"] { width: 20px; height: 20px; }
+  .splitter-vertical { width: 20px; }
+  .splitter-horizontal { height: 12px; }
+  .bx-touchbar {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 8px;
+  }
+  .bx-touchbar > button, .bx-touchbar .bx-label { min-height: 44px; min-width: 44px; font-size: 15px; }
+  .bx-touchbar-labels { display: flex; flex-wrap: wrap; gap: 6px; flex: 1 1 auto; }
+  .bx-touchbar .btn-primary { margin-left: auto; padding: 0 16px; }
+  .bx-help-touch { display: inline; }
+  .bx-cell { min-height: 14px; }
+  .sc-roi-list li { padding: 8px 8px; font-size: 13px; }
+  .sc-slider { grid-template-columns: 32px 1fr 76px; }
+  .sc-slider input[type="range"] { height: 32px; }
+}
+
+@media (max-width: 760px) {
+  /* app bar: logo, title and ☰ on one row, the experiment below; settings behind ☰ */
+  .app-bar { gap: 6px 10px; padding: 10px 10px 8px; }
+  .app-menu-btn {
+    display: inline-flex; align-items: center; justify-content: center; margin-left: auto;
+    width: 44px; height: 40px; padding: 0; font-size: 18px;
+  }
+  .app-bar:not(.menu-open) .app-actions, .app-bar:not(.menu-open) .exp-basedir { display: none; }
+  .app-bar.menu-open .app-actions { padding-top: 4px; }
+
+  /* tabs stay reachable while a long tab is scrolled */
+  .tabs { position: sticky; top: 0; z-index: 30; }
+
+  /* Group viewer: frame, navigation, then the tracking table; the nine transport buttons on one row */
+  .viewer-nav { order: -1; }
+  .viewer-nav .card-header { flex-wrap: wrap; }
+  .viewer-nav .transport { display: grid; grid-template-columns: repeat(9, minmax(0, 1fr)); gap: 3px; width: 100%; }
+  .viewer-nav .transport .icon-btn, .viewer-nav .transport .icon-btn.primary { width: auto; min-width: 0; height: 44px; }
+  .viewer-nav .transport .icon-btn svg { width: 30px; height: 30px; }
+  .viewer-nav .transport .sep { display: none; }
+  /* Segmentation editor's frame steps: four to a row, labels on one line */
+  .sc-view .transport { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; width: 100%; }
+  .sc-view .transport button { white-space: nowrap; padding: 0 4px; min-height: 40px; }
+
+  /* Annotate: the frame first, the scene list and labels below it */
+  .bx-view { order: -1; }
+  .bx-stage { height: min(60vh, calc(100vw - 40px)); min-height: 240px; }
+  .bx-view > .card-header { flex-wrap: wrap; row-gap: 6px; }
+  .sl-actions > * { flex: 1 1 auto; }
+
+  /* Segmentation settings: the file row wraps */
+  .sc-file-row { flex-wrap: wrap; }
+  .sc-roi-types { grid-template-columns: 1fr 1fr; }
+
+  /* dialogs fill the phone */
+  .ae-overlay { align-items: stretch; }
+  .ae-dialog { width: 100vw; height: 100dvh; max-height: none; border-radius: 0; }
+  .ae-foot { flex-wrap: wrap; }
+  .ae-foot progress { width: 100%; }
+}
+
+/* tablets (between the phone layout and a desktop window): the app bar wraps instead of running off the screen */
+@media (min-width: 761px) and (max-width: 1100px) {
+  .app-bar { flex-wrap: wrap; row-gap: 8px; }
+  .app-bar .spacer { display: none; }
+  .exp-picker { min-width: 0; max-width: 100%; flex-wrap: wrap; }
+  .app-actions { flex-wrap: wrap; }
+}
+/* tablets held upright: the Group viewer stacked as on a phone (VIEWER_STACK_QUERY in App.js) */
+@media (max-width: 1100px) and (orientation: portrait) {
+  .viewer { flex-direction: column; gap: 8px; }
+  .viewer-side { height: auto !important; }
+  .viewer-table { min-height: 0; }
+  .viewer-table .scroll { max-height: 50vh; }
+  .viewer-nav { order: -1; }
+  .viewer-nav .card-header { flex-wrap: wrap; }
+}
+
+/* phones: tables marked to stack (responsiveTables.js: the Data collector's, .stack-narrow) show one card per row,
+   each cell after its column's name; the header keeps only its first cell (a select-all checkbox, if any) */
+@media (max-width: 760px) {
+  :is(.sc-tab table.ov-table, table.stack-narrow) { display: block; width: 100%; }
+  :is(.sc-tab table.ov-table, table.stack-narrow) thead { display: block; }
+  :is(.sc-tab table.ov-table, table.stack-narrow) thead tr { display: flex; }
+  :is(.sc-tab table.ov-table, table.stack-narrow) thead th { display: none; }
+  :is(.sc-tab table.ov-table, table.stack-narrow) thead th:first-child:has(input) { display: block; border: none; }
+  :is(.sc-tab table.ov-table, table.stack-narrow) tbody { display: flex; flex-direction: column; gap: 8px; }
+  :is(.sc-tab table.ov-table, table.stack-narrow) tbody tr {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 2px 12px; padding: 8px 10px;
+    border: 1px solid var(--border); border-radius: var(--radius, 6px); background: var(--surface);
+  }
+  :is(.sc-tab table.ov-table, table.stack-narrow) tbody td {
+    display: flex; align-items: baseline; gap: 8px; padding: 2px 0; border: none; white-space: normal;
+    min-width: 0; max-width: 100%; overflow-wrap: anywhere; position: static;
+  }
+  /* named cells take a line each; unnamed ones (checkbox, buttons) sit side by side */
+  :is(.sc-tab table.ov-table, table.stack-narrow) tbody td[data-label]:not([data-label=""]) { flex: 1 1 100%; }
+  :is(.sc-tab table.ov-table, table.stack-narrow) tbody td[data-label]:not([data-label=""])::before {
+    content: attr(data-label); flex: 0 0 104px; color: var(--subtext); font-size: 12px;
+  }
 }

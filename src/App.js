@@ -12,7 +12,7 @@ import FrameJump from './FrameJump';
 import SelectComponent, { postLoad } from './selectComponent';
 import CardResizer from './CardResizer';
 import Splitter from './Splitter';
-import { useIsNarrow } from './layout';
+import { useIsNarrow, useMediaQuery } from './layout';
 
 import { FIRST_FRAME, PLACEHOLDER_IMAGE, LABEL_FIELD } from './constants';
 import PEValidator from './PEValidator';
@@ -32,6 +32,9 @@ import CvatLinks from './CvatLinks';
 import RoiPanel from './RoiPanel';
 import api, { apiUrl } from './api';
 import MessageConsole, { useConsole, useConsoleState, consoleHeight } from './MessageConsole';
+
+// tablets held upright stack the Group viewer as phones do (the same query in index.css)
+const VIEWER_STACK_QUERY = '(max-width: 1100px) and (orientation: portrait)';
 
 // Loaded (with hls.js) off the viewer's critical path.
 const EthogramViewer = lazy(() => import('./EthogramViewer'));
@@ -252,7 +255,21 @@ function App() {
   // without scrolling, keeping the native aspect ratio. Once the splitter is
   // dragged, its width is that share of the window width (persisted).
   const viewerRef = useRef(null);
-  const narrow = useIsNarrow();   // phone: frame above the side panel, full width
+  const phone = useIsNarrow();
+  // phone, or tablet held upright: frame above the side panel, full width (VIEWER_STACK_QUERY in index.css too)
+  const narrow = useMediaQuery(VIEWER_STACK_QUERY) || phone;
+  // phone: the app bar's settings (tracking source, theme, sign out) fold behind a menu button
+  const [menuOpen, setMenuOpen] = useState(false);
+  const tabsRef = useRef(null);
+  // the tab bar scrolls sideways on phones: keep the active tab in it (scrollLeft only, never the page)
+  useEffect(() => {
+    const nav = tabsRef.current;
+    const t = nav?.querySelector('.tab.active');
+    if (!nav || !t || nav.scrollWidth <= nav.clientWidth) return;
+    const left = t.offsetLeft - nav.offsetLeft, right = left + t.offsetWidth;
+    if (left < nav.scrollLeft) nav.scrollLeft = left - 24;
+    else if (right > nav.scrollLeft + nav.clientWidth) nav.scrollLeft = right - nav.clientWidth + 24;
+  }, [activeTab]);
   const [frameSize, setFrameSize] = useState({ width: 600, height: 600, available: 600 });
   const [frameWidthShare, setFrameWidthShare] = useState(() => {
     try { return Number(localStorage.getItem('fh-frame-width-share')) || null; }
@@ -861,13 +878,18 @@ function App() {
       boxSizing: 'border-box',
     }}>
       {/* ── App bar: title, experiment (shared across tabs), global toggles ── */}
-      <header className="app-bar">
+      <header className={`app-bar${menuOpen ? ' menu-open' : ''}`}>
         <VersionTag onOpen={() => { setActiveTab('help'); setTimeout(() => document.getElementById('help-updates')?.scrollIntoView({ block: 'start' }), 50); }} />
         <img className="app-logo" src={`${import.meta.env.BASE_URL}logo.svg`} alt="" />
         <div className="app-title">
           <h1>FlyHostel Viewer</h1>
           <p>Liu Lab @ VIB-KU Leuven Center for Neuroscience</p>
         </div>
+
+        <button className="app-menu-btn" onClick={() => setMenuOpen((o) => !o)} aria-expanded={menuOpen}
+                title="Tracking source, theme, sign out">
+          <i className={`fa ${menuOpen ? 'fa-times' : 'fa-bars'}`} />
+        </button>
 
         <Logos />
 
@@ -908,7 +930,7 @@ function App() {
       </header>
 
       {/* ── Tabs ── */}
-      <nav className="tabs">
+      <nav className="tabs" ref={tabsRef}>
         <Tab id="data_collector" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+0" disabled={missingTab('data_collector')}>Data collector</Tab>
         <Tab id="group_viewer" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+1">Group viewer</Tab>
         <Tab id="proboscis_extension" activeTab={activeTab} setActiveTab={setActiveTab} shortcut="Ctrl+2" disabled={noDatabase || bundleOnly || missingTab('pe_validation')}>Proboscis extension (PE)</Tab>
@@ -985,7 +1007,7 @@ function App() {
               <CardResizer id="viewer-tracking" />
             </section>
 
-            <section className="card">
+            <section className="card viewer-nav">
               <div className="card-header">
                 Navigation
                 <span className="spacer" />
