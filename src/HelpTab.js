@@ -1247,6 +1247,16 @@ export default function HelpTab() {
               more blobs, mean the thresholds or ROIs need changing. It also runs in an arena (<code>…/arenas/K</code>): there
               it reads <code>K.conf</code>, a copy of the arena's <code>&lt;date&gt;.conf</code> made when its toml is saved and before
               each run.</li>
+            <li><b>idtrackerai pipeline</b>: the experiment's rows in the idtrackerai pipeline's <code>idtrackerai.csv</code>{' '}
+              (<code>basedir,mark,note</code>; the next nextflow run takes the rows marked <code>1</code>). <i>+ Add to
+              idtrackerai.csv</i> opens a dialog with the mark (1 = next run, NEXT / LATER / ? = planned, or any text) and the
+              note (OK by default), the checks (the files the pipeline needs: a row marked 1 without one would stop the whole
+              run, so it is refused; settings saved; preprocess-sample finished and how many chunks had problems; already
+              analyzed; other rows marked 1) and the exact line it writes. <i>Edit</i> / <i>Remove</i> change a row the same way.
+              Nothing is written until you confirm; if the file changed in the meantime you are asked to check again. Each
+              change keeps a copy of the file before it and is logged with your name. Allowed from a browser on the server
+              and for the logins listed in <code>VALIDATOR_PIPELINE_USERS</code> (by default the app's login), so also from
+              a phone once signed in.</li>
           </ul>
         </Section>
 

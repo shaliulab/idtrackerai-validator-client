@@ -16,6 +16,7 @@ import api from './api';
 import { useConsole } from './MessageConsole';
 import SegmentationEditor from './SegmentationEditor';
 import GpuQueueCard from './GpuQueue';
+import IdtrackeraiCsvCard from './IdtrackeraiCsv';
 
 const unwrap = (data) => (typeof data === 'string' ? JSON.parse(data) : data);
 const errorOf = (err) => err.response?.data?.error ?? err.message;
@@ -989,6 +990,8 @@ export default function DataCollectorTab({ active, onOpenExperiment }) {
         <PreprocessCard experiment={experiment} active={active} refreshKey={savedKey}
                         onShowFrame={showFrame} shownFrame={highlight?.frame_number} />
       </div>
+
+      <IdtrackeraiCsvCard experiment={experiment} active={active} refreshKey={savedKey} />
     </div>
   );
 }
