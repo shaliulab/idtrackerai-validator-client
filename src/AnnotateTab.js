@@ -18,7 +18,8 @@ import { useConsole } from './MessageConsole';
 import { setAnnotateState } from './loadGuard';
 import ValidationQueue from './ValidationQueue';
 import PreDownload from './PreDownload';
-import { Pack } from './annotatePack';
+import { Pack, isContinuity } from './annotatePack';
+import AcceptEasy from './AcceptEasy';
 
 const unwrap = (data) => (typeof data === 'string' ? JSON.parse(data) : data);
 const errorOf = (err) => err.response?.data?.error || err.message;
@@ -739,12 +740,31 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
   const frameRef = useRef(null);
   frameRef.current = frame;
   const [reloadKey, setReloadKey] = useState(0);
+  // the person's choices, kept in this browser: tracker of the continuity proposal (1 / 2, null = the server's default)
+  // and how easy scenes are found ('rules' / 'learned', null = the server's default)
+  const [contChoice, setContChoice] = useState(() => { try { const v = Number(localStorage.getItem('fh-annotate-continuity')); return v === 1 || v === 2 ? v : null; } catch { return null; } });
+  const [easyChoice, setEasyChoice] = useState(() => { try { const v = localStorage.getItem('fh-annotate-easy-method'); return v === 'rules' || v === 'learned' ? v : null; } catch { return null; } });
+  useEffect(() => { try { if (contChoice) localStorage.setItem('fh-annotate-continuity', String(contChoice)); else localStorage.removeItem('fh-annotate-continuity'); } catch { /* ignore */ } }, [contChoice]);
+  useEffect(() => { try { if (easyChoice) localStorage.setItem('fh-annotate-easy-method', easyChoice); else localStorage.removeItem('fh-annotate-easy-method'); } catch { /* ignore */ } }, [easyChoice]);
+  const [contDefault, setContDefault] = useState(1);
+  const cont = contChoice || contDefault;           // continuity version in use
+  const contRef = useRef(cont);
+  contRef.current = cont;
+  const easyRef = useRef(easyChoice);
+  easyRef.current = easyChoice;
+  const [acceptOpen, setAcceptOpen] = useState(false);
+  const acceptOpenRef = useRef(false);
+  acceptOpenRef.current = acceptOpen;
 
   const fetchInfo = useCallback(() => {
     setLoading(true);
     const forExperiment = fetchedFor.current;   // which experiment this info is of (a link waits for it)
-    return api.get('/api/annotate/scenes')
-      .then((r) => setInfo({ ...unwrap(r.data), forExperiment }))
+    return api.get('/api/annotate/scenes', { params: easyRef.current ? { easy: easyRef.current } : {} })
+      .then((r) => {
+        const d = unwrap(r.data);
+        if (d.options?.continuity_default) setContDefault(d.options.continuity_default);
+        setInfo({ ...d, forExperiment });
+      })
       .catch((err) => { setInfo(null); log('error', `Annotate: ${errorOf(err)}`); })
       .finally(() => setLoading(false));
   }, [log]);
@@ -822,11 +842,11 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
   packRef.current = pack;
   useEffect(() => {
     if (!currentExperiment) return undefined;
-    const p = new Pack(currentExperiment, () => setPackVersion((v) => v + 1));
+    const p = new Pack(currentExperiment, () => setPackVersion((v) => v + 1), cont);
     setPack(p);
     p.ready.then(() => { if (p.video.size || p.data.size) p.refresh().catch(() => {}); });
     return () => p.close();
-  }, [currentExperiment]);
+  }, [currentExperiment, cont]);
   // Preload scene: the JPEGs of whole scenes kept in the browser (fn -> object URL, ~120 kB each, ≤ PRELOAD_MAX):
   // opening one of their frames only decodes it, wherever it is in the scene
   const blobUrls = useRef(new Map());
@@ -863,7 +883,7 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
     }
     return cached(images.current, fn, serverImage);
   }, [cached, serverImage]);
-  const serverData = useCallback((n) => queue.current.then(() => api.get(`/api/annotate/frame/${n}`)).then((r) => unwrap(r.data)), []);  // after the saves sent
+  const serverData = useCallback((n) => queue.current.then(() => api.get(`/api/annotate/frame/${n}`, { params: { continuity: contRef.current } })).then((r) => unwrap(r.data)), []);  // after the saves sent
   const dataOf = useCallback((fn) => cached(datas.current, fn, (n) => {
     const p = packRef.current;
     const kept = () => p?.frameData(n);
@@ -892,6 +912,21 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
   }, [dataOf]);
   useEffect(() => { images.current.clear(); datas.current.clear(); edits.current.clear(); trackOut.current.clear(); hiddenAt.current.clear(); fragLabels.current.clear(); serverSplits.current.clear(); localTags.current.clear(); worked.current.clear(); leftBoxes.current.clear(); }, [currentExperiment]);
   useEffect(() => { datas.current.clear(); }, [reloadKey, info?.proposal_run?.t]);
+  // another tracker for the continuity proposals: the boxes kept are of the other one (the open frame is read again)
+  const contSeen = useRef(cont);
+  useEffect(() => {
+    if (contSeen.current === cont) return;
+    contSeen.current = cont;
+    datas.current.clear();
+    setReloadKey((k) => k + 1);
+  }, [cont]);
+  // another way of finding easy scenes: asked to the server (a job the first time)
+  const easySeen = useRef(easyChoice);
+  useEffect(() => {
+    if (easySeen.current === easyChoice) return;
+    easySeen.current = easyChoice;
+    if (fetchedFor.current) fetchInfo();
+  }, [easyChoice, fetchInfo]);
   useEffect(() => { edits.current.clear(); setEditsVersion((v) => v + 1); }, [info?.proposal_run?.t]);
 
   // a frame as shown: unsaved, its carried edits, then the labels given in this session to its fragments (anywhere in
@@ -1131,7 +1166,7 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
         // saved as proposed, every fly placed (no ⚑, no box without label): the continuity proposals after it, now
         // from this frame, come out the same (checked on 12X: 1911 of 1911 later frames; with a fly lost or a box
         // unlabelled 8 % differ, the saved frame cannot carry that fly)
-        asProposed: !!prev && prev.source === 'continuity' && !(prev.flags || []).length
+        asProposed: !!prev && isContinuity(prev.source) && !(prev.flags || []).length
           && prev.boxes.every((b) => /^\d+$/.test(b.label)) && sameBoxes(list, prev.boxes),
       });
       forget(fn);
@@ -1160,8 +1195,8 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
           // (not when it was saved as proposed: they come out the same, and the boxes of a preloaded scene stay)
           if (!asProposed) {
             packRef.current?.staleAfter(d.chunk, fn);
-            for (const [k, e] of [...datas.current]) if (k > fn && k !== open && e.value?.source === 'continuity' && e.value.chunk === d.chunk) datas.current.delete(k);
-            if (open > fn && openFrame?.chunk === d.chunk && openFrame.source === 'continuity') refresh = true;
+            for (const [k, e] of [...datas.current]) if (k > fn && k !== open && isContinuity(e.value?.source) && e.value.chunk === d.chunk) datas.current.delete(k);
+            if (open > fn && openFrame?.chunk === d.chunk && isContinuity(openFrame.source)) refresh = true;
           }
           if (refresh) refreshOpen();
           if (fn === currentRef.current) { setLoaded(d.boxes); setFrame((f) => f && { ...f, saved: true, author: d.author, updated: d.updated }); }
@@ -1317,7 +1352,7 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
         if (list.length > 200 && done % 200 === 0) log('info', `Save all: ${done} of ${list.length} frames`);
         let v = datas.current.get(fn)?.value;
         if (!v) {
-          try { v = unwrap((await queue.current.then(() => api.get(`/api/annotate/frame/${fn}`))).data); } catch (err) {
+          try { v = unwrap((await queue.current.then(() => api.get(`/api/annotate/frame/${fn}`, { params: { continuity: contRef.current } }))).data); } catch (err) {
             failed += 1; log('error', `Frame ${fn}: ${errorOf(err)}`); continue;
           }
         }
@@ -1433,7 +1468,8 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
   const resetToProposal = useCallback((which = '1') => {
     if (current == null) return;
     // a proposal again (also for a saved frame): the solver's, or idtrackerai's boxes ('tracking')
-    api.get(`/api/annotate/frame/${current}`, { params: { proposal: which } })
+    const proposal = which === 'continuity' && contRef.current === 2 ? 'continuity2' : which;
+    api.get(`/api/annotate/frame/${current}`, { params: { proposal, continuity: contRef.current } })
       .then((r) => commit(unwrap(r.data).boxes))
       .catch((err) => log('error', errorOf(err)));
   }, [current, commit, log]);
@@ -1446,7 +1482,7 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
     const known = datas.current.get(fn)?.value;
     if (known) return composeRef.current(fn, known);
     if (edits.current.has(fn)) return edits.current.get(fn).boxes;
-    const v = unwrap((await api.get(`/api/annotate/frame/${fn}`)).data);
+    const v = unwrap((await api.get(`/api/annotate/frame/${fn}`, { params: { continuity: contRef.current } })).data);
     return composeRef.current(fn, v);
   }, []);
   const plain = ({ x0, y0, x1, y1, label, track }) => (track ? { x0, y0, x1, y1, label, track } : { x0, y0, x1, y1, label });
@@ -1713,6 +1749,7 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
   useEffect(() => {
     if (!active) return undefined;
     const onKey = (e) => {
+      if (acceptOpenRef.current) return;    // the review of easy scenes has the keyboard
       const t = e.target;
       if (['INPUT', 'SELECT', 'TEXTAREA'].includes(t.tagName)) {
         // a ticked checkbox or a number box (N frames, ZT…) keeps the keyboard: letters are still the tab's
@@ -1893,6 +1930,23 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
           </span>
         )}
         <span className="toolbar-sep" />
+        <label className="field" data-annotate-option="continuity"
+               title={`Tracker of the continuity proposal, which unsaved frames open with (kept in this browser). v1: flies lost are kept only at a notch. v2: every fly not detected is kept where it was last seen, flies reappearing further away are paired, fragments are followed through crossings (on validated 12X: 40 % fewer edits). The server's default is v${contDefault}`}>
+          Proposal
+          <select value={cont} onChange={(e) => setContChoice(Number(e.target.value))}>
+            <option value={1}>Continuity v1{contDefault === 1 ? ' (default)' : ''}</option>
+            <option value={2}>Continuity v2{contDefault === 2 ? ' (default)' : ''}</option>
+          </select>
+        </label>
+        <label className="field" data-annotate-option="easy"
+               title={`How the easy scenes (◆) are found (kept in this browser). Rules: the continuity proposal agrees with idtrackerai everywhere and only flies at a notch are missing. Learned: a model trained on the validated experiments scores each scene (on held-out 12X: 68 % of scenes at 99 % identity precision). ${info?.options?.learned_available ? '' : 'No learned model on this server yet (scripts/train_scene_scorer.py). '}The server's default is ${info?.options?.easy_default || 'rules'}`}>
+          Easy
+          <select value={easyChoice || info?.easy?.method || info?.options?.easy_default || 'rules'} onChange={(e) => setEasyChoice(e.target.value)}>
+            <option value="rules">Rules{info?.options?.easy_default === 'rules' ? ' (default)' : ''}</option>
+            <option value="learned" disabled={info && !info.options?.learned_available}>Learned{info?.options?.easy_default === 'learned' ? ' (default)' : ''}</option>
+          </select>
+        </label>
+        <span className="toolbar-sep" />
         <label className="field" title="ZT range integrated (hours, as integrate-human-annotations --start-zt / --end-zt). Empty: every tracked chunk (or only from the first to the last saved frame with 'Annotated only')">
           ZT
           <input type="number" placeholder="start" value={zt.start} style={{ width: 64 }} onChange={(e) => setZt((z) => ({ ...z, start: e.target.value }))} />
@@ -1934,7 +1988,7 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
               <span className="ov-count" title={info.easy.error ? `Could not find the easy scenes: ${info.easy.error}` : EASY_TIP}>
                 {info.easy.pending ? `· finding easy scenes… ${Math.round(100 * (info.easy.pending.items?.[0]?.progress || 0))}%`
                   : info.easy.error ? '· easy scenes: failed'
-                  : `· ${scenes.filter((s) => s.easy != null && s.done < s.length).length} ◆ to do`}
+                  : `· ${scenes.filter((s) => s.easy != null && s.done < s.length).length} ◆ to do (${info.easy.method || 'rules'})`}
               </span>
             )}
           </header>
@@ -1944,6 +1998,13 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
               <button key={k} className={filter === k ? 'btn-primary' : undefined} onClick={() => setFilter(k)}>{label}</button>
             ))}
             <button onClick={fetchInfo} title="Read the scenes and annotated frames again">↻</button>
+            {info?.easy?.scenes && !info?.bundle && (
+              <button className="bx-accept-open" data-action="accept-easy-open" onClick={() => setAcceptOpen(true)}
+                      disabled={!scenes.some((s) => s.easy != null && s.done < s.length) && !(info.accept_batches || []).length && !info.accepting}
+                      title="Review the easy scenes not saved yet, untick any, and save their proposals in one go (undoable)">
+                Accept easy…
+              </button>
+            )}
             <span className="sl-zt-filter" title="List only the scenes starting within this ZT interval (hours since ZT0 of the first day, with the “ZT0 at” hour; beyond 24 for the next days). Empty = no limit">
               ZT
               <input type="number" step={0.5} value={sceneZt[0]} placeholder="from" style={{ width: 62 }}
@@ -2002,8 +2063,8 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
             {current != null ? (
               <span>
                 Frame {current.toLocaleString()}
-                {frame?.source && <span className={`bx-source bx-source-${frame.source}`}>{{ solver: 'solver proposal', tracking: 'idtrackerai proposal', continuity: 'continuity proposal', saved: 'saved' }[frame.source]}</span>}
-                {frame?.source === 'continuity' && frame.anchor && (
+                {frame?.source && <span className={`bx-source bx-source-${frame.source}`}>{{ solver: 'solver proposal', tracking: 'idtrackerai proposal', continuity: 'continuity proposal', continuity2: 'continuity v2 proposal', saved: 'saved' }[frame.source]}</span>}
+                {isContinuity(frame?.source) && frame.anchor && (
                   <span className="ov-count" title={frame.anchor.kind === 'saved'
                     ? 'Identities followed by position from the last frame saved before this one'
                     : 'Identities followed by position from the last frame before the scene where idtrackerai identified every fly (10 frames in a row, none jumping)'}>
@@ -2092,7 +2153,9 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
                 <button onClick={() => act('proposal', 'button', '1')} disabled={!frame?.has_solver}
                         title="The boxes of the YOLO + solver proposal again">Solver proposal</button>
                 <button onClick={() => act('proposal', 'button', 'continuity')}
-                        title="One box per blob, identities followed by position from the last saved frame (or the last frame before the scene with every fly identified); flies lost at a notch kept there">Continuity</button>
+                        title={cont === 2
+                          ? 'Continuity v2: one box per blob, identities followed by position from the last saved frame (or the last frame before the scene with every fly identified); every fly not detected kept where it was last seen, fragments followed through crossings'
+                          : 'One box per blob, identities followed by position from the last saved frame (or the last frame before the scene with every fly identified); flies lost at a notch kept there'}>{cont === 2 ? 'Continuity v2' : 'Continuity'}</button>
                 <button onClick={() => act('proposal', 'button', 'tracking')} title="One box per blob of idtrackerai, with its local identity">idtrackerai boxes</button>
                 <button onClick={() => act('unsave', 'button')} disabled={!frame?.saved} title="This frame no longer counts as annotated">Unsave</button>
                 {onOpenFrame && <button onClick={() => act('groupViewer', 'button')}>Open in Group viewer</button>}
@@ -2181,6 +2244,12 @@ export default function AnnotateTab({ active, currentExperiment, viewerFrame, on
           </div>
         </section>
       </div>
+      {acceptOpen && (
+        <AcceptEasy experiment={currentExperiment} info={info} scenes={scenes} cont={cont} zt0={zt0}
+                    onClose={() => setAcceptOpen(false)}
+                    onOpenScene={(sc) => { setAcceptOpen(false); go(sc.start, sc.k); }}
+                    onChanged={() => { forget(null); packRef.current?.markAllStale(); setReloadKey((k) => k + 1); return fetchInfo(); }} />
+      )}
     </div>
   );
 }

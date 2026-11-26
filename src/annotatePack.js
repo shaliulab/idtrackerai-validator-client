@@ -7,6 +7,8 @@
 // (database, scene_qc.csv, solver run, the chunk's saved frames). Saves made here mark the frames they change as
 // stale (markStale / staleChunk / staleAfter, called where AnnotateTab drops its cached boxes): those are read from
 // the server as before; the chunk's data is fetched again the next time the status is read (refresh).
+// The frame data holds the continuity proposals of one tracker version (the Annotate tab's proposal choice, `continuity`
+// 1 / 2): a Pack is made per version, its data kept under `<experiment>|<chunk>[|c2]` (the streams are shared).
 import api from './api';
 
 const DB_NAME = 'fh-annotate-pack';
@@ -43,6 +45,9 @@ function tx(store, mode, fn) {
 }
 
 const keyOf = (experiment, chunk) => `${experiment}|${String(chunk).padStart(6, '0')}`;
+const dataKeyOf = (experiment, chunk, continuity) => keyOf(experiment, chunk) + (continuity === 2 ? '|c2' : '');
+// a continuity proposal, whatever its tracker version
+export const isContinuity = (source) => source === 'continuity' || source === 'continuity2';
 const rangeOf = (experiment) => IDBKeyRange.bound(`${experiment}|`, `${experiment}|￿`);
 
 // every record of an experiment in a store, without reading the Blobs
@@ -104,8 +109,9 @@ function dropInWorker(experiment, chunk) {
 
 // The pre-download of one experiment
 export class Pack {
-  constructor(experiment, onChange) {
+  constructor(experiment, onChange, continuity = 1) {
     this.experiment = experiment;
+    this.continuity = continuity === 2 ? 2 : 1;   // tracker of the continuity proposals in the frame data
     this.onChange = onChange || (() => {});
     this.status = null;          // GET /api/annotate/pack
     this.video = new Map();      // chunk -> {vkey, index (frames, offsets, sizes, keys, codec, width, height), bytes}
@@ -128,7 +134,7 @@ export class Pack {
     try {
       const [videos, datas] = await Promise.all([readAll('video', this.experiment), readAll('data', this.experiment)]);
       for (const v of videos) this.addVideo(v);
-      for (const d of datas) this.data.set(d.chunk, { sig: d.sig, bytes: d.blob.size });
+      for (const d of datas) if ((d.continuity || 1) === this.continuity) this.data.set(d.chunk, { sig: d.sig, bytes: d.blob.size });
     } catch (err) {
       this.error = String(err?.message || err);
     }
@@ -146,7 +152,7 @@ export class Pack {
   // the status of now (which chunks are built, their vkey / sig): kept data with another sig is fetched again
   async refresh({ refetch = true } = {}) {
     const startSeq = this.seq;
-    const r = await api.get('/api/annotate/pack');
+    const r = await api.get('/api/annotate/pack', { params: { continuity: this.continuity } });
     this.status = r.data;
     this.byChunk = new Map(r.data.chunks.map((c) => [c.chunk, c]));
     if (this.allStale && this.allStale < startSeq) this.allStale = 0;
@@ -181,7 +187,7 @@ export class Pack {
   parsedOf(chunk) {
     let p = this.parsed.get(chunk);
     if (p) { this.parsed.delete(chunk); this.parsed.set(chunk, p); return p; }
-    p = tx('data', 'readonly', (s) => s.get(keyOf(this.experiment, chunk)))
+    p = tx('data', 'readonly', (s) => s.get(dataKeyOf(this.experiment, chunk, this.continuity)))
       .then((rec) => gunzipJson(rec.blob).then((d) => ({ sig: rec.sig, frames: d.frames })));
     p.catch(() => this.parsed.delete(chunk));
     this.parsed.set(chunk, p);
@@ -200,7 +206,7 @@ export class Pack {
     return this.parsedOf(c).then((p) => {
       const v = p.frames[String(fn)];
       if (!v || this.stale.has(fn) || this.chunkStale.has(c) || this.allStale) return null;
-      if (after && fn > after[0] && v.source === 'continuity') return null;
+      if (after && fn > after[0] && isContinuity(v.source)) return null;
       return { ...v, fromPack: true };
     }, () => null);
   }
@@ -238,10 +244,11 @@ export class Pack {
 
   async fetchData(chunk, { signal } = {}) {
     const seq = this.seq++;
-    const r = await api.get(`/api/annotate/pack/${chunk}/data`, { responseType: 'blob', signal });
+    const r = await api.get(`/api/annotate/pack/${chunk}/data`, { responseType: 'blob', signal, params: { continuity: this.continuity } });
     const sig = r.headers['x-data-sig'];
     const blob = new Blob([r.data], { type: 'application/gzip' });
-    await tx('data', 'readwrite', (s) => s.put({ experiment: this.experiment, chunk, sig, blob }, keyOf(this.experiment, chunk)));
+    await tx('data', 'readwrite', (s) => s.put({ experiment: this.experiment, chunk, sig, blob, continuity: this.continuity },
+      dataKeyOf(this.experiment, chunk, this.continuity)));
     this.data.set(chunk, { sig, bytes: blob.size });
     this.parsed.delete(chunk);
     this.clearStale(chunk, seq);
@@ -282,7 +289,7 @@ export class Pack {
       const total = want.reduce((n, c) => n + this.byChunk.get(c).frames, 0);
       const need = () => want.filter((c) => { const st = this.stored(c); return !st.video || !st.data; });
       if (need().some((c) => !this.byChunk.get(c).built || !this.byChunk.get(c).data_ready)) {
-        await api.post('/api/annotate/pack', { chunks: need() });
+        await api.post('/api/annotate/pack', { chunks: need(), continuity: this.continuity });
       }
       let bytes = 0;
       const inflight = new Map();   // chunk -> bytes of its stream received so far
@@ -317,7 +324,7 @@ export class Pack {
         if (!ready.length) {
           report('waiting');
           if (!status.job) {   // nothing being built (stopped, or failed): ask again
-            await api.post('/api/annotate/pack', { chunks: left });
+            await api.post('/api/annotate/pack', { chunks: left, continuity: this.continuity });
           }
           await new Promise((r) => setTimeout(r, 3000));
           status = await this.refresh({ refetch: false });

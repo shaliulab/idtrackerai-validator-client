@@ -708,7 +708,11 @@ export default function HelpTab() {
             their box is kept. Check the "!" boxes at the notches, then Enter through the frames. On the 12X experiment, 96 % of
             the frames of such scenes came out entirely right. They are found in the background the first time the list is
             opened, which takes minutes (the header shows the progress), and are found again when the tracking or scene_qc.csv
-            changes.
+            changes. The <b>Easy</b> choice in the toolbar says how: <i>Rules</i> (what is described above) or <i>Learned</i>,
+            a model trained on the frames people saved in the validated experiments, which scores each scene from what the
+            tracker did in it (closest flies, merged blobs, flies kept undetected…): on 12X experiments it left out of its
+            training it marked 68 % of the scenes easy with the identities right in 99 % of them (the rules: 46 % and 96 %).
+            The header says which one the ◆ come from; the choice is kept in this browser.
             The top of the list says, in ZT, what the scene proposer <b>looked at</b> (the tracking data it read), where its
             scenes start and end, and what is <b>tracked</b> and <b>recorded</b>; it warns in red when chunks were tracked after
             the scenes were made (Prepare scenes again) or when idtrackerai stopped before the end of the recording.
@@ -732,6 +736,18 @@ export default function HelpTab() {
             the chunk boundaries; your frames are the ones saved under your name (the login, else the Drive exchange name).
           </p>
           <p>
+            <b>Accept easy…</b> (next to the ◆ count) saves the proposals of easy scenes in one go, after you review them: the
+            list shows each easy scene not saved yet with a thumbnail, its ZT, the frames it would save and why it is easy
+            (its score with <i>Learned</i>; <i>score ≥</i> ticks only those above a value). All are ticked; untick any you want
+            to do by hand. A click on a row previews it: the frame with the boxes it would be saved with (amber: to look at),
+            a slider through its frames, and <b>Open in editor</b>. <b>Accept N scenes…</b> asks once with the number of
+            frames, then saves on the server, scene by scene (the bar and the console follow it; <b>■ Stop</b> keeps what is
+            saved). Frames already saved by anyone are skipped. The frames are saved under your name with the proposal you
+            use (Continuity v1 / v2); the log of each says "accepted easy scene, continuity2, learned 0.97, batch N", so they
+            can be found later. <b>Accepted batches</b> lists them: <b>Undo</b> unsaves the frames of a batch still as they
+            were accepted (frames you saved again since are kept).
+          </p>
+          <p>
             A frame not saved yet opens with the <b>continuity proposal</b>: one box around each tracked blob, its identity
             followed by position from the last frame saved before it in the chunk (else from the last frame before the
             scene where idtrackerai identified every fly), not idtrackerai's identity, which flips between close flies.
@@ -739,7 +755,12 @@ export default function HelpTab() {
             whose identity differs from idtrackerai's, kept at a notch or with another fly almost as close carry a yellow
             <b>!</b>; flies lost elsewhere are listed above the labels (⚑). The header shows the frame it started from.
             Without such a frame in the chunk the frame opens with idtrackerai's proposal (its local identities, dashed
-            <b>?</b> = no identity); the <b>Continuity</b> and <b>idtrackerai boxes</b> buttons give either again. Since
+            <b>?</b> = no identity); the <b>Continuity</b> and <b>idtrackerai boxes</b> buttons give either again.
+            The <b>Proposal</b> choice in the toolbar picks the tracker of the continuity proposal (kept in this browser):
+            <i>Continuity v1</i> keeps an undetected fly only at a notch; <i>Continuity v2</i> keeps every fly not detected
+            where it was last seen (two touching flies are often not segmented), pairs a fly that reappears further away,
+            and follows idtrackerai's fragments through crossings. On the validated 12X experiments v2 needed 40 % fewer
+            edits. The header shows "continuity v2 proposal" for its frames. Since
             each frame starts from the one you saved before it, fixing a frame and pressing Enter carries the fix on. Fix what is wrong, then <Key>Enter</Key> saves the frame and opens the next one (<Key>Ctrl</Key>+<Key>S</Key>, <b>Save all</b>, stays here and saves this frame and every frame of each scene you opened in this session, as each would open: its proposal with the labels and tracks carried into it. Frames of scenes you never opened are left alone). Closing or reloading the page while something is not saved yet makes the browser ask first. The experiment picker is grayed out while saves are on their way, and loading another experiment with annotations not saved yet asks first (they would be dropped).
             Edits are also saved when you leave the frame; a proposal you did not touch is not. Saved frames turn green in the
             strip above the image and count as validated.
@@ -753,7 +774,8 @@ export default function HelpTab() {
             H.264 video, ~20 kB a frame, sharper than the JPEGs the tab otherwise shows, and every frame's boxes); the bar
             shows frames, MB, time left and what the server has built. <b>■ Stop</b> stops; <b>Resume pre-download</b>
             fetches only what is missing; <b>Clear</b> deletes it from this browser. It stays after reloading the page.
-            Saves still go to the server at once. A save that changes other frames (the continuity proposals after it,
+            The boxes kept are those of the Proposal chosen (v1 or v2): changing it fetches that one's boxes again (the
+            images are shared). Saves still go to the server at once. A save that changes other frames (the continuity proposals after it,
             labels carried by fragment) makes those frames come from the server again; another person's saves make their
             chunks be fetched again when the tab is opened. The images need a browser with WebCodecs (Chrome, Edge,
             recent Firefox / Safari); without it only the boxes are kept. <b>⇩ Preload scene</b> keeps the JPEGs of one
