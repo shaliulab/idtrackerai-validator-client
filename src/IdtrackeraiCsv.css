@@ -1,0 +1,38 @@
+/* IdtrackeraiCsv.js: idtrackerai pipeline card and its dialog */
+.ic-rows { display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; }
+.ic-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.ic-mark { font-family: monospace; font-weight: 600; padding: 0 8px; border: 1px solid var(--border); border-radius: 8px; }
+.ic-mark-run { color: var(--accent); border-color: var(--accent); }
+.ic-checks { list-style: none; margin: 8px 0; padding: 0; font-size: 13px; }
+.ic-checks li { padding: 2px 0; overflow-wrap: anywhere; }
+.ic-icon { display: inline-block; width: 18px; font-weight: 700; }
+.ic-ok .ic-icon { color: #2ca02c; }
+.ic-warn .ic-icon { color: #e07b00; }
+.ic-error, .ic-error .ic-icon { color: var(--danger); }
+.ic-detail { color: var(--subtext); }
+.ic-error .ic-detail { color: var(--danger); }
+div.ic-error { margin: 8px 0; font-weight: 600; }
+.ic-foot { font-size: 12px; margin-top: 6px; }
+.ic-dialog { width: min(760px, 100%); }
+.ic-path { font-size: 12px; overflow-wrap: anywhere; margin-bottom: 8px; }
+.ic-fields { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: flex-end; }
+.ic-fields input[type="text"] { width: 160px; }
+.ic-help { flex-basis: 100%; font-size: 12px; color: var(--subtext); }
+.ic-diff { font-size: 12px; border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; overflow-x: auto;
+  background: var(--surface-2); white-space: pre; }
+.ic-add { color: #1a7f37; }
+.ic-del { color: var(--danger); text-decoration: line-through; }
+.ic-ln { display: inline-block; min-width: 3.5em; color: var(--subtext); text-decoration: none; }
+.ic-file { font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; flex: 1 1 200px; }
+:root[data-theme="dark"] .ic-add { color: #4ade80; }
+
+/* phone: the dialog takes the whole screen, fields full width, buttons big enough to tap */
+@media (max-width: 760px) {
+  .ic-overlay { padding: 0; align-items: stretch; }
+  .ic-dialog { width: 100%; max-height: none; height: 100%; border-radius: 0; }
+  .ic-fields .field, .ic-fields input[type="text"], .ic-fields select { width: 100%; }
+  .ic-fields input[type="text"], .ic-fields select { font-size: 16px; }
+  .ic-footer button, .ic-row button, .ic-card .card-header button { min-height: 40px; padding: 0 14px; }
+  .ic-footer .ic-file { flex-basis: 100%; order: 3; }
+  .ic-diff { white-space: pre-wrap; word-break: break-all; }
+}
