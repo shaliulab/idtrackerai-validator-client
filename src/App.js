@@ -260,6 +260,18 @@ function App() {
   const narrow = useMediaQuery(VIEWER_STACK_QUERY) || phone;
   // phone: the app bar's settings (tracking source, theme, sign out) fold behind a menu button
   const [menuOpen, setMenuOpen] = useState(false);
+  // Group viewer: the tracking table folds away (kept per browser; folded at first on phones, open on desktop)
+  const [trackingOpen, setTrackingOpen] = useState(() => {
+    try {
+      const v = localStorage.getItem('fh-viewer-tracking-open');
+      if (v != null) return v !== 'false';
+    } catch { /* ignore */ }
+    return !window.matchMedia?.('(max-width: 760px)').matches;
+  });
+  const toggleTracking = () => setTrackingOpen((o) => {
+    try { localStorage.setItem('fh-viewer-tracking-open', String(!o)); } catch { /* ignore */ }
+    return !o;
+  });
   const tabsRef = useRef(null);
   // the tab bar scrolls sideways on phones: keep the active tab in it (scrollLeft only, never the page)
   useEffect(() => {
@@ -987,15 +999,16 @@ function App() {
           />}
 
           <div className="viewer-side" style={narrow ? undefined : { height: Math.max(frameSize.height + 2, frameSize.available) }}>
-            <section className="card viewer-table">
-              <div className="card-header">
-                Tracking
+            <section className={`card viewer-table${trackingOpen ? '' : ' viewer-table-closed'}`}>
+              <div className="card-header viewer-table-header" onClick={toggleTracking} role="button" aria-expanded={trackingOpen}
+                   title={trackingOpen ? 'Hide the tracking table' : 'Show the tracking table'}>
+                <span>{trackingOpen ? '▾' : '▸'} Tracking</span>
                 <span className="spacer" />
                 <span style={{ textTransform: 'none', letterSpacing: 0, fontWeight: 400 }}>
                   {trackingData.length} / {number_of_animals} animals detected
                 </span>
               </div>
-              <div className="scroll">
+              {trackingOpen && <div className="scroll">
                 <BlobsTable Data={trackingData} setFrameNumber={setFrameNumber}
                             frameRange={frameRange}
                             number_of_animals={number_of_animals}
@@ -1003,8 +1016,8 @@ function App() {
                             onOpenEthogram={openEthogram}
                             ethogramIdentities={ethogramIdentities}
                             interactions={interactions} />
-              </div>
-              <CardResizer id="viewer-tracking" />
+              </div>}
+              {trackingOpen && <CardResizer id="viewer-tracking" />}
             </section>
 
             <section className="card viewer-nav">

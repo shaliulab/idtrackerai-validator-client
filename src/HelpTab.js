@@ -1273,7 +1273,9 @@ export default function HelpTab() {
               <b>Group viewer.</b> Swipe left / right on the frame to step forward / back (one swipe step = the
               playback framerate in frames, as a mouse wheel notch); pinch with two fingers to zoom, then drag
               with one to move; double tap zooms in / back to the whole frame (also the <b>×</b> button); press
-              and hold to show the magnifier where your finger is. Up / down still scrolls the page.
+              and hold to show the magnifier where your finger is. Up / down still scrolls the page. The slider and
+              play / step buttons sit right under the frame; the <b>Tracking</b> table is folded (tap its title to
+              open it; the browser remembers it, on a computer it starts open).
             </li>
             <li>
               <b>Annotate.</b> Tap a box to select it, drag it to move it, drag its edges or corners to resize it,

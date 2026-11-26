@@ -191,6 +191,10 @@ input[type="checkbox"] { accent-color: var(--accent); }
 }
 .viewer-table { flex: 1; min-height: 120px; display: flex; flex-direction: column; }
 .viewer-table .scroll { flex: 1; overflow: auto; }
+.viewer-table-header { cursor: pointer; user-select: none; }
+/* folded: only its header, the Navigation card moves up */
+.viewer-table.viewer-table-closed { flex: none; min-height: 0; }
+.viewer-table.viewer-table-closed .card-header { border-bottom: none; }
 
 /* ── PE tab (PEValidator.js) ── */
 .pe-layout { display: flex; align-items: stretch; min-height: 360px; }
@@ -1307,6 +1311,9 @@ button.ov-sheet.ov-sheet-error { border-color: var(--danger); color: var(--dange
   /* Group viewer: frame, navigation, then the tracking table; the nine transport buttons on one row */
   .viewer-nav { order: -1; }
   .viewer-nav .card-header { flex-wrap: wrap; }
+  .viewer-nav { display: flex; flex-direction: column; }
+  .viewer-nav > .card-body { order: -1; }
+  .viewer-nav > .card-header { border-top: 1px solid var(--border); border-bottom: none; }
   .viewer-nav .transport { display: grid; grid-template-columns: repeat(9, minmax(0, 1fr)); gap: 3px; width: 100%; }
   .viewer-nav .transport .icon-btn, .viewer-nav .transport .icon-btn.primary { width: auto; min-width: 0; height: 44px; }
   .viewer-nav .transport .icon-btn svg { width: 30px; height: 30px; }
@@ -1349,6 +1356,9 @@ button.ov-sheet.ov-sheet-error { border-color: var(--danger); color: var(--dange
   .viewer-table .scroll { max-height: 50vh; }
   .viewer-nav { order: -1; }
   .viewer-nav .card-header { flex-wrap: wrap; }
+  .viewer-nav { display: flex; flex-direction: column; }
+  .viewer-nav > .card-body { order: -1; }
+  .viewer-nav > .card-header { border-top: 1px solid var(--border); border-bottom: none; }
 }
 
 /* phones: tables marked to stack (responsiveTables.js: the Data collector's, .stack-narrow) show one card per row,
