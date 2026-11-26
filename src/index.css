@@ -1338,6 +1338,8 @@ button.ov-sheet.ov-sheet-error { border-color: var(--danger); color: var(--dange
   .app-bar .spacer { display: none; }
   .exp-picker { min-width: 0; max-width: 100%; flex-wrap: wrap; }
   .app-actions { flex-wrap: wrap; }
+  .card-header { flex-wrap: wrap; row-gap: 4px; }
+  .ov-heat select, .card-header select { max-width: 100%; }
 }
 /* tablets held upright: the Group viewer stacked as on a phone (VIEWER_STACK_QUERY in App.js) */
 @media (max-width: 1100px) and (orientation: portrait) {
